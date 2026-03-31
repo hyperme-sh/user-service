@@ -1,0 +1,38 @@
+from __future__ import annotations
+
+import uuid
+from typing import Protocol
+
+from controlplane_db.models import Group, Organization, User, UserGroupMembership
+
+from user_service.domain.dtos import UserCreateBody, UserUpdateBody
+
+
+class UserRepositoryPort(Protocol):
+    async def create(self, tenant_id: uuid.UUID, body: UserCreateBody) -> User: ...
+    async def list_active(self, tenant_id: uuid.UUID) -> list[User]: ...
+    async def get(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> User | None: ...
+    async def update(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, body: UserUpdateBody
+    ) -> User | None: ...
+    async def soft_delete(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> bool: ...
+
+
+class GroupRepositoryPort(Protocol):
+    async def create(
+        self, tenant_id: uuid.UUID, name: str, description: str | None, role_id: uuid.UUID
+    ) -> Group: ...
+    async def get(self, tenant_id: uuid.UUID, group_id: uuid.UUID) -> Group | None: ...
+
+
+class OrganizationRepositoryPort(Protocol):
+    async def create(self, tenant_id: uuid.UUID, legal_name: str) -> Organization: ...
+
+
+class MembershipRepositoryPort(Protocol):
+    async def add(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, group_id: uuid.UUID
+    ) -> UserGroupMembership: ...
+    async def exists(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, group_id: uuid.UUID
+    ) -> bool: ...

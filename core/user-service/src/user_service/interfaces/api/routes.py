@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.common.event_types import GROUP_MEMBER_ADDED_V1, USER_CREATED_V1
+from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
+from api.infrastructure.persistence.db_session import get_db_session
+from auth_service.schemas import AuthMeResponse
+from controlplane_events.payloads import GroupMemberAddedPayload, UserCreatedEvent
+
+from user_service.deps import get_current_user, require_matched_tenant
+from user_service.domain.dtos import (
+    GroupCreateBody,
+    GroupResponse,
+    OrganizationCreateBody,
+    OrganizationResponse,
+    UserCreateBody,
+    UserResponse,
+    UserUpdateBody,
+)
+from user_service.infrastructure.persistence.repos import (
+    SqlGroupRepository,
+    SqlMembershipRepository,
+    SqlOrganizationRepository,
+    SqlUserRepository,
+)
+
+router = APIRouter(tags=["Users & groups"])
+
+
+def _user_to_response(u) -> UserResponse:
+    if u.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not tenant-scoped",
+        )
+    return UserResponse(
+        id=u.id,
+        tenant_id=u.tenant_id,
+        email=u.email,
+        first_name=u.first_name,
+        last_name=u.last_name,
+        gender=u.gender,
+        is_active=u.is_active,
+        deleted_at=u.deleted_at,
+        sociacl_attributes=u.sociacl_attributes,
+    )
+
+
+def _actor_sub_as_uuid(me: AuthMeResponse) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(me.sub))
+    except (ValueError, TypeError):
+        return None
+
+
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def create_user(
+    body: UserCreateBody,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlUserRepository(session)
+    u = await repo.create(tenant_id, body)
+    display = f"{u.first_name} {u.last_name}".strip()
+    await get_tenant_event_publisher().publish(
+        tenant_id=tenant_id,
+        event_type=USER_CREATED_V1,
+        payload=UserCreatedEvent(
+            user_id=u.id,
+            email=u.email,
+            tenant_id=str(tenant_id),
+            display_name=display or None,
+        ).to_envelope_payload(),
+    )
+    return _user_to_response(u)
+
+
+@router.get(
+    "/users",
+    response_model=list[UserResponse],
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def list_users(
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlUserRepository(session)
+    users = await repo.list_active(tenant_id)
+    return [_user_to_response(u) for u in users]
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def update_user(
+    user_id: uuid.UUID,
+    body: UserUpdateBody,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlUserRepository(session)
+    u = await repo.update(tenant_id, user_id, body)
+    if u is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    return _user_to_response(u)
+
+
+@router.delete(
+    "/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def delete_user(
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlUserRepository(session)
+    ok = await repo.soft_delete(tenant_id, user_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+
+@router.post(
+    "/groups",
+    response_model=GroupResponse,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def create_group(
+    body: GroupCreateBody,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlGroupRepository(session)
+    g = await repo.create(tenant_id, body.name, body.description, body.role_id)
+    return GroupResponse.model_validate(g)
+
+
+@router.post(
+    "/organizations",
+    response_model=OrganizationResponse,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def create_organization(
+    body: OrganizationCreateBody,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlOrganizationRepository(session)
+    o = await repo.create(tenant_id, body.legal_name)
+    return OrganizationResponse.model_validate(o)
+
+
+@router.post(
+    "/users/{user_id}/groups/{group_id}",
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def add_user_to_group(
+    user_id: uuid.UUID,
+    group_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    urepo = SqlUserRepository(session)
+    grep = SqlGroupRepository(session)
+    mrepo = SqlMembershipRepository(session)
+    user = await urepo.get(tenant_id, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    group = await grep.get(tenant_id, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
+    if await mrepo.exists(tenant_id, user_id, group_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "User already in group")
+    try:
+        m = await mrepo.add(tenant_id, user_id, group_id)
+    except IntegrityError as e:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Could not add membership"
+        ) from e
+    await get_tenant_event_publisher().publish(
+        tenant_id=tenant_id,
+        event_type=GROUP_MEMBER_ADDED_V1,
+        payload=GroupMemberAddedPayload(
+            user_id=user_id,
+            group_id=group_id,
+            tenant_id=tenant_id,
+            added_by_user_id=_actor_sub_as_uuid(me),
+        ).to_envelope_payload(),
+    )
+    return {"id": str(m.id)}
