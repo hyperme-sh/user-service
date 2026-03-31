@@ -20,13 +20,22 @@ from controlplane_db.session import normalize_database_url
 from controlplane_events import AioKafkaEventProducer
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from user_service.infrastructure.payment_succeeded_consumer import (
+    build_payment_succeeded_consumer,
+)
 from user_service.interfaces.api.routes import router as user_api_router
 from user_service.middleware import UserServiceDbMiddleware
 
 logger = get_logger(__name__)
 
 
-def create_app(*, test_event_sink: list | None = None) -> FastAPI:
+def create_app(
+    *,
+    test_event_sink: list | None = None,
+    service_name: str | None = None,
+) -> FastAPI:
+    svc_name = service_name or settings.service_name
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         configure_logging()
@@ -59,22 +68,31 @@ def create_app(*, test_event_sink: list | None = None) -> FastAPI:
         elif settings.kafka_bootstrap_servers:
             kafka_producer = AioKafkaEventProducer(
                 settings.kafka_bootstrap_servers,
-                client_id=f"{settings.service_name}-events",
+                client_id=f"{svc_name}-events",
             )
             await kafka_producer.start()
             set_tenant_event_publisher(
                 KafkaTenantEventPublisher(
                     kafka_producer,
                     settings.kafka_events_topic,
-                    settings.service_name,
+                    svc_name,
                 )
             )
             app.state.kafka_producer = kafka_producer
+            pay_consumer = build_payment_succeeded_consumer(
+                settings.kafka_bootstrap_servers,
+                settings.kafka_events_topic,
+            )
+            await pay_consumer.start()
+            app.state.kafka_payment_consumer = pay_consumer
         else:
             set_tenant_event_publisher(NoOpTenantEventPublisher())
 
         yield
 
+        k_pay = getattr(app.state, "kafka_payment_consumer", None)
+        if k_pay is not None:
+            await k_pay.stop()
         set_tenant_event_publisher(None)
         kp = getattr(app.state, "kafka_producer", None)
         if kp is not None:
