@@ -65,7 +65,9 @@ async def test_list_users_only_current_tenant(
         )
     r2 = await http_client.get("/api/v1/users", headers=tenant_headers)
     assert r2.status_code == 200
-    emails = {u["email"] for u in r2.json()}
+    body = r2.json()
+    assert "items" in body
+    emails = {u["email"] for u in body["items"]}
     assert "a@example.com" in emails
     assert "b@other.com" not in emails
 
@@ -157,7 +159,7 @@ async def test_soft_delete_excludes_from_list(http_client, tenant_headers):
     assert dr.status_code == 204
     lr = await http_client.get("/api/v1/users", headers=tenant_headers)
     assert lr.status_code == 200
-    assert all(u["id"] != uid for u in lr.json())
+    assert all(u["id"] != uid for u in lr.json()["items"])
 
 
 @pytest.mark.asyncio
@@ -190,3 +192,41 @@ async def test_tenant_header_mismatch_returns_403(app, seed, event_sink):
             assert r.status_code == 403
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_current_tenant, None)
+
+
+@pytest.mark.asyncio
+async def test_list_users_pagination_and_search(http_client, tenant_headers):
+    for i in range(3):
+        r = await http_client.post(
+            "/api/v1/users",
+            headers=tenant_headers,
+            json={
+                "email": f"page{i}@example.com",
+                "first_name": "P",
+                "last_name": f"User{i}",
+                "gender": "unspecified",
+                "is_active": True,
+            },
+        )
+        assert r.status_code == 201, r.text
+
+    r0 = await http_client.get(
+        "/api/v1/users",
+        headers=tenant_headers,
+        params={"limit": 2, "offset": 0},
+    )
+    assert r0.status_code == 200
+    b0 = r0.json()
+    assert b0["total"] >= 3
+    assert len(b0["items"]) == 2
+    assert b0["limit"] == 2
+    assert b0["offset"] == 0
+
+    r1 = await http_client.get(
+        "/api/v1/users",
+        headers=tenant_headers,
+        params={"q": "page1@", "limit": 50, "offset": 0},
+    )
+    assert r1.status_code == 200
+    emails = {u["email"] for u in r1.json()["items"]}
+    assert "page1@example.com" in emails

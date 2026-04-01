@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from user_service.domain.dtos import (
     OrganizationCreateBody,
     OrganizationResponse,
     UserCreateBody,
+    UserListPage,
     UserResponse,
     UserUpdateBody,
 )
@@ -88,17 +89,31 @@ async def create_user(
 
 @router.get(
     "/users",
-    response_model=list[UserResponse],
+    response_model=UserListPage,
     openapi_extra={"security": [{"BearerAuth": []}]},
 )
 async def list_users(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
+    limit: int = Query(50, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    q: str | None = Query(
+        None,
+        max_length=256,
+        description="Case-insensitive search on email, first name, or last name",
+    ),
 ):
     repo = SqlUserRepository(session)
-    users = await repo.list_active(tenant_id)
-    return [_user_to_response(u) for u in users]
+    users, total = await repo.list_active_paged(
+        tenant_id, offset=offset, limit=limit, q=q
+    )
+    return UserListPage(
+        items=[_user_to_response(u) for u in users],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.patch(

@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 from panopticon_models.acl import SociACLAttributes
+from panopticon_models.http_common import Page
 
 
 class UserCreateBody(BaseModel):
@@ -34,6 +35,10 @@ class UserResponse(BaseModel):
     sociacl_attributes: dict | None = None
 
     model_config = {"from_attributes": True}
+
+
+class UserListPage(Page[UserResponse]):
+    """Paginated active users for the current tenant."""
 
 
 class GroupCreateBody(BaseModel):

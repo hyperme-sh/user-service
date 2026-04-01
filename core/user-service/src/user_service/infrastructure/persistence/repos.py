@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from controlplane_db.models import Group, Organization, User, UserGroupMembership
@@ -38,6 +38,43 @@ class SqlUserRepository:
             )
         )
         return list(q.scalars().all())
+
+    async def list_active_paged(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        offset: int,
+        limit: int,
+        q: str | None,
+    ) -> tuple[list[User], int]:
+        cond = [
+            User.tenant_id == tenant_id,
+            User.deleted_at.is_(None),
+        ]
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            cond.append(
+                or_(
+                    User.email.ilike(term),
+                    User.first_name.ilike(term),
+                    User.last_name.ilike(term),
+                )
+            )
+        where_clause = and_(*cond)
+
+        total_q = await self._s.execute(
+            select(func.count()).select_from(User).where(where_clause)
+        )
+        total = int(total_q.scalar_one())
+
+        rows_q = await self._s.execute(
+            select(User)
+            .where(where_clause)
+            .order_by(User.email.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows_q.scalars().all()), total
 
     async def get(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> User | None:
         q = await self._s.execute(

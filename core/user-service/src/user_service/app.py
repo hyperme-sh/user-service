@@ -15,6 +15,7 @@ from api.infrastructure.messaging.tenant_event_publisher import (
     set_tenant_event_publisher,
 )
 from api.infrastructure.persistence.db_session import configure_session_maker
+from api.infrastructure.service_cors import add_optional_service_cors
 from api.interfaces.api_controllers.health_endpoint import router as health_router
 from controlplane_db.session import normalize_database_url
 from controlplane_events import AioKafkaEventProducer
@@ -147,7 +148,8 @@ def create_app(
     app.add_middleware(UserServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(user_api_router, prefix="/api/v1")
-    logger.info("User service: UserServiceDbMiddleware + /api/v1 routes")
+    add_optional_service_cors(app, env_var="USER_SERVICE_CORS_ORIGINS")
+    logger.info("User service: UserServiceDbMiddleware + /api/v1 routes + optional CORS")
     return app
 
 
