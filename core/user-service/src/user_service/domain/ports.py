@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Protocol
 
-from controlplane_db.models import Group, Organization, User, UserGroupMembership
+from controlplane_db.models import Group, Organization, Role, User, UserGroupMembership
 
 from user_service.domain.dtos import UserCreateBody, UserUpdateBody
 
@@ -15,7 +15,14 @@ class UserRepositoryPort(Protocol):
     async def update(
         self, tenant_id: uuid.UUID, user_id: uuid.UUID, body: UserUpdateBody
     ) -> User | None: ...
+    async def set_role(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, role_id: uuid.UUID | None
+    ) -> User | None: ...
     async def soft_delete(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> bool: ...
+
+
+class RoleRepositoryPort(Protocol):
+    async def get(self, role_id: uuid.UUID) -> Role | None: ...
 
 
 class GroupRepositoryPort(Protocol):

@@ -23,12 +23,14 @@ from user_service.domain.dtos import (
     UserCreateBody,
     UserListPage,
     UserResponse,
+    UserRoleUpdateBody,
     UserUpdateBody,
 )
 from user_service.infrastructure.persistence.repos import (
     SqlGroupRepository,
     SqlMembershipRepository,
     SqlOrganizationRepository,
+    SqlRoleRepository,
     SqlUserRepository,
 )
 
@@ -51,6 +53,7 @@ def _user_to_response(u) -> UserResponse:
         is_active=u.is_active,
         deleted_at=u.deleted_at,
         sociacl_attributes=u.sociacl_attributes,
+        role_id=u.role_id,
     )
 
 
@@ -280,6 +283,64 @@ async def get_organization(
     if o is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
     return OrganizationResponse.model_validate(o)
+
+
+@router.patch(
+    "/users/{user_id}/assign_role",
+    response_model=UserResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def assign_user_role(
+    user_id: uuid.UUID,
+    body: UserRoleUpdateBody,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    urepo = SqlUserRepository(session)
+    rrepo = SqlRoleRepository(session)
+    user = await urepo.get(tenant_id, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    role = await rrepo.get(body.role_id)
+    if role is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Role not found")
+    if user.role_id == body.role_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "User already has this role assigned"
+        )
+    updated = await urepo.set_role(tenant_id, user_id, body.role_id)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    return _user_to_response(updated)
+
+
+@router.patch(
+    "/users/{user_id}/remove_role",
+    response_model=UserResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def remove_user_role(
+    user_id: uuid.UUID,
+    body: UserRoleUpdateBody,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    urepo = SqlUserRepository(session)
+    user = await urepo.get(tenant_id, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if user.role_id != body.role_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "User does not have this role assigned"
+        )
+    updated = await urepo.set_role(tenant_id, user_id, None)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    return _user_to_response(updated)
 
 
 @router.post(

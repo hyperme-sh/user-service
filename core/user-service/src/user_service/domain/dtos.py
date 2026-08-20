@@ -33,8 +33,13 @@ class UserResponse(BaseModel):
     is_active: bool
     deleted_at: datetime | None = None
     sociacl_attributes: dict | None = None
+    role_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
+
+
+class UserRoleUpdateBody(BaseModel):
+    role_id: uuid.UUID
 
 
 class UserListPage(Page[UserResponse]):

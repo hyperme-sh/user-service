@@ -15,3 +15,14 @@ def test_openapi_includes_group_and_org_list_get():
     group_list = paths["/api/v1/groups"]["get"]
     param_names = {p["name"] for p in group_list.get("parameters", [])}
     assert {"limit", "offset", "q"} <= param_names
+
+
+def test_openapi_includes_user_role_assign_remove():
+    app = create_app(test_event_sink=[])
+    spec = app.openapi()
+    paths = spec["paths"]
+    assert "patch" in paths["/api/v1/users/{user_id}/assign_role"]
+    assert "patch" in paths["/api/v1/users/{user_id}/remove_role"]
+    schemas = spec["components"]["schemas"]
+    assert "UserRoleUpdateBody" in schemas
+    assert "role_id" in schemas["UserResponse"]["properties"]

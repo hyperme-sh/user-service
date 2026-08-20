@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from controlplane_db.models import Group, Organization, User, UserGroupMembership
+from controlplane_db.models import Group, Organization, Role, User, UserGroupMembership
 from user_service.domain.dtos import UserCreateBody, UserUpdateBody
 
 
@@ -111,6 +111,17 @@ class SqlUserRepository:
         await self._s.refresh(u)
         return u
 
+    async def set_role(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, role_id: uuid.UUID | None
+    ) -> User | None:
+        u = await self.get(tenant_id, user_id)
+        if u is None:
+            return None
+        u.role_id = role_id
+        await self._s.flush()
+        await self._s.refresh(u)
+        return u
+
     async def soft_delete(self, tenant_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         u = await self.get(tenant_id, user_id)
         if u is None:
@@ -119,6 +130,15 @@ class SqlUserRepository:
         u.is_active = False
         await self._s.flush()
         return True
+
+
+class SqlRoleRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def get(self, role_id: uuid.UUID) -> Role | None:
+        q = await self._s.execute(select(Role).where(Role.id == role_id))
+        return q.scalar_one_or_none()
 
 
 class SqlGroupRepository:

@@ -387,3 +387,77 @@ async def test_list_users_pagination_and_search(http_client, tenant_headers):
     assert r1.status_code == 200
     emails = {u["email"] for u in r1.json()["items"]}
     assert "page1@example.com" in emails
+
+
+@pytest.mark.asyncio
+async def test_assign_and_remove_user_role(http_client, tenant_headers, seed):
+    ur = await http_client.post(
+        "/api/v1/users",
+        headers=tenant_headers,
+        json={
+            "email": "roleuser@example.com",
+            "first_name": "Role",
+            "last_name": "User",
+            "gender": "unspecified",
+            "is_active": True,
+        },
+    )
+    assert ur.status_code == 201, ur.text
+    uid = ur.json()["id"]
+    assert ur.json()["role_id"] is None
+
+    assigned = await http_client.patch(
+        f"/api/v1/users/{uid}/assign_role",
+        headers=tenant_headers,
+        json={"role_id": str(seed.ra)},
+    )
+    assert assigned.status_code == 202, assigned.text
+    assert assigned.json()["role_id"] == str(seed.ra)
+
+    listed = await http_client.get("/api/v1/users", headers=tenant_headers)
+    assert listed.status_code == 200
+    match = next(u for u in listed.json()["items"] if u["id"] == uid)
+    assert match["role_id"] == str(seed.ra)
+
+    again = await http_client.patch(
+        f"/api/v1/users/{uid}/assign_role",
+        headers=tenant_headers,
+        json={"role_id": str(seed.ra)},
+    )
+    assert again.status_code == 409
+
+    missing_role = await http_client.patch(
+        f"/api/v1/users/{uid}/assign_role",
+        headers=tenant_headers,
+        json={"role_id": str(uuid.uuid4())},
+    )
+    assert missing_role.status_code == 404
+
+    other_role = await http_client.patch(
+        f"/api/v1/users/{uid}/assign_role",
+        headers=tenant_headers,
+        json={"role_id": str(seed.rb)},
+    )
+    assert other_role.status_code == 404
+
+    removed = await http_client.patch(
+        f"/api/v1/users/{uid}/remove_role",
+        headers=tenant_headers,
+        json={"role_id": str(seed.ra)},
+    )
+    assert removed.status_code == 202, removed.text
+    assert removed.json()["role_id"] is None
+
+    already = await http_client.patch(
+        f"/api/v1/users/{uid}/remove_role",
+        headers=tenant_headers,
+        json={"role_id": str(seed.ra)},
+    )
+    assert already.status_code == 409
+
+    missing_user = await http_client.patch(
+        f"/api/v1/users/{uuid.uuid4()}/assign_role",
+        headers=tenant_headers,
+        json={"role_id": str(seed.ra)},
+    )
+    assert missing_user.status_code == 404
