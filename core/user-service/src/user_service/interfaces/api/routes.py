@@ -15,8 +15,10 @@ from controlplane_events.payloads import GroupMemberAddedPayload, UserCreatedEve
 from user_service.deps import get_current_user, require_matched_tenant
 from user_service.domain.dtos import (
     GroupCreateBody,
+    GroupListPage,
     GroupResponse,
     OrganizationCreateBody,
+    OrganizationListPage,
     OrganizationResponse,
     UserCreateBody,
     UserListPage,
@@ -169,6 +171,53 @@ async def create_group(
     return GroupResponse.model_validate(g)
 
 
+@router.get(
+    "/groups",
+    response_model=GroupListPage,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def list_groups(
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    limit: int = Query(50, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    q: str | None = Query(
+        None,
+        max_length=256,
+        description="Case-insensitive search on name or description",
+    ),
+):
+    repo = SqlGroupRepository(session)
+    groups, total = await repo.list_paged(
+        tenant_id, offset=offset, limit=limit, q=q
+    )
+    return GroupListPage(
+        items=[GroupResponse.model_validate(g) for g in groups],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/groups/{group_id}",
+    response_model=GroupResponse,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def get_group(
+    group_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlGroupRepository(session)
+    g = await repo.get(tenant_id, group_id)
+    if g is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
+    return GroupResponse.model_validate(g)
+
+
 @router.post(
     "/organizations",
     response_model=OrganizationResponse,
@@ -183,6 +232,53 @@ async def create_organization(
 ):
     repo = SqlOrganizationRepository(session)
     o = await repo.create(tenant_id, body.legal_name)
+    return OrganizationResponse.model_validate(o)
+
+
+@router.get(
+    "/organizations",
+    response_model=OrganizationListPage,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def list_organizations(
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    limit: int = Query(50, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    q: str | None = Query(
+        None,
+        max_length=256,
+        description="Case-insensitive search on legal name",
+    ),
+):
+    repo = SqlOrganizationRepository(session)
+    orgs, total = await repo.list_paged(
+        tenant_id, offset=offset, limit=limit, q=q
+    )
+    return OrganizationListPage(
+        items=[OrganizationResponse.model_validate(o) for o in orgs],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/organizations/{organization_id}",
+    response_model=OrganizationResponse,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def get_organization(
+    organization_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    repo = SqlOrganizationRepository(session)
+    o = await repo.get(tenant_id, organization_id)
+    if o is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
     return OrganizationResponse.model_validate(o)
 
 

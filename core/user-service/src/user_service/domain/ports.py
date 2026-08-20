@@ -23,10 +23,29 @@ class GroupRepositoryPort(Protocol):
         self, tenant_id: uuid.UUID, name: str, description: str | None, role_id: uuid.UUID
     ) -> Group: ...
     async def get(self, tenant_id: uuid.UUID, group_id: uuid.UUID) -> Group | None: ...
+    async def list_paged(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        offset: int,
+        limit: int,
+        q: str | None,
+    ) -> tuple[list[Group], int]: ...
 
 
 class OrganizationRepositoryPort(Protocol):
     async def create(self, tenant_id: uuid.UUID, legal_name: str) -> Organization: ...
+    async def get(
+        self, tenant_id: uuid.UUID, organization_id: uuid.UUID
+    ) -> Organization | None: ...
+    async def list_paged(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        offset: int,
+        limit: int,
+        q: str | None,
+    ) -> tuple[list[Organization], int]: ...
 
 
 class MembershipRepositoryPort(Protocol):

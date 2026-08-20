@@ -57,6 +57,10 @@ class GroupResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GroupListPage(Page[GroupResponse]):
+    """Paginated groups for the current tenant."""
+
+
 class OrganizationCreateBody(BaseModel):
     legal_name: str = Field(..., min_length=1, max_length=512)
 
@@ -67,3 +71,7 @@ class OrganizationResponse(BaseModel):
     legal_name: str
 
     model_config = {"from_attributes": True}
+
+
+class OrganizationListPage(Page[OrganizationResponse]):
+    """Paginated organizations for the current tenant."""

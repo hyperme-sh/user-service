@@ -195,6 +195,163 @@ async def test_tenant_header_mismatch_returns_403(app, seed, event_sink):
 
 
 @pytest.mark.asyncio
+async def test_list_groups_only_current_tenant(
+    http_client, tenant_headers, seed, migrated_sync_url
+):
+    gr = await http_client.post(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        json={"name": "ops", "description": "Ops team", "role_id": str(seed.ra)},
+    )
+    assert gr.status_code == 201, gr.text
+    gid = gr.json()["id"]
+
+    eng = create_engine(migrated_sync_url)
+    other_id = uuid.uuid4()
+    with eng.begin() as cx:
+        cx.execute(
+            text(
+                "INSERT INTO groups (id, tenant_id, name, description, role_id) "
+                "VALUES (:id, :tid, 'other-g', NULL, :rid)"
+            ),
+            {"id": other_id, "tid": seed.tb, "rid": seed.rb},
+        )
+
+    lr = await http_client.get("/api/v1/groups", headers=tenant_headers)
+    assert lr.status_code == 200
+    body = lr.json()
+    names = {g["name"] for g in body["items"]}
+    assert "ops" in names
+    assert "other-g" not in names
+    assert body["total"] >= 1
+
+    one = await http_client.get(f"/api/v1/groups/{gid}", headers=tenant_headers)
+    assert one.status_code == 200
+    assert one.json()["name"] == "ops"
+    assert one.json()["tenant_id"] == str(seed.ta)
+
+    missing = await http_client.get(
+        f"/api/v1/groups/{other_id}", headers=tenant_headers
+    )
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_groups_pagination_and_search(http_client, tenant_headers, seed):
+    for i in range(3):
+        r = await http_client.post(
+            "/api/v1/groups",
+            headers=tenant_headers,
+            json={
+                "name": f"page-g{i}",
+                "description": f"desc{i}",
+                "role_id": str(seed.ra),
+            },
+        )
+        assert r.status_code == 201, r.text
+
+    r0 = await http_client.get(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        params={"limit": 2, "offset": 0},
+    )
+    assert r0.status_code == 200
+    b0 = r0.json()
+    assert b0["total"] >= 3
+    assert len(b0["items"]) == 2
+    assert b0["limit"] == 2
+    assert b0["offset"] == 0
+
+    r1 = await http_client.get(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        params={"q": "page-g1", "limit": 50, "offset": 0},
+    )
+    assert r1.status_code == 200
+    names = {g["name"] for g in r1.json()["items"]}
+    assert "page-g1" in names
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_only_current_tenant(
+    http_client, tenant_headers, seed, migrated_sync_url
+):
+    empty = await http_client.get("/api/v1/organizations", headers=tenant_headers)
+    assert empty.status_code == 200
+    assert empty.json()["items"] == []
+    assert empty.json()["total"] == 0
+
+    cr = await http_client.post(
+        "/api/v1/organizations",
+        headers=tenant_headers,
+        json={"legal_name": "Acme LLC"},
+    )
+    assert cr.status_code == 201, cr.text
+    oid = cr.json()["id"]
+
+    eng = create_engine(migrated_sync_url)
+    other_id = uuid.uuid4()
+    with eng.begin() as cx:
+        cx.execute(
+            text(
+                "INSERT INTO organizations (id, tenant_id, legal_name) "
+                "VALUES (:id, :tid, 'Other LLC')"
+            ),
+            {"id": other_id, "tid": seed.tb},
+        )
+
+    lr = await http_client.get("/api/v1/organizations", headers=tenant_headers)
+    assert lr.status_code == 200
+    names = {o["legal_name"] for o in lr.json()["items"]}
+    assert "Acme LLC" in names
+    assert "Other LLC" not in names
+
+    one = await http_client.get(
+        f"/api/v1/organizations/{oid}", headers=tenant_headers
+    )
+    assert one.status_code == 200
+    assert one.json()["legal_name"] == "Acme LLC"
+    assert one.json()["tenant_id"] == str(seed.ta)
+
+    missing = await http_client.get(
+        f"/api/v1/organizations/{other_id}", headers=tenant_headers
+    )
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_pagination_and_search(
+    http_client, tenant_headers
+):
+    for i in range(3):
+        r = await http_client.post(
+            "/api/v1/organizations",
+            headers=tenant_headers,
+            json={"legal_name": f"Page Org {i}"},
+        )
+        assert r.status_code == 201, r.text
+
+    r0 = await http_client.get(
+        "/api/v1/organizations",
+        headers=tenant_headers,
+        params={"limit": 2, "offset": 0},
+    )
+    assert r0.status_code == 200
+    b0 = r0.json()
+    assert b0["total"] >= 3
+    assert len(b0["items"]) == 2
+
+    r1 = await http_client.get(
+        "/api/v1/organizations",
+        headers=tenant_headers,
+        params={"q": "Page Org 1", "limit": 50, "offset": 0},
+    )
+    assert r1.status_code == 200
+    names = {o["legal_name"] for o in r1.json()["items"]}
+    assert "Page Org 1" in names
+
+
+@pytest.mark.asyncio
 async def test_list_users_pagination_and_search(http_client, tenant_headers):
     for i in range(3):
         r = await http_client.post(

@@ -150,6 +150,39 @@ class SqlGroupRepository:
         )
         return q.scalar_one_or_none()
 
+    async def list_paged(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        offset: int,
+        limit: int,
+        q: str | None,
+    ) -> tuple[list[Group], int]:
+        cond = [Group.tenant_id == tenant_id]
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            cond.append(
+                or_(
+                    Group.name.ilike(term),
+                    Group.description.ilike(term),
+                )
+            )
+        where_clause = and_(*cond)
+
+        total_q = await self._s.execute(
+            select(func.count()).select_from(Group).where(where_clause)
+        )
+        total = int(total_q.scalar_one())
+
+        rows_q = await self._s.execute(
+            select(Group)
+            .where(where_clause)
+            .order_by(Group.name.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows_q.scalars().all()), total
+
 
 class SqlOrganizationRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -165,6 +198,45 @@ class SqlOrganizationRepository:
         await self._s.flush()
         await self._s.refresh(o)
         return o
+
+    async def get(
+        self, tenant_id: uuid.UUID, organization_id: uuid.UUID
+    ) -> Organization | None:
+        q = await self._s.execute(
+            select(Organization).where(
+                Organization.tenant_id == tenant_id,
+                Organization.id == organization_id,
+            )
+        )
+        return q.scalar_one_or_none()
+
+    async def list_paged(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        offset: int,
+        limit: int,
+        q: str | None,
+    ) -> tuple[list[Organization], int]:
+        cond = [Organization.tenant_id == tenant_id]
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            cond.append(Organization.legal_name.ilike(term))
+        where_clause = and_(*cond)
+
+        total_q = await self._s.execute(
+            select(func.count()).select_from(Organization).where(where_clause)
+        )
+        total = int(total_q.scalar_one())
+
+        rows_q = await self._s.execute(
+            select(Organization)
+            .where(where_clause)
+            .order_by(Organization.legal_name.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows_q.scalars().all()), total
 
 
 class SqlMembershipRepository:
