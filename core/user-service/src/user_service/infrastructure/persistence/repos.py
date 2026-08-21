@@ -136,8 +136,10 @@ class SqlRoleRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def get(self, role_id: uuid.UUID) -> Role | None:
-        q = await self._s.execute(select(Role).where(Role.id == role_id))
+    async def get(self, tenant_id: uuid.UUID, role_id: uuid.UUID) -> Role | None:
+        q = await self._s.execute(
+            select(Role).where(Role.tenant_id == tenant_id, Role.id == role_id)
+        )
         return q.scalar_one_or_none()
 
 

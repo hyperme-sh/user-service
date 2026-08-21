@@ -303,7 +303,7 @@ async def assign_user_role(
     user = await urepo.get(tenant_id, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-    role = await rrepo.get(body.role_id)
+    role = await rrepo.get(tenant_id, body.role_id)
     if role is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Role not found")
     if user.role_id == body.role_id:

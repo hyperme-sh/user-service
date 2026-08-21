@@ -22,7 +22,7 @@ class UserRepositoryPort(Protocol):
 
 
 class RoleRepositoryPort(Protocol):
-    async def get(self, role_id: uuid.UUID) -> Role | None: ...
+    async def get(self, tenant_id: uuid.UUID, role_id: uuid.UUID) -> Role | None: ...
 
 
 class GroupRepositoryPort(Protocol):
