@@ -80,3 +80,32 @@ class OrganizationResponse(BaseModel):
 
 class OrganizationListPage(Page[OrganizationResponse]):
     """Paginated organizations for the current tenant."""
+
+
+class GroupMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    first_name: str
+    last_name: str
+    is_active: bool
+    role_id: uuid.UUID | None = None
+    group_id: uuid.UUID
+    group_name: str
+
+
+class GroupMemberListPage(Page[GroupMemberResponse]):
+    """Paginated members of an existing group."""
+
+
+class PortalControlsResponse(BaseModel):
+    """Slice-2 portal gates. IR door stays hidden until that door exists."""
+
+    org_admin: bool
+    groups: list[str]
+    can_invite_members: bool
+    can_assign_group: bool
+    can_mint_keys: bool
+    can_checkout: bool
+    can_see_host_status: bool
+    can_see_leases: bool
+    can_use_ir_door: bool = False

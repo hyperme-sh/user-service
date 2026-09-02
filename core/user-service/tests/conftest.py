@@ -117,7 +117,7 @@ def auth_context(seed: Seed):
             sub="11111111-1111-1111-1111-111111111111",
             email="actor@example.com",
             tenant_id=seed.ta,
-            roles=[],
+            roles=["admin"],
             scopes=[],
         )
 

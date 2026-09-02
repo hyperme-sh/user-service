@@ -62,3 +62,6 @@ class MembershipRepositoryPort(Protocol):
     async def exists(
         self, tenant_id: uuid.UUID, user_id: uuid.UUID, group_id: uuid.UUID
     ) -> bool: ...
+    async def remove(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, group_id: uuid.UUID
+    ) -> bool: ...
