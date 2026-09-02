@@ -98,7 +98,7 @@ class GroupMemberListPage(Page[GroupMemberResponse]):
 
 
 class PortalControlsResponse(BaseModel):
-    """Slice-2 portal gates. IR door stays hidden until that door exists."""
+    """Slice-2 portal gates plus slice-4 IR door use / export receipts."""
 
     org_admin: bool
     groups: list[str]
@@ -109,3 +109,4 @@ class PortalControlsResponse(BaseModel):
     can_see_host_status: bool
     can_see_leases: bool
     can_use_ir_door: bool = False
+    can_export_ir_receipts: bool = False

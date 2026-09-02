@@ -481,7 +481,8 @@ async def test_portal_controls_admin_can_mint_and_invite(
     assert body["can_checkout"] is True
     assert body["can_see_host_status"] is True
     assert body["can_see_leases"] is True
-    assert body["can_use_ir_door"] is False
+    assert body["can_use_ir_door"] is True
+    assert body["can_export_ir_receipts"] is True
 
 
 @pytest.mark.asyncio
