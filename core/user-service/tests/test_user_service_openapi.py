@@ -43,3 +43,4 @@ def test_openapi_includes_portal_org_group_controls():
     assert "can_checkout" in schemas["PortalControlsResponse"]["properties"]
     assert "can_see_host_status" in schemas["PortalControlsResponse"]["properties"]
     assert schemas["PortalControlsResponse"]["properties"]["can_use_ir_door"]
+    assert schemas["PortalControlsResponse"]["properties"]["can_export_ir_receipts"]
