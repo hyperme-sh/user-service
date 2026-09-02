@@ -7,7 +7,11 @@ import pytest
 from asgi_lifespan import LifespanManager
 from sqlalchemy import create_engine, text
 
-from api.common.event_types import GROUP_MEMBER_ADDED_V1, USER_CREATED_V1
+from api.common.event_types import (
+    GROUP_MEMBER_ADDED_V1,
+    GROUP_MEMBER_REMOVED_V1,
+    USER_CREATED_V1,
+)
 from auth_service.deps import get_current_tenant, get_current_user
 from auth_service.schemas import AuthMeResponse
 
@@ -461,3 +465,144 @@ async def test_assign_and_remove_user_role(http_client, tenant_headers, seed):
         json={"role_id": str(seed.ra)},
     )
     assert missing_user.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_portal_controls_admin_can_mint_and_invite(
+    http_client, tenant_headers
+):
+    r = await http_client.get("/api/v1/me/portal-controls", headers=tenant_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["org_admin"] is True
+    assert body["can_invite_members"] is True
+    assert body["can_assign_group"] is True
+    assert body["can_mint_keys"] is True
+    assert body["can_checkout"] is True
+    assert body["can_see_host_status"] is True
+    assert body["can_see_leases"] is True
+    assert body["can_use_ir_door"] is False
+
+
+@pytest.mark.asyncio
+async def test_group_members_list_and_remove(
+    http_client, tenant_headers, event_sink, seed
+):
+    ur = await http_client.post(
+        "/api/v1/users",
+        headers=tenant_headers,
+        json={
+            "email": "renter@example.com",
+            "first_name": "R",
+            "last_name": "Enter",
+            "gender": "unspecified",
+            "is_active": True,
+        },
+    )
+    assert ur.status_code == 201
+    uid = ur.json()["id"]
+    gr = await http_client.post(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        json={"name": "renter", "description": "Renter group", "role_id": str(seed.ra)},
+    )
+    assert gr.status_code == 201, gr.text
+    gid = gr.json()["id"]
+    added = await http_client.post(
+        f"/api/v1/users/{uid}/groups/{gid}",
+        headers=tenant_headers,
+    )
+    assert added.status_code == 201, added.text
+
+    listed = await http_client.get(
+        f"/api/v1/groups/{gid}/members",
+        headers=tenant_headers,
+    )
+    assert listed.status_code == 200, listed.text
+    emails = {m["email"] for m in listed.json()["items"]}
+    assert "renter@example.com" in emails
+
+    mine = await http_client.get(
+        f"/api/v1/users/{uid}/groups",
+        headers=tenant_headers,
+    )
+    assert mine.status_code == 200, mine.text
+    assert {g["name"] for g in mine.json()["items"]} == {"renter"}
+
+    event_sink.clear()
+    removed = await http_client.delete(
+        f"/api/v1/users/{uid}/groups/{gid}",
+        headers=tenant_headers,
+    )
+    assert removed.status_code == 204, removed.text
+    assert any(e["event_type"] == GROUP_MEMBER_REMOVED_V1 for e in event_sink)
+
+    empty = await http_client.get(
+        f"/api/v1/groups/{gid}/members",
+        headers=tenant_headers,
+    )
+    assert empty.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_assign_group_forbidden_without_org_admin(
+    app, http_client, tenant_headers, seed
+):
+    ur = await http_client.post(
+        "/api/v1/users",
+        headers=tenant_headers,
+        json={
+            "email": "guest-actor-target@example.com",
+            "first_name": "G",
+            "last_name": "T",
+            "gender": "unspecified",
+            "is_active": True,
+        },
+    )
+    assert ur.status_code == 201
+    uid = ur.json()["id"]
+    gr = await http_client.post(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        json={"name": "host", "description": None, "role_id": str(seed.ra)},
+    )
+    assert gr.status_code == 201
+    gid = gr.json()["id"]
+
+    async def _guest() -> AuthMeResponse:
+        return AuthMeResponse(
+            sub="22222222-2222-2222-2222-222222222222",
+            email="guest@example.com",
+            tenant_id=seed.ta,
+            roles=["guest"],
+            groups=[],
+            scopes=[],
+        )
+
+    app.dependency_overrides[get_current_user] = _guest
+    try:
+        denied = await http_client.post(
+            f"/api/v1/users/{uid}/groups/{gid}",
+            headers=tenant_headers,
+        )
+        assert denied.status_code == 403
+        controls = await http_client.get(
+            "/api/v1/me/portal-controls", headers=tenant_headers
+        )
+        assert controls.status_code == 200
+        body = controls.json()
+        assert body["org_admin"] is False
+        assert body["can_mint_keys"] is False
+        assert body["can_checkout"] is False
+        assert body["can_see_host_status"] is False
+    finally:
+        async def _admin() -> AuthMeResponse:
+            return AuthMeResponse(
+                sub="11111111-1111-1111-1111-111111111111",
+                email="actor@example.com",
+                tenant_id=seed.ta,
+                roles=["admin"],
+                scopes=[],
+            )
+
+        app.dependency_overrides[get_current_user] = _admin

@@ -86,6 +86,28 @@ class SqlUserRepository:
         )
         return q.scalar_one_or_none()
 
+    async def get_by_email(self, tenant_id: uuid.UUID, email: str) -> User | None:
+        q = await self._s.execute(
+            select(User).where(
+                User.tenant_id == tenant_id,
+                User.email == email.lower(),
+                User.deleted_at.is_(None),
+            )
+        )
+        return q.scalar_one_or_none()
+
+    async def get_by_keycloak_sub(
+        self, tenant_id: uuid.UUID, keycloak_sub: str
+    ) -> User | None:
+        q = await self._s.execute(
+            select(User).where(
+                User.tenant_id == tenant_id,
+                User.keycloak_sub == keycloak_sub,
+                User.deleted_at.is_(None),
+            )
+        )
+        return q.scalar_one_or_none()
+
     async def get_any(
         self, tenant_id: uuid.UUID, user_id: uuid.UUID
     ) -> User | None:
@@ -290,3 +312,49 @@ class SqlMembershipRepository:
             )
         )
         return q.scalar_one_or_none() is not None
+
+    async def remove(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID, group_id: uuid.UUID
+    ) -> bool:
+        q = await self._s.execute(
+            select(UserGroupMembership).where(
+                UserGroupMembership.tenant_id == tenant_id,
+                UserGroupMembership.user_id == user_id,
+                UserGroupMembership.group_id == group_id,
+            )
+        )
+        row = q.scalar_one_or_none()
+        if row is None:
+            return False
+        await self._s.delete(row)
+        await self._s.flush()
+        return True
+
+    async def list_for_group(
+        self, tenant_id: uuid.UUID, group_id: uuid.UUID
+    ) -> list[tuple[UserGroupMembership, User]]:
+        q = await self._s.execute(
+            select(UserGroupMembership, User)
+            .join(User, User.id == UserGroupMembership.user_id)
+            .where(
+                UserGroupMembership.tenant_id == tenant_id,
+                UserGroupMembership.group_id == group_id,
+                User.deleted_at.is_(None),
+            )
+            .order_by(User.email.asc())
+        )
+        return list(q.all())
+
+    async def groups_for_user(
+        self, tenant_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[Group]:
+        q = await self._s.execute(
+            select(Group)
+            .join(UserGroupMembership, UserGroupMembership.group_id == Group.id)
+            .where(
+                UserGroupMembership.tenant_id == tenant_id,
+                UserGroupMembership.user_id == user_id,
+            )
+            .order_by(Group.name.asc())
+        )
+        return list(q.scalars().all())

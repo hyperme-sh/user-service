@@ -6,20 +6,32 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.common.event_types import GROUP_MEMBER_ADDED_V1, USER_CREATED_V1
+from api.common.event_types import (
+    GROUP_MEMBER_ADDED_V1,
+    GROUP_MEMBER_REMOVED_V1,
+    USER_CREATED_V1,
+)
+from api.common.portal_controls import PortalControls, evaluate_portal_controls
 from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
 from api.infrastructure.persistence.db_session import get_db_session
 from auth_service.schemas import AuthMeResponse
-from controlplane_events.payloads import GroupMemberAddedPayload, UserCreatedEvent
+from controlplane_events.payloads import (
+    GroupMemberAddedPayload,
+    GroupMemberRemovedPayload,
+    UserCreatedEvent,
+)
 
 from user_service.deps import get_current_user, require_matched_tenant
 from user_service.domain.dtos import (
     GroupCreateBody,
     GroupListPage,
+    GroupMemberListPage,
+    GroupMemberResponse,
     GroupResponse,
     OrganizationCreateBody,
     OrganizationListPage,
     OrganizationResponse,
+    PortalControlsResponse,
     UserCreateBody,
     UserListPage,
     UserResponse,
@@ -62,6 +74,51 @@ def _actor_sub_as_uuid(me: AuthMeResponse) -> uuid.UUID | None:
         return uuid.UUID(str(me.sub))
     except (ValueError, TypeError):
         return None
+
+
+async def _lookup_actor_user(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    me: AuthMeResponse,
+):
+    urepo = SqlUserRepository(session)
+    sub_uuid = _actor_sub_as_uuid(me)
+    if sub_uuid is not None:
+        user = await urepo.get(tenant_id, sub_uuid)
+        if user is not None:
+            return user
+    if me.sub:
+        user = await urepo.get_by_keycloak_sub(tenant_id, me.sub)
+        if user is not None:
+            return user
+    if me.email:
+        return await urepo.get_by_email(tenant_id, me.email)
+    return None
+
+
+async def actor_portal_controls(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    me: AuthMeResponse,
+) -> PortalControls:
+    roles = list(me.roles)
+    groups = list(me.groups)
+    user = await _lookup_actor_user(session, tenant_id, me)
+    if user is not None:
+        if user.role_id is not None:
+            role = await SqlRoleRepository(session).get(tenant_id, user.role_id)
+            if role is not None:
+                roles.append(role.name)
+        for group in await SqlMembershipRepository(session).groups_for_user(
+            tenant_id, user.id
+        ):
+            groups.append(group.name)
+    return evaluate_portal_controls(roles, groups)
+
+
+def _require_flag(controls: PortalControls, flag: str, detail: str) -> None:
+    if not getattr(controls, flag):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
 
 
 @router.post(
@@ -151,6 +208,12 @@ async def delete_user(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    _require_flag(
+        controls,
+        "can_invite_members",
+        "Org admin role required to remove members",
+    )
     repo = SqlUserRepository(session)
     ok = await repo.soft_delete(tenant_id, user_id)
     if not ok:
@@ -355,6 +418,12 @@ async def add_user_to_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    _require_flag(
+        controls,
+        "can_assign_group",
+        "Org admin role required to assign groups",
+    )
     urepo = SqlUserRepository(session)
     grep = SqlGroupRepository(session)
     mrepo = SqlMembershipRepository(session)
@@ -383,3 +452,120 @@ async def add_user_to_group(
         ).to_envelope_payload(),
     )
     return {"id": str(m.id)}
+
+
+@router.delete(
+    "/users/{user_id}/groups/{group_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def remove_user_from_group(
+    user_id: uuid.UUID,
+    group_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    _require_flag(
+        controls,
+        "can_assign_group",
+        "Org admin role required to assign groups",
+    )
+    urepo = SqlUserRepository(session)
+    grep = SqlGroupRepository(session)
+    mrepo = SqlMembershipRepository(session)
+    user = await urepo.get(tenant_id, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    group = await grep.get(tenant_id, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
+    ok = await mrepo.remove(tenant_id, user_id, group_id)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membership not found")
+    await get_tenant_event_publisher().publish(
+        tenant_id=tenant_id,
+        event_type=GROUP_MEMBER_REMOVED_V1,
+        payload=GroupMemberRemovedPayload(
+            user_id=user_id,
+            group_id=group_id,
+            tenant_id=tenant_id,
+            removed_by_user_id=_actor_sub_as_uuid(me),
+        ).to_envelope_payload(),
+    )
+
+
+@router.get(
+    "/groups/{group_id}/members",
+    response_model=GroupMemberListPage,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def list_group_members(
+    group_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    limit: int = Query(50, ge=1, le=500, description="Page size"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
+):
+    grep = SqlGroupRepository(session)
+    group = await grep.get(tenant_id, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
+    rows = await SqlMembershipRepository(session).list_for_group(tenant_id, group_id)
+    sliced = rows[offset : offset + limit]
+    items = [
+        GroupMemberResponse(
+            user_id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            is_active=user.is_active,
+            role_id=user.role_id,
+            group_id=group.id,
+            group_name=group.name,
+        )
+        for _membership, user in sliced
+    ]
+    return GroupMemberListPage(
+        items=items, total=len(rows), limit=limit, offset=offset
+    )
+
+
+@router.get(
+    "/users/{user_id}/groups",
+    response_model=GroupListPage,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def list_user_groups(
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    urepo = SqlUserRepository(session)
+    user = await urepo.get(tenant_id, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    groups = await SqlMembershipRepository(session).groups_for_user(tenant_id, user_id)
+    return GroupListPage(
+        items=[GroupResponse.model_validate(g) for g in groups],
+        total=len(groups),
+        limit=len(groups) or 1,
+        offset=0,
+    )
+
+
+@router.get(
+    "/me/portal-controls",
+    response_model=PortalControlsResponse,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def get_portal_controls(
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    return PortalControlsResponse.model_validate(controls.as_dict())
