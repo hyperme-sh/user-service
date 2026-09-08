@@ -5,6 +5,10 @@ def test_normalize_keycloak_group_paths():
     assert normalize_group_name("/host") == "host"
     assert normalize_group_name("/org/renter") == "renter"
     assert normalize_group_name("Billing Group") == "billing"
+    assert normalize_group_name("/org/ir") == "ir"
+    assert normalize_group_name("ir_export group") == "ir_export"
+    assert normalize_group_name("ir_door") == "ir"
+    assert normalize_group_name("ir_receipts") == "ir_export"
     assert normalize_group_name("workspace") is None
     assert normalize_group_name("team") is None
 
@@ -61,3 +65,29 @@ def test_guest_has_no_portal_controls():
     assert c.can_invite_members is False
     assert c.can_use_ir_door is False
     assert c.can_export_ir_receipts is False
+
+
+def test_ir_group_can_use_door_but_not_export():
+    c = evaluate_portal_controls(["user"], ["ir"])
+    assert c.org_admin is False
+    assert c.can_use_ir_door is True
+    assert c.can_export_ir_receipts is False
+    assert c.can_mint_keys is False
+    assert c.can_checkout is False
+    assert "ir" in c.groups
+
+
+def test_ir_export_group_can_export_but_not_use_door():
+    c = evaluate_portal_controls([], ["/ir_export"])
+    assert c.org_admin is False
+    assert c.can_use_ir_door is False
+    assert c.can_export_ir_receipts is True
+    assert c.can_mint_keys is False
+    assert "ir_export" in c.groups
+
+
+def test_ir_and_export_grants_are_independent():
+    both = evaluate_portal_controls(["user"], ["ir", "ir_export"])
+    assert both.can_use_ir_door is True
+    assert both.can_export_ir_receipts is True
+    assert both.org_admin is False
