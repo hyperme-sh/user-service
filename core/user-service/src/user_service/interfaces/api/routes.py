@@ -133,6 +133,12 @@ async def create_user(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    _require_flag(
+        controls,
+        "can_invite_members",
+        "Org admin role required to invite members",
+    )
     repo = SqlUserRepository(session)
     u = await repo.create(tenant_id, body)
     display = f"{u.first_name} {u.last_name}".strip()

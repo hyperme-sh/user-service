@@ -546,7 +546,7 @@ async def test_group_members_list_and_remove(
 
 
 @pytest.mark.asyncio
-async def test_assign_group_forbidden_without_org_admin(
+async def test_invite_and_assign_forbidden_without_org_admin(
     app, http_client, tenant_headers, seed
 ):
     ur = await http_client.post(
@@ -596,6 +596,18 @@ async def test_assign_group_forbidden_without_org_admin(
         assert body["can_mint_keys"] is False
         assert body["can_checkout"] is False
         assert body["can_see_host_status"] is False
+        invite = await http_client.post(
+            "/api/v1/users",
+            headers=tenant_headers,
+            json={
+                "email": "guest-invite@example.com",
+                "first_name": "No",
+                "last_name": "Invite",
+                "gender": "unspecified",
+                "is_active": True,
+            },
+        )
+        assert invite.status_code == 403
     finally:
         async def _admin() -> AuthMeResponse:
             return AuthMeResponse(
