@@ -486,6 +486,110 @@ async def test_portal_controls_admin_can_mint_and_invite(
 
 
 @pytest.mark.asyncio
+async def test_ir_group_grants_are_separate_on_portal_controls(
+    app, http_client, tenant_headers, seed
+):
+    ur = await http_client.post(
+        "/api/v1/users",
+        headers=tenant_headers,
+        json={
+            "email": "ir-actor@example.com",
+            "first_name": "Ir",
+            "last_name": "Door",
+            "gender": "unspecified",
+            "is_active": True,
+        },
+    )
+    assert ur.status_code == 201, ur.text
+    uid = ur.json()["id"]
+    ir_g = await http_client.post(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        json={"name": "ir", "description": "IR door", "role_id": str(seed.ra)},
+    )
+    assert ir_g.status_code == 201, ir_g.text
+    export_g = await http_client.post(
+        "/api/v1/groups",
+        headers=tenant_headers,
+        json={
+            "name": "ir_export",
+            "description": "IR receipts",
+            "role_id": str(seed.ra),
+        },
+    )
+    assert export_g.status_code == 201, export_g.text
+    added = await http_client.post(
+        f"/api/v1/users/{uid}/groups/{ir_g.json()['id']}",
+        headers=tenant_headers,
+    )
+    assert added.status_code == 201, added.text
+
+    async def _ir_member() -> AuthMeResponse:
+        return AuthMeResponse(
+            sub="33333333-3333-3333-3333-333333333333",
+            email="ir-actor@example.com",
+            tenant_id=seed.ta,
+            roles=["user"],
+            groups=[],
+            scopes=[],
+        )
+
+    app.dependency_overrides[get_current_user] = _ir_member
+    try:
+        door_only = await http_client.get(
+            "/api/v1/me/portal-controls", headers=tenant_headers
+        )
+        assert door_only.status_code == 200, door_only.text
+        body = door_only.json()
+        assert body["can_use_ir_door"] is True
+        assert body["can_export_ir_receipts"] is False
+        assert body["org_admin"] is False
+    finally:
+        async def _admin() -> AuthMeResponse:
+            return AuthMeResponse(
+                sub="11111111-1111-1111-1111-111111111111",
+                email="actor@example.com",
+                tenant_id=seed.ta,
+                roles=["admin"],
+                scopes=[],
+            )
+
+        app.dependency_overrides[get_current_user] = _admin
+
+    export_add = await http_client.post(
+        f"/api/v1/users/{uid}/groups/{export_g.json()['id']}",
+        headers=tenant_headers,
+    )
+    assert export_add.status_code == 201, export_add.text
+    revoke_door = await http_client.delete(
+        f"/api/v1/users/{uid}/groups/{ir_g.json()['id']}",
+        headers=tenant_headers,
+    )
+    assert revoke_door.status_code == 204, revoke_door.text
+
+    app.dependency_overrides[get_current_user] = _ir_member
+    try:
+        export_only = await http_client.get(
+            "/api/v1/me/portal-controls", headers=tenant_headers
+        )
+        assert export_only.status_code == 200, export_only.text
+        body = export_only.json()
+        assert body["can_use_ir_door"] is False
+        assert body["can_export_ir_receipts"] is True
+    finally:
+        async def _admin() -> AuthMeResponse:
+            return AuthMeResponse(
+                sub="11111111-1111-1111-1111-111111111111",
+                email="actor@example.com",
+                tenant_id=seed.ta,
+                roles=["admin"],
+                scopes=[],
+            )
+
+        app.dependency_overrides[get_current_user] = _admin
+
+
+@pytest.mark.asyncio
 async def test_group_members_list_and_remove(
     http_client, tenant_headers, event_sink, seed
 ):
@@ -596,6 +700,8 @@ async def test_invite_and_assign_forbidden_without_org_admin(
         assert body["can_mint_keys"] is False
         assert body["can_checkout"] is False
         assert body["can_see_host_status"] is False
+        assert body["can_use_ir_door"] is False
+        assert body["can_export_ir_receipts"] is False
         invite = await http_client.post(
             "/api/v1/users",
             headers=tenant_headers,

@@ -98,7 +98,7 @@ class GroupMemberListPage(Page[GroupMemberResponse]):
 
 
 class PortalControlsResponse(BaseModel):
-    """Slice-2 portal gates plus slice-4 IR door use / export receipts."""
+    """Slice-2 portal gates plus slice-4 IR door / receipt export grants."""
 
     org_admin: bool
     groups: list[str]
