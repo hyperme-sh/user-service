@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.infrastructure.persistence.tenant_membership import (
+    create_tenant_membership_row,
+)
 from controlplane_db.models import Group, Organization, Role, User, UserGroupMembership
 from user_service.domain.dtos import UserCreateBody, UserUpdateBody
 
@@ -15,20 +18,17 @@ class SqlUserRepository:
         self._s = session
 
     async def create(self, tenant_id: uuid.UUID, body: UserCreateBody) -> User:
-        u = User(
-            id=uuid.uuid4(),
-            tenant_id=tenant_id,
+        # Invite HTTP still gates this. Enrollment calls the same helper
+        # as the service — it does not POST /api/v1/users as the renter.
+        return await create_tenant_membership_row(
+            self._s,
+            tenant_id,
             email=str(body.email).lower(),
             first_name=body.first_name,
             last_name=body.last_name,
             gender=body.gender,
             is_active=body.is_active,
-            activated_at=datetime.now(timezone.utc) if body.is_active else None,
         )
-        self._s.add(u)
-        await self._s.flush()
-        await self._s.refresh(u)
-        return u
 
     async def list_active(self, tenant_id: uuid.UUID) -> list[User]:
         q = await self._s.execute(

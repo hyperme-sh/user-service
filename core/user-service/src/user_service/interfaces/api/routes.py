@@ -133,6 +133,7 @@ async def create_user(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    # Invite only. Enrollment does not self-join through this HTTP door.
     controls = await actor_portal_controls(session, tenant_id, me)
     _require_flag(
         controls,
