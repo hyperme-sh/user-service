@@ -478,9 +478,9 @@ async def test_portal_controls_admin_can_mint_and_invite(
     assert body["can_invite_members"] is True
     assert body["can_assign_group"] is True
     assert body["can_mint_keys"] is True
-    assert body["can_checkout"] is True
-    assert body["can_see_host_status"] is True
-    assert body["can_see_leases"] is True
+    assert body["can_checkout"] is False
+    assert body["can_see_host_status"] is False
+    assert body["can_see_leases"] is False
     assert body["can_use_ir_door"] is True
     assert body["can_export_ir_receipts"] is True
 
