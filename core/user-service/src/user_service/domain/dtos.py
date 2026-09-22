@@ -82,6 +82,25 @@ class OrganizationListPage(Page[OrganizationResponse]):
     """Paginated organizations for the current tenant."""
 
 
+class OrganizationIdpLinkCreateBody(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=32)
+    external_key: str = Field(..., min_length=1, max_length=256)
+
+
+class OrganizationIdpLinkResponse(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    organization_id: uuid.UUID
+    provider: str
+    external_key: str
+
+    model_config = {"from_attributes": True}
+
+
+class OrganizationIdpLinkList(BaseModel):
+    items: list[OrganizationIdpLinkResponse]
+
+
 class GroupMemberResponse(BaseModel):
     user_id: uuid.UUID
     email: str

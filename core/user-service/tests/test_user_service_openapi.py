@@ -9,6 +9,8 @@ def test_openapi_includes_group_and_org_list_get():
     assert "get" in paths["/api/v1/groups/{group_id}"]
     assert "get" in paths["/api/v1/organizations"]
     assert "get" in paths["/api/v1/organizations/{organization_id}"]
+    assert "post" in paths["/api/v1/organizations/{organization_id}/idp-links"]
+    assert "get" in paths["/api/v1/organizations/idp-match"]
     schemas = spec["components"]["schemas"]
     assert "GroupListPage" in schemas
     assert "OrganizationListPage" in schemas

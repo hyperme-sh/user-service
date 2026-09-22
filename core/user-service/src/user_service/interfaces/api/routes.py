@@ -29,6 +29,9 @@ from user_service.domain.dtos import (
     GroupMemberResponse,
     GroupResponse,
     OrganizationCreateBody,
+    OrganizationIdpLinkCreateBody,
+    OrganizationIdpLinkList,
+    OrganizationIdpLinkResponse,
     OrganizationListPage,
     OrganizationResponse,
     PortalControlsResponse,
@@ -38,9 +41,11 @@ from user_service.domain.dtos import (
     UserRoleUpdateBody,
     UserUpdateBody,
 )
+from user_service.idp_links import PROVIDERS, normalize_external_key, proof_failure
 from user_service.infrastructure.persistence.repos import (
     SqlGroupRepository,
     SqlMembershipRepository,
+    SqlOrganizationIdpLinkRepository,
     SqlOrganizationRepository,
     SqlRoleRepository,
     SqlUserRepository,
@@ -289,6 +294,139 @@ async def get_group(
     if g is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
     return GroupResponse.model_validate(g)
+
+
+def _require_org_admin(me: AuthMeResponse) -> None:
+    controls = evaluate_portal_controls(me.roles, me.groups)
+    if not controls.org_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization admin required")
+
+
+def _link_response(link) -> OrganizationIdpLinkResponse:
+    return OrganizationIdpLinkResponse(
+        id=link.id,
+        tenant_id=link.tenant_id,
+        organization_id=link.organization_id,
+        provider=link.provider,
+        external_key=link.external_key,
+    )
+
+
+@router.get(
+    "/organizations/idp-match",
+    response_model=OrganizationIdpLinkResponse,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def match_organization_for_sign_in(
+    me: AuthMeResponse = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    session: AsyncSession = Depends(get_db_session),
+) -> OrganizationIdpLinkResponse:
+    """Enterprise this sign-in's identity-provider org is linked to."""
+    if me.idp_account != "organization" or not me.idp_provider or not me.idp_org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization on this sign-in")
+    key = normalize_external_key(me.idp_provider, me.idp_org)
+    link = await SqlOrganizationIdpLinkRepository(session).find(tenant_id, me.idp_provider, key)
+    if link is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No enterprise link for this sign-in")
+    return _link_response(link)
+
+
+@router.get(
+    "/organizations/{organization_id}/idp-links",
+    response_model=OrganizationIdpLinkList,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def list_organization_idp_links(
+    organization_id: uuid.UUID,
+    me: AuthMeResponse = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    session: AsyncSession = Depends(get_db_session),
+) -> OrganizationIdpLinkList:
+    _require_org_admin(me)
+    org = await SqlOrganizationRepository(session).get(tenant_id, organization_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    rows = await SqlOrganizationIdpLinkRepository(session).list_for_org(tenant_id, organization_id)
+    return OrganizationIdpLinkList(items=[_link_response(row) for row in rows])
+
+
+@router.post(
+    "/organizations/{organization_id}/idp-links",
+    response_model=OrganizationIdpLinkResponse,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def link_organization_idp(
+    organization_id: uuid.UUID,
+    body: OrganizationIdpLinkCreateBody,
+    me: AuthMeResponse = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    session: AsyncSession = Depends(get_db_session),
+) -> OrganizationIdpLinkResponse:
+    """Save an IdP org on this enterprise after the owner proves they administer it."""
+    _require_org_admin(me)
+    provider = body.provider.strip().lower()
+    if provider not in PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unknown identity provider",
+        )
+    key = normalize_external_key(provider, body.external_key)
+    reason = proof_failure(
+        provider=provider,
+        external_key=key,
+        idp_provider=me.idp_provider,
+        idp_org=me.idp_org,
+        idp_orgs=me.idp_orgs,
+        idp_wids=me.idp_wids,
+    )
+    if reason:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
+    org = await SqlOrganizationRepository(session).get(tenant_id, organization_id)
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    repo = SqlOrganizationIdpLinkRepository(session)
+    existing = await repo.find(tenant_id, provider, key)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That identity-provider organization is already linked",
+        )
+    try:
+        link = await repo.create(
+            tenant_id=tenant_id,
+            organization_id=organization_id,
+            provider=provider,
+            external_key=key,
+            linked_by_sub=me.sub,
+        )
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That identity-provider organization is already linked",
+        ) from None
+    return _link_response(link)
+
+
+@router.delete(
+    "/organizations/{organization_id}/idp-links/{link_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def unlink_organization_idp(
+    organization_id: uuid.UUID,
+    link_id: uuid.UUID,
+    me: AuthMeResponse = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    _require_org_admin(me)
+    deleted = await SqlOrganizationIdpLinkRepository(session).delete(
+        tenant_id, organization_id, link_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
 
 
 @router.post(

@@ -725,3 +725,68 @@ async def test_invite_and_assign_forbidden_without_org_admin(
             )
 
         app.dependency_overrides[get_current_user] = _admin
+
+
+@pytest.mark.asyncio
+async def test_org_admin_links_only_the_idp_org_they_administer(
+    app, http_client, tenant_headers, seed
+):
+    from auth_service.claims import ENTRA_GLOBAL_ADMIN_WID
+
+    created = await http_client.post(
+        "/api/v1/organizations",
+        headers=tenant_headers,
+        json={"legal_name": "Acme Enterprise"},
+    )
+    assert created.status_code == 201, created.text
+    org_id = created.json()["id"]
+    tenant = "11111111-2222-4333-8444-555555555555"
+
+    async def _admin() -> AuthMeResponse:
+        return AuthMeResponse(
+            sub="11111111-1111-1111-1111-111111111111",
+            email="actor@example.com",
+            tenant_id=seed.ta,
+            roles=["admin"],
+            scopes=[],
+            idp_provider="microsoft",
+            idp_org=tenant,
+            idp_wids=[ENTRA_GLOBAL_ADMIN_WID],
+            idp_account="organization",
+        )
+
+    app.dependency_overrides[get_current_user] = _admin
+    denied = await http_client.post(
+        f"/api/v1/organizations/{org_id}/idp-links",
+        headers=tenant_headers,
+        json={"provider": "microsoft", "external_key": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"},
+    )
+    assert denied.status_code == 403
+    linked = await http_client.post(
+        f"/api/v1/organizations/{org_id}/idp-links",
+        headers=tenant_headers,
+        json={"provider": "microsoft", "external_key": tenant.upper()},
+    )
+    assert linked.status_code == 201, linked.text
+    body = linked.json()
+    assert body["external_key"] == tenant
+    again = await http_client.post(
+        f"/api/v1/organizations/{org_id}/idp-links",
+        headers=tenant_headers,
+        json={"provider": "microsoft", "external_key": tenant},
+    )
+    assert again.status_code == 409
+    listed = await http_client.get(
+        f"/api/v1/organizations/{org_id}/idp-links",
+        headers=tenant_headers,
+    )
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["provider"] == "microsoft"
+    matched = await http_client.get("/api/v1/organizations/idp-match", headers=tenant_headers)
+    assert matched.status_code == 200
+    assert matched.json()["organization_id"] == org_id
+    removed = await http_client.delete(
+        f"/api/v1/organizations/{org_id}/idp-links/{body['id']}",
+        headers=tenant_headers,
+    )
+    assert removed.status_code == 204

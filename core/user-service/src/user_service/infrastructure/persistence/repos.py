@@ -9,7 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.infrastructure.persistence.tenant_membership import (
     create_tenant_membership_row,
 )
-from controlplane_db.models import Group, Organization, Role, User, UserGroupMembership
+from controlplane_db.models import (
+    Group,
+    Organization,
+    OrganizationIdpLink,
+    Role,
+    User,
+    UserGroupMembership,
+)
 from user_service.domain.dtos import UserCreateBody, UserUpdateBody
 
 
@@ -281,6 +288,75 @@ class SqlOrganizationRepository:
             .limit(limit)
         )
         return list(rows_q.scalars().all()), total
+
+
+class SqlOrganizationIdpLinkRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._s = session
+
+    async def list_for_org(
+        self, tenant_id: uuid.UUID, organization_id: uuid.UUID
+    ) -> list[OrganizationIdpLink]:
+        rows = await self._s.execute(
+            select(OrganizationIdpLink)
+            .where(
+                OrganizationIdpLink.tenant_id == tenant_id,
+                OrganizationIdpLink.organization_id == organization_id,
+            )
+            .order_by(OrganizationIdpLink.provider.asc(), OrganizationIdpLink.external_key.asc())
+        )
+        return list(rows.scalars().all())
+
+    async def find(
+        self, tenant_id: uuid.UUID, provider: str, external_key: str
+    ) -> OrganizationIdpLink | None:
+        row = await self._s.execute(
+            select(OrganizationIdpLink).where(
+                OrganizationIdpLink.tenant_id == tenant_id,
+                OrganizationIdpLink.provider == provider,
+                OrganizationIdpLink.external_key == external_key,
+            )
+        )
+        return row.scalar_one_or_none()
+
+    async def create(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        organization_id: uuid.UUID,
+        provider: str,
+        external_key: str,
+        linked_by_sub: str,
+    ) -> OrganizationIdpLink:
+        link = OrganizationIdpLink(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            organization_id=organization_id,
+            provider=provider,
+            external_key=external_key,
+            linked_by_sub=linked_by_sub,
+        )
+        self._s.add(link)
+        await self._s.flush()
+        await self._s.refresh(link)
+        return link
+
+    async def delete(
+        self, tenant_id: uuid.UUID, organization_id: uuid.UUID, link_id: uuid.UUID
+    ) -> bool:
+        row = await self._s.execute(
+            select(OrganizationIdpLink).where(
+                OrganizationIdpLink.tenant_id == tenant_id,
+                OrganizationIdpLink.organization_id == organization_id,
+                OrganizationIdpLink.id == link_id,
+            )
+        )
+        link = row.scalar_one_or_none()
+        if link is None:
+            return False
+        await self._s.delete(link)
+        await self._s.flush()
+        return True
 
 
 class SqlMembershipRepository:
