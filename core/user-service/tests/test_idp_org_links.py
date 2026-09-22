@@ -91,6 +91,29 @@ def test_gmail_without_a_hosted_domain_cannot_link():
     )
 
 
+def test_broker_attributes_prove_the_same_entra_tenant() -> None:
+    """The live token carries idp_provider, idp_org, and idp_wids, not raw tid."""
+    facts = idp_facts_from_claims(
+        {
+            "idp_provider": "microsoft",
+            "idp_org": TENANT,
+            "idp_wids": [ENTRA_GLOBAL_ADMIN_WID],
+        }
+    )
+    assert facts["idp_account"] == "organization"
+    assert (
+        proof_failure(
+            provider="microsoft",
+            external_key=TENANT,
+            idp_provider=facts["idp_provider"],
+            idp_org=facts["idp_org"],
+            idp_orgs=facts["idp_orgs"],
+            idp_wids=facts["idp_wids"],
+        )
+        is None
+    )
+
+
 def test_github_org_on_the_token_can_link_and_another_org_cannot():
     facts = idp_facts_from_claims({"identity_provider": "github", "orgs": ["FyberLabs"]})
     assert (
