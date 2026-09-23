@@ -114,9 +114,13 @@ async def actor_portal_controls(
             role = await SqlRoleRepository(session).get(tenant_id, user.role_id)
             if role is not None:
                 roles.append(role.name)
+        from api.domain.operator.bans import ban_book
+
         for group in await SqlMembershipRepository(session).groups_for_user(
             tenant_id, user.id
         ):
+            if not ban_book().group_grant_allowed(tenant_id, group.id):
+                continue
             groups.append(group.name)
     return evaluate_portal_controls(roles, groups)
 

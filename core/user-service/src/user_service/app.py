@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from user_service.infrastructure.payment_succeeded_consumer import (
     build_payment_succeeded_consumer,
 )
+from user_service.interfaces.api.operator_routes import router as operator_router
 from user_service.interfaces.api.routes import router as user_api_router
 from user_service.middleware import UserServiceDbMiddleware
 
@@ -148,6 +149,7 @@ def create_app(
     app.add_middleware(UserServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(user_api_router, prefix="/api/v1")
+    app.include_router(operator_router, prefix="/api/v1")
     add_optional_service_cors(app, env_var="USER_SERVICE_CORS_ORIGINS")
     logger.info("User service: UserServiceDbMiddleware + /api/v1 routes + optional CORS")
     return app
