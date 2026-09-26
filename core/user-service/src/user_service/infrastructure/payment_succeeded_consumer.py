@@ -1,10 +1,11 @@
-"""Kafka consumer: payment.succeeded.v1 → paid subscription + tenant.subscription_id."""
+"""payment.succeeded.v1 → paid subscription + tenant.subscription_id."""
 
 from __future__ import annotations
 
 from sqlalchemy import text
 
 from api.common.event_types import PAYMENT_SUCCEEDED_V1
+from api.core.config import settings
 from api.core.container import container
 from api.domain.dtos.tenant_dto import UpdateTenantDto
 from api.infrastructure.persistence.db_session import (
@@ -14,14 +15,14 @@ from api.infrastructure.persistence.db_session import (
 )
 from api.usecases.subscription_plan_service import SubscriptionPlanService
 from api.usecases.tenant_service import TenantService
-from controlplane_events import RoutingControlPlaneConsumer
+from api.infrastructure.messaging.tenant_event_publisher import build_routing_consumer
 from controlplane_events.payloads.payment_events import PaymentSucceededPayload
 
 USER_PAYMENT_GROUP = "user-service-controlplane-events"
 DEFAULT_PAID_PLAN_ID = "payment_succeeded"
 
 
-def build_payment_succeeded_consumer(bootstrap_servers: str, topic: str) -> RoutingControlPlaneConsumer:
+def build_payment_succeeded_consumer(database_url: str):
     async def on_payment_succeeded(_envelope, payload: PaymentSucceededPayload) -> None:
         tid = payload.tenant_id
         maker = get_session_maker()
@@ -51,10 +52,11 @@ def build_payment_succeeded_consumer(bootstrap_servers: str, topic: str) -> Rout
             finally:
                 reset_db_session(tok)
 
-    return RoutingControlPlaneConsumer(
-        bootstrap_servers,
-        [topic],
-        USER_PAYMENT_GROUP,
-        {PAYMENT_SUCCEEDED_V1: (PaymentSucceededPayload, on_payment_succeeded)},
+    return build_routing_consumer(
+        database_url=database_url,
+        group_id=USER_PAYMENT_GROUP,
+        routes={PAYMENT_SUCCEEDED_V1: (PaymentSucceededPayload, on_payment_succeeded)},
         client_id="user-service-payment-events",
+        service_bus_connection_string=settings.azure_service_bus_connection_string,
+        service_bus_subscription=settings.azure_service_bus_subscription,
     )
