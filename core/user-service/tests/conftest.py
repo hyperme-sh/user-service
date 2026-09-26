@@ -100,7 +100,6 @@ def app(event_sink: list, migrated_sync_url: str, monkeypatch: pytest.MonkeyPatc
     if "+psycopg" in db_url:
         db_url = db_url.replace("postgresql+psycopg://", "postgresql://", 1)
     monkeypatch.setattr(api_config.settings, "database_url", db_url)
-    monkeypatch.setattr(api_config.settings, "kafka_bootstrap_servers", None)
     monkeypatch.setattr(api_config.settings, "service_name", "user-service-test")
 
     from user_service.app import create_app

@@ -10,15 +10,14 @@ from api.common.logging import configure_logging
 from api.common.utils import get_logger
 from api.core.config import settings
 from api.infrastructure.messaging.tenant_event_publisher import (
-    KafkaTenantEventPublisher,
-    NoOpTenantEventPublisher,
+    install_tenant_event_publisher,
     set_tenant_event_publisher,
+    shutdown_tenant_event_publisher,
 )
 from api.infrastructure.persistence.db_session import configure_session_maker
 from api.infrastructure.service_cors import add_optional_service_cors
 from api.interfaces.api_controllers.health_endpoint import router as health_router
 from controlplane_db.session import normalize_database_url
-from controlplane_events import AioKafkaEventProducer
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from user_service.infrastructure.payment_succeeded_consumer import (
@@ -67,44 +66,24 @@ def create_app(
                     )
 
             set_tenant_event_publisher(_ListSink())
-        elif settings.kafka_bootstrap_servers:
-            kafka_producer = AioKafkaEventProducer(
-                settings.kafka_bootstrap_servers,
-                client_id=f"{svc_name}-events",
-            )
-            await kafka_producer.start()
-            set_tenant_event_publisher(
-                KafkaTenantEventPublisher(
-                    kafka_producer,
-                    settings.kafka_events_topic,
-                    svc_name,
-                )
-            )
-            app.state.kafka_producer = kafka_producer
-            pay_consumer = build_payment_succeeded_consumer(
-                settings.kafka_bootstrap_servers,
-                settings.kafka_events_topic,
-            )
-            await pay_consumer.start()
-            app.state.kafka_payment_consumer = pay_consumer
         else:
-            set_tenant_event_publisher(NoOpTenantEventPublisher())
+            await install_tenant_event_publisher(service_name=svc_name)
+            pay_consumer = build_payment_succeeded_consumer(settings.database_url)
+            await pay_consumer.start()
+            app.state.event_consumer = pay_consumer
 
         yield
 
-        k_pay = getattr(app.state, "kafka_payment_consumer", None)
-        if k_pay is not None:
-            await k_pay.stop()
-        set_tenant_event_publisher(None)
-        kp = getattr(app.state, "kafka_producer", None)
-        if kp is not None:
-            await kp.stop()
+        event_consumer = getattr(app.state, "event_consumer", None)
+        if event_consumer is not None:
+            await event_consumer.stop()
+        await shutdown_tenant_event_publisher()
         await engine.dispose()
 
     app = FastAPI(
         lifespan=lifespan,
         title="Panopticon User Service",
-        description="Tenant-scoped users, groups, organizations (RLS + Kafka).",
+        description="Tenant-scoped users, groups, organizations (RLS + Postgres events).",
         version="0.1.0",
     )
 
