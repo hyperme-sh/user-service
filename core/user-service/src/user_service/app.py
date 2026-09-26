@@ -131,6 +131,9 @@ def create_app(
     app.include_router(operator_router, prefix="/api/v1")
     add_optional_service_cors(app, env_var="USER_SERVICE_CORS_ORIGINS")
     logger.info("User service: UserServiceDbMiddleware + /api/v1 routes + optional CORS")
+    from api.infrastructure.metrics import install_http_metrics
+
+    install_http_metrics(app)
     return app
 
 
