@@ -1,4 +1,4 @@
-"""Tests for payment.succeeded Kafka consumer (handler wiring)."""
+"""Tests for payment.succeeded consumer (handler wiring)."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ async def test_payment_succeeded_runs_subscription_and_tenant_update(monkeypatch
         MagicMock(resolve=_resolve),
     )
 
-    consumer = build_payment_succeeded_consumer("localhost:9092", "controlplane.events.v1")
+    consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
     env = ControlPlaneEventEnvelope(
         event_type="payment.succeeded.v1",
         service="payment-service",
