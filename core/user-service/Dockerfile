@@ -17,7 +17,9 @@ COPY core/auth-service ./core/auth-service
 COPY core/user-service ./core/user-service
 # panopticon-tests is a workspace member; uv validates [tool.uv.sources] even with --no-dev.
 COPY core/tests ./core/tests
-RUN uv sync --frozen --no-dev --package user-service
+ARG CONTROLPLANE_SERVICEBUS=0
+RUN uv sync --frozen --no-dev --package user-service \
+ && if [ "$CONTROLPLANE_SERVICEBUS" = "1" ]; then uv pip install --python /app/.venv 'azure-servicebus>=7.12.0'; fi
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/core/auth-service/src:/app/core/user-service/src
 WORKDIR /app/core/user-service
 CMD ["uv", "run", "--project", "/app/core/user-service", "python", "-m", "user_service.main"]

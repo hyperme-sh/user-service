@@ -58,5 +58,4 @@ def build_payment_succeeded_consumer(database_url: str):
         routes={PAYMENT_SUCCEEDED_V1: (PaymentSucceededPayload, on_payment_succeeded)},
         client_id="user-service-payment-events",
         service_bus_connection_string=settings.azure_service_bus_connection_string,
-        service_bus_subscription=settings.azure_service_bus_subscription,
     )
