@@ -17,6 +17,7 @@ from api.infrastructure.messaging.tenant_event_publisher import (
 from api.infrastructure.persistence.db_session import configure_session_maker
 from api.infrastructure.service_cors import add_optional_service_cors
 from api.interfaces.api_controllers.health_endpoint import router as health_router
+from api.interfaces.api_controllers.version_endpoint import router as version_router
 from controlplane_db.session import normalize_database_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -127,6 +128,7 @@ def create_app(
 
     app.add_middleware(UserServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(version_router)
     app.include_router(user_api_router, prefix="/api/v1")
     app.include_router(operator_router, prefix="/api/v1")
     add_optional_service_cors(app, env_var="USER_SERVICE_CORS_ORIGINS")
