@@ -161,7 +161,7 @@ async def _persist_audit(row) -> None:
     session = _db()
     if session is None:
         return
-    from api.domain.operator.store import insert_audit
+    from user_service.infrastructure.operator_store import insert_audit
 
     await insert_audit(session, row)
 
@@ -230,7 +230,7 @@ async def create_ban(request: Request, body: BanBody) -> dict:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     session = _db()
     if session is not None:
-        from api.domain.operator.store import insert_ban
+        from user_service.infrastructure.operator_store import insert_ban
 
         await insert_ban(session, row)
     audit = _audit(
@@ -269,7 +269,7 @@ async def lift_ban(request: Request, ban_id: uuid.UUID, body: LiftBody) -> dict:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     session = _db()
     if session is not None:
-        from api.domain.operator.store import update_lift
+        from user_service.infrastructure.operator_store import update_lift
 
         await update_lift(session, row)
     audit = _audit(
@@ -364,7 +364,7 @@ async def save_peer(request: Request, body: PeerBody) -> dict:
     )
     session = _db()
     if session is not None:
-        from api.domain.operator.store import insert_peer
+        from user_service.infrastructure.operator_store import insert_peer
 
         await insert_peer(session, row)
     audit = _audit(
