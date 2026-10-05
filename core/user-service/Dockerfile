@@ -32,4 +32,4 @@ ARG BUILT_AT=
 ENV GIT_SHA=${GIT_SHA}
 ENV BUILT_AT=${BUILT_AT}
 WORKDIR /app/core/user-service
-CMD ["uv", "run", "--project", "/app/core/user-service", "python", "-m", "user_service.main"]
+CMD ["/app/.venv/bin/python", "-m", "user_service.main"]
