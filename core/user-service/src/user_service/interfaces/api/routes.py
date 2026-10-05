@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.common.event_types import (
+from controlplane_api.event_types import (
     GROUP_MEMBER_ADDED_V1,
     GROUP_MEMBER_REMOVED_V1,
     USER_CREATED_V1,

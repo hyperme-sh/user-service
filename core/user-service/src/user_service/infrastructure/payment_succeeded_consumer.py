@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-from api.common.event_types import PAYMENT_SUCCEEDED_V1
-from api.core.config import settings
+from controlplane_api.event_types import PAYMENT_SUCCEEDED_V1
+from controlplane_api.config import settings
 from api.core.container import container
 from api.domain.dtos.tenant_dto import UpdateTenantDto
 from api.infrastructure.persistence.db_session import (

@@ -5,19 +5,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from api.common.exceptions import ForbiddenException, UnauthorizedException
-from api.common.logging import configure_logging
-from api.common.utils import get_logger
-from api.core.config import settings
+from controlplane_api.exceptions import ForbiddenException, UnauthorizedException
+from controlplane_api.logging import configure_logging
+from controlplane_api.utils import get_logger
+from controlplane_api.config import settings
 from api.infrastructure.messaging.tenant_event_publisher import (
     install_tenant_event_publisher,
     set_tenant_event_publisher,
     shutdown_tenant_event_publisher,
 )
 from api.infrastructure.persistence.db_session import configure_session_maker
-from api.infrastructure.service_cors import add_optional_service_cors
-from api.interfaces.api_controllers.health_endpoint import router as health_router
-from api.interfaces.api_controllers.version_endpoint import router as version_router
+from controlplane_api.service_cors import add_optional_service_cors
+from controlplane_api.health import router as health_router
+from controlplane_api.version import router as version_router
 from controlplane_db.session import normalize_database_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -133,7 +133,7 @@ def create_app(
     app.include_router(operator_router, prefix="/api/v1")
     add_optional_service_cors(app, env_var="USER_SERVICE_CORS_ORIGINS")
     logger.info("User service: UserServiceDbMiddleware + /api/v1 routes + optional CORS")
-    from api.infrastructure.metrics import install_http_metrics
+    from controlplane_api.metrics import install_http_metrics
 
     install_http_metrics(app)
     return app
