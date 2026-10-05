@@ -5,6 +5,8 @@ Tenant comes from the session. Search and cases stay inside that tenant.
 
 from __future__ import annotations
 
+from api.core.config import settings
+
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -404,7 +406,7 @@ async def catalog_health(request: Request) -> dict:
         ok, detail = ping_health(url.removesuffix("/health"), fetch=_default_ping)
         cards.append({"name": name, "url": url, "up": ok, "detail": detail})
     return {
-        "hypermesh_url": "http://127.0.0.1:8010",
+        "hypermesh_url": settings.hypermesh_url,
         "catalog": cards,
         "stripe_case": False,
     }
