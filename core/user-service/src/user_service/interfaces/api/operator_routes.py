@@ -5,7 +5,7 @@ Tenant comes from the session. Search and cases stay inside that tenant.
 
 from __future__ import annotations
 
-from api.core.config import settings
+from controlplane_api.config import settings
 
 import secrets
 import uuid
@@ -34,7 +34,7 @@ from api.domain.operator.mail import (
     prepare_password_reset,
 )
 from api.domain.operator.peers import peer_book, ping_health
-from api.domain.operator.plugins import plugin_by_id, plugin_registry
+from controlplane_api.operator.plugins import plugin_by_id, plugin_registry
 from api.infrastructure.persistence.db_session import get_db_session
 from api.infrastructure.security.tenant_session_jwt import try_decode_tenant_session_jwt
 
