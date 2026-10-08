@@ -20,10 +20,19 @@ from controlplane_events.payloads.payment_events import PaymentSucceededPayload
 
 USER_PAYMENT_GROUP = "user-service-controlplane-events"
 DEFAULT_PAID_PLAN_ID = "payment_succeeded"
+# USDC payments settle Hypermesh leases and marketplace listings. They share
+# payment.succeeded.v1 with subscription invoices but never buy the plan.
+NON_PLAN_CURRENCIES = frozenset({"usdc"})
+
+
+def grants_paid_plan(payload: PaymentSucceededPayload) -> bool:
+    return (payload.currency or "").strip().lower() not in NON_PLAN_CURRENCIES
 
 
 def build_payment_succeeded_consumer(database_url: str):
     async def on_payment_succeeded(_envelope, payload: PaymentSucceededPayload) -> None:
+        if not grants_paid_plan(payload):
+            return
         tid = payload.tenant_id
         maker = get_session_maker()
         async with maker() as session:

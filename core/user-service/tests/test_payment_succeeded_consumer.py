@@ -82,3 +82,43 @@ async def test_payment_succeeded_runs_subscription_and_tenant_update(monkeypatch
 
     sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once()
     tenant_svc.update_tenant.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("currency", ["usdc", "USDC"])
+async def test_usdc_lease_payment_does_not_grant_a_subscription(monkeypatch, currency):
+    tid = uuid.uuid4()
+    sub_svc = MagicMock()
+    sub_svc.ensure_paid_plan_for_tenant = AsyncMock()
+    tenant_svc = MagicMock()
+    tenant_svc.update_tenant = AsyncMock()
+
+    def _resolve(cls):
+        if cls is SubscriptionPlanService:
+            return sub_svc
+        if cls is TenantService:
+            return tenant_svc
+        raise AssertionError(cls)
+
+    monkeypatch.setattr(
+        "user_service.infrastructure.payment_succeeded_consumer.container",
+        MagicMock(resolve=_resolve),
+    )
+    consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
+    env = ControlPlaneEventEnvelope(
+        event_type="payment.succeeded.v1",
+        service="payment-service",
+        tenant_id=tid,
+        payload=PaymentSucceededPayload(
+            tenant_id=tid,
+            billing_record_id=uuid.uuid4(),
+            currency=currency,
+        ).to_envelope_payload(),
+    )
+    await consumer.handle_message(
+        key=None,
+        value=env.model_dump_json().encode("utf-8"),
+        headers={},
+    )
+    sub_svc.ensure_paid_plan_for_tenant.assert_not_awaited()
+    tenant_svc.update_tenant.assert_not_awaited()
