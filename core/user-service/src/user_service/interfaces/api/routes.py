@@ -510,6 +510,8 @@ async def assign_user_role(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    _require_flag(controls, "can_assign_group", "Org admin role required to manage role assignments")
     urepo = SqlUserRepository(session)
     rrepo = SqlRoleRepository(session)
     user = await urepo.get(tenant_id, user_id)
@@ -541,6 +543,8 @@ async def remove_user_role(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    controls = await actor_portal_controls(session, tenant_id, me)
+    _require_flag(controls, "can_assign_group", "Org admin role required to manage role assignments")
     urepo = SqlUserRepository(session)
     user = await urepo.get(tenant_id, user_id)
     if user is None:

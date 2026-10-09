@@ -790,3 +790,26 @@ async def test_org_admin_links_only_the_idp_org_they_administer(
         headers=tenant_headers,
     )
     assert removed.status_code == 204
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["assign_role", "remove_role"])
+async def test_tenant_member_cannot_manage_own_role(http_client, tenant_headers, seed, app, operation):
+    created = await http_client.post("/api/v1/users", headers=tenant_headers, json={
+        "email": f"escalation-{operation}@example.com", "first_name": "Tenant", "last_name": "Member",
+    })
+    assert created.status_code == 201
+    uid = created.json()["id"]
+    if operation == "remove_role":
+        assert (await http_client.patch(f"/api/v1/users/{uid}/assign_role", headers=tenant_headers,
+            json={"role_id": str(seed.ra)})).status_code == 202
+    async def member():
+        return AuthMeResponse(sub=uid, email=f"escalation-{operation}@example.com",
+            tenant_id=seed.ta, roles=["renter"], scopes=[])
+    app.dependency_overrides[get_current_user] = member
+    result = await http_client.patch(f"/api/v1/users/{uid}/{operation}", headers=tenant_headers,
+        json={"role_id": str(seed.ra)})
+    assert result.status_code == 403
+    listed = await http_client.get("/api/v1/users", headers=tenant_headers)
+    current = next(user for user in listed.json()["items"] if user["id"] == uid)
+    assert current["role_id"] == (str(seed.ra) if operation == "remove_role" else None)
