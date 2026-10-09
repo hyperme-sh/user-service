@@ -85,6 +85,9 @@ def seed(migrated_sync_url: str) -> Seed:
             ),
             {"id": rb, "tid": tb},
         )
+        admin = uuid.uuid4()
+        cx.execute(text("INSERT INTO roles (id, tenant_id, name, permissions) VALUES (:id, :tid, 'admin', '[]'::jsonb)"), {"id": admin, "tid": ta})
+        cx.execute(text("INSERT INTO users (id, tenant_id, keycloak_sub, email, first_name, last_name, gender, is_active, role_id) VALUES (:id, :tid, :sub, 'actor@example.com', 'Actor', 'Admin', 'unspecified', true, :role)"), {"id": uuid.uuid4(), "tid": ta, "sub": "11111111-1111-1111-1111-111111111111", "role": admin})
     return Seed(ta, tb, ra, rb)
 
 

@@ -125,6 +125,17 @@ async def actor_portal_controls(
     return evaluate_portal_controls(roles, groups)
 
 
+async def require_live_role_admin(session, tenant_id, me):
+    from controlplane_tenancy.tenant_membership import get_active_tenant_role_member
+
+    # Signed role claims can outlive deactivation or membership removal.
+    # Subject binding and durable tenant authority must still exist now.
+    if not me.sub or await get_active_tenant_role_member(
+        session, tenant_id, keycloak_sub=me.sub, role="admin"
+    ) is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Active org admin role required to manage role assignments")
+
+
 def _require_flag(controls: PortalControls, flag: str, detail: str) -> None:
     if not getattr(controls, flag):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
@@ -248,6 +259,7 @@ async def create_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    await require_live_role_admin(session, tenant_id, me)
     repo = SqlGroupRepository(session)
     g = await repo.create(tenant_id, body.name, body.description, body.role_id)
     return GroupResponse.model_validate(g)
@@ -510,6 +522,7 @@ async def assign_user_role(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    await require_live_role_admin(session, tenant_id, me)
     urepo = SqlUserRepository(session)
     rrepo = SqlRoleRepository(session)
     user = await urepo.get(tenant_id, user_id)
@@ -541,6 +554,7 @@ async def remove_user_role(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    await require_live_role_admin(session, tenant_id, me)
     urepo = SqlUserRepository(session)
     user = await urepo.get(tenant_id, user_id)
     if user is None:
@@ -567,12 +581,7 @@ async def add_user_to_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
-    controls = await actor_portal_controls(session, tenant_id, me)
-    _require_flag(
-        controls,
-        "can_assign_group",
-        "Org admin role required to assign groups",
-    )
+    await require_live_role_admin(session, tenant_id, me)
     urepo = SqlUserRepository(session)
     grep = SqlGroupRepository(session)
     mrepo = SqlMembershipRepository(session)
@@ -615,12 +624,7 @@ async def remove_user_from_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
-    controls = await actor_portal_controls(session, tenant_id, me)
-    _require_flag(
-        controls,
-        "can_assign_group",
-        "Org admin role required to assign groups",
-    )
+    await require_live_role_admin(session, tenant_id, me)
     urepo = SqlUserRepository(session)
     grep = SqlGroupRepository(session)
     mrepo = SqlMembershipRepository(session)

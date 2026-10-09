@@ -790,3 +790,60 @@ async def test_org_admin_links_only_the_idp_org_they_administer(
         headers=tenant_headers,
     )
     assert removed.status_code == 204
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["assign_role", "remove_role"])
+async def test_tenant_member_cannot_manage_own_role(http_client, tenant_headers, seed, app, operation):
+    created = await http_client.post("/api/v1/users", headers=tenant_headers, json={
+        "email": f"escalation-{operation}@example.com", "first_name": "Tenant", "last_name": "Member",
+    })
+    assert created.status_code == 201
+    uid = created.json()["id"]
+    if operation == "remove_role":
+        assert (await http_client.patch(f"/api/v1/users/{uid}/assign_role", headers=tenant_headers,
+            json={"role_id": str(seed.ra)})).status_code == 202
+    async def member():
+        return AuthMeResponse(sub=uid, email=f"escalation-{operation}@example.com",
+            tenant_id=seed.ta, roles=["renter"], scopes=[])
+    app.dependency_overrides[get_current_user] = member
+    result = await http_client.patch(f"/api/v1/users/{uid}/{operation}", headers=tenant_headers,
+        json={"role_id": str(seed.ra)})
+    assert result.status_code == 403
+    listed = await http_client.get("/api/v1/users", headers=tenant_headers)
+    current = next(user for user in listed.json()["items"] if user["id"] == uid)
+    assert current["role_id"] == (str(seed.ra) if operation == "remove_role" else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lost_authority", ["inactive", "deleted", "role_removed", "roleless"])
+async def test_cached_admin_claim_cannot_restore_lost_durable_authority(http_client, tenant_headers, seed, migrated_sync_url, lost_authority):
+    eng = create_engine(migrated_sync_url)
+    with eng.begin() as connection:
+        if lost_authority == "inactive":
+            change = "is_active = false"
+        elif lost_authority == "deleted":
+            change = "deleted_at = now()"
+        else:
+            change = "role_id = NULL"
+        connection.execute(text(f"UPDATE users SET {change} WHERE tenant_id = :tenant AND keycloak_sub = :sub"),
+            {"tenant": seed.ta, "sub": "11111111-1111-1111-1111-111111111111"})
+    for operation in ["assign_role", "remove_role"]:
+        result = await http_client.patch(f"/api/v1/users/{uuid.uuid4()}/{operation}",
+            headers=tenant_headers, json={"role_id": str(seed.ra)})
+        assert result.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lost_authority", ["inactive", "deleted", "role_removed"])
+async def test_stale_admin_cannot_create_groups_or_mutate_membership(http_client, tenant_headers, seed, migrated_sync_url, lost_authority):
+    eng = create_engine(migrated_sync_url)
+    with eng.begin() as connection:
+        change = {"inactive": "is_active=false", "deleted": "deleted_at=now()", "role_removed": "role_id=NULL"}[lost_authority]
+        connection.execute(text(f"UPDATE users SET {change} WHERE tenant_id=:tenant AND keycloak_sub=:sub"),
+            {"tenant": seed.ta, "sub": "11111111-1111-1111-1111-111111111111"})
+    assert (await http_client.post("/api/v1/groups", headers=tenant_headers,
+        json={"name": "admin", "description": None, "role_id": str(seed.ra)})).status_code == 403
+    path = f"/api/v1/users/{uuid.uuid4()}/groups/{uuid.uuid4()}"
+    assert (await http_client.post(path, headers=tenant_headers)).status_code == 403
+    assert (await http_client.delete(path, headers=tenant_headers)).status_code == 403
