@@ -259,6 +259,7 @@ async def create_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    await require_live_role_admin(session, tenant_id, me)
     repo = SqlGroupRepository(session)
     g = await repo.create(tenant_id, body.name, body.description, body.role_id)
     return GroupResponse.model_validate(g)
@@ -580,12 +581,7 @@ async def add_user_to_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
-    controls = await actor_portal_controls(session, tenant_id, me)
-    _require_flag(
-        controls,
-        "can_assign_group",
-        "Org admin role required to assign groups",
-    )
+    await require_live_role_admin(session, tenant_id, me)
     urepo = SqlUserRepository(session)
     grep = SqlGroupRepository(session)
     mrepo = SqlMembershipRepository(session)
@@ -628,12 +624,7 @@ async def remove_user_from_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
-    controls = await actor_portal_controls(session, tenant_id, me)
-    _require_flag(
-        controls,
-        "can_assign_group",
-        "Org admin role required to assign groups",
-    )
+    await require_live_role_admin(session, tenant_id, me)
     urepo = SqlUserRepository(session)
     grep = SqlGroupRepository(session)
     mrepo = SqlMembershipRepository(session)

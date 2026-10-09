@@ -832,3 +832,18 @@ async def test_cached_admin_claim_cannot_restore_lost_durable_authority(http_cli
         result = await http_client.patch(f"/api/v1/users/{uuid.uuid4()}/{operation}",
             headers=tenant_headers, json={"role_id": str(seed.ra)})
         assert result.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lost_authority", ["inactive", "deleted", "role_removed"])
+async def test_stale_admin_cannot_create_groups_or_mutate_membership(http_client, tenant_headers, seed, migrated_sync_url, lost_authority):
+    eng = create_engine(migrated_sync_url)
+    with eng.begin() as connection:
+        change = {"inactive": "is_active=false", "deleted": "deleted_at=now()", "role_removed": "role_id=NULL"}[lost_authority]
+        connection.execute(text(f"UPDATE users SET {change} WHERE tenant_id=:tenant AND keycloak_sub=:sub"),
+            {"tenant": seed.ta, "sub": "11111111-1111-1111-1111-111111111111"})
+    assert (await http_client.post("/api/v1/groups", headers=tenant_headers,
+        json={"name": "admin", "description": None, "role_id": str(seed.ra)})).status_code == 403
+    path = f"/api/v1/users/{uuid.uuid4()}/groups/{uuid.uuid4()}"
+    assert (await http_client.post(path, headers=tenant_headers)).status_code == 403
+    assert (await http_client.delete(path, headers=tenant_headers)).status_code == 403
