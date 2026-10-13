@@ -847,3 +847,50 @@ async def test_stale_admin_cannot_create_groups_or_mutate_membership(http_client
     path = f"/api/v1/users/{uuid.uuid4()}/groups/{uuid.uuid4()}"
     assert (await http_client.post(path, headers=tenant_headers)).status_code == 403
     assert (await http_client.delete(path, headers=tenant_headers)).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_create_group_rejects_unavailable_role(http_client, tenant_headers, seed, foreign, migrated_sync_url):
+    engine = create_engine(migrated_sync_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE users SET is_active=true, deleted_at=NULL, role_id=(SELECT id FROM roles WHERE tenant_id=:tenant AND name='admin' LIMIT 1) WHERE tenant_id=:tenant AND keycloak_sub=:sub"), {"tenant": seed.ta, "sub": "11111111-1111-1111-1111-111111111111"})
+    finally:
+        engine.dispose()
+    response = await http_client.post("/api/v1/groups", headers=tenant_headers,
+        json={"name": uuid.uuid4().hex, "description": "invalid role",
+              "role_id": str(seed.rb if foreign else uuid.uuid4())})
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Role not found"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_operator_role_rejects_unavailable_role_without_mutation(
+    http_client, tenant_headers, seed, migrated_sync_url, monkeypatch, foreign
+):
+    from user_service.interfaces.api import operator_routes
+    # Console/support authentication is covered by the operator HTTP gate suite.
+    monkeypatch.setattr(operator_routes, "require_support", lambda request: {
+        "tenant_id": str(seed.ta), "sub": "operator-role-test",
+    })
+    user_id = uuid.uuid4()
+    engine = create_engine(migrated_sync_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO users (id, tenant_id, email, first_name, last_name, gender, is_active, role_id) VALUES (:id, :tenant, :email, 'Role', 'Target', 'unspecified', true, :role)"),
+                {"id": user_id, "tenant": seed.ta, "email": f"{user_id}@example.com", "role": seed.ra})
+        response = await http_client.post(f"/api/v1/operator/users/{user_id}/role",
+            headers=tenant_headers, json={"role_id": str(seed.rb if foreign else uuid.uuid4()),
+                                         "reason": "test invalid role refusal"})
+        assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "Role not found"
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT role_id FROM users WHERE id=:id AND tenant_id=:tenant"),
+                {"id": user_id, "tenant": seed.ta}) == seed.ra
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM users WHERE id=:id AND tenant_id=:tenant"),
+                {"id": user_id, "tenant": seed.ta})
+        engine.dispose()
