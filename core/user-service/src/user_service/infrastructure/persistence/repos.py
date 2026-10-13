@@ -19,6 +19,13 @@ class SqlUserRepository(_OwnerUsers):
             last_name=body.last_name, gender=body.gender, is_active=body.is_active,
         ))
 
+    async def set_role(self, tenant_id, user_id, role_id):
+        from fastapi import HTTPException
+        try:
+            return await super().set_role(tenant_id, user_id, role_id)
+        except DirectoryLinkError:
+            raise HTTPException(404, "Role not found") from None
+
     async def update(self, tenant_id, user_id, body):
         attributes = body.sociacl_attributes
         return await super().update(tenant_id, user_id, UserUpdateData(

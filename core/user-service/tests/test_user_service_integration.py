@@ -863,3 +863,34 @@ async def test_create_group_rejects_unavailable_role(http_client, tenant_headers
               "role_id": str(seed.rb if foreign else uuid.uuid4())})
     assert response.status_code == 404, response.text
     assert response.json()["detail"] == "Role not found"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_operator_role_rejects_unavailable_role_without_mutation(
+    http_client, tenant_headers, seed, migrated_sync_url, monkeypatch, foreign
+):
+    from user_service.interfaces.api import operator_routes
+    # Console/support authentication is covered by the operator HTTP gate suite.
+    monkeypatch.setattr(operator_routes, "require_support", lambda request: {
+        "tenant_id": str(seed.ta), "sub": "operator-role-test",
+    })
+    user_id = uuid.uuid4()
+    engine = create_engine(migrated_sync_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("INSERT INTO users (id, tenant_id, email, first_name, last_name, gender, is_active, role_id) VALUES (:id, :tenant, :email, 'Role', 'Target', 'unspecified', true, :role)"),
+                {"id": user_id, "tenant": seed.ta, "email": f"{user_id}@example.com", "role": seed.ra})
+        response = await http_client.post(f"/api/v1/operator/users/{user_id}/role",
+            headers=tenant_headers, json={"role_id": str(seed.rb if foreign else uuid.uuid4()),
+                                         "reason": "test invalid role refusal"})
+        assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "Role not found"
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT role_id FROM users WHERE id=:id AND tenant_id=:tenant"),
+                {"id": user_id, "tenant": seed.ta}) == seed.ra
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM users WHERE id=:id AND tenant_id=:tenant"),
+                {"id": user_id, "tenant": seed.ta})
+        engine.dispose()
