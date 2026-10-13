@@ -449,22 +449,9 @@ async def clear_model_preference(request: Request, user_id: uuid.UUID, body: Rea
     claims = require_support(request)
     session = _db()
     if session is not None:
-        from sqlalchemy import select
+        from controlplane_tenancy.directory import clear_model_preference as clear_owned_preference
 
-        from controlplane_db.models import UserPreference
-
-        q = await session.execute(
-            select(UserPreference).where(
-                UserPreference.tenant_id == _tenant(claims),
-                UserPreference.user_id == user_id,
-            )
-        )
-        row = q.scalar_one_or_none()
-        if row is not None and isinstance(row.preferences, dict):
-            prefs = dict(row.preferences)
-            prefs.pop("model_name", None)
-            row.preferences = prefs
-            await session.flush()
+        await clear_owned_preference(session, _tenant(claims), user_id)
     audit = _audit(
         claims,
         action="clear_model_preference",
@@ -538,22 +525,15 @@ async def edit_membership(request: Request, user_id: uuid.UUID, body: Membership
     session = _db()
     if session is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
-    from sqlalchemy import select
-
-    from controlplane_db.models import Group
     from user_service.infrastructure.persistence.repos import (
-        SqlMembershipRepository,
-        SqlUserRepository,
+        SqlMembershipRepository, SqlUserRepository, SqlGroupRepository,
     )
 
     tenant_id = _tenant(claims)
     user = await SqlUserRepository(session).get(tenant_id, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-    found = await session.execute(
-        select(Group).where(Group.tenant_id == tenant_id, Group.name == body.group_name)
-    )
-    group = found.scalar_one_or_none()
+    group = await SqlGroupRepository(session).get_by_name(tenant_id, body.group_name)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
     membership = SqlMembershipRepository(session)

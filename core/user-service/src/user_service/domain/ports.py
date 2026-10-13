@@ -3,7 +3,10 @@ from __future__ import annotations
 import uuid
 from typing import Protocol
 
-from controlplane_db.models import Group, Organization, Role, User, UserGroupMembership
+from controlplane_tenancy.directory import (
+    GroupView as Group, OrganizationView as Organization, RoleView as Role,
+    UserView as User, MembershipView as UserGroupMembership,
+)
 
 from user_service.domain.dtos import UserCreateBody, UserUpdateBody
 
