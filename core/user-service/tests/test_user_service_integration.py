@@ -847,3 +847,19 @@ async def test_stale_admin_cannot_create_groups_or_mutate_membership(http_client
     path = f"/api/v1/users/{uuid.uuid4()}/groups/{uuid.uuid4()}"
     assert (await http_client.post(path, headers=tenant_headers)).status_code == 403
     assert (await http_client.delete(path, headers=tenant_headers)).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_create_group_rejects_unavailable_role(http_client, tenant_headers, seed, foreign, migrated_sync_url):
+    engine = create_engine(migrated_sync_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE users SET is_active=true, deleted_at=NULL, role_id=(SELECT id FROM roles WHERE tenant_id=:tenant AND name='admin' LIMIT 1) WHERE tenant_id=:tenant AND keycloak_sub=:sub"), {"tenant": seed.ta, "sub": "11111111-1111-1111-1111-111111111111"})
+    finally:
+        engine.dispose()
+    response = await http_client.post("/api/v1/groups", headers=tenant_headers,
+        json={"name": uuid.uuid4().hex, "description": "invalid role",
+              "role_id": str(seed.rb if foreign else uuid.uuid4())})
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Role not found"

@@ -2,10 +2,11 @@
 from controlplane_tenancy.directory import (
     SqlUserRepository as _OwnerUsers,
     SqlRoleRepository,
-    SqlGroupRepository,
+    SqlGroupRepository as _OwnerGroups,
     SqlOrganizationRepository,
     SqlOrganizationIdpLinkRepository,
     SqlMembershipRepository,
+    DirectoryLinkError,
     UserCreateData,
     UserUpdateData,
 )
@@ -24,3 +25,12 @@ class SqlUserRepository(_OwnerUsers):
             first_name=body.first_name, last_name=body.last_name,
             sociacl_attributes=attributes.model_dump(mode="json") if attributes is not None else None,
         ))
+
+
+class SqlGroupRepository(_OwnerGroups):
+    async def create(self, tenant_id, name, description, role_id):
+        from fastapi import HTTPException
+        try:
+            return await super().create(tenant_id, name, description, role_id)
+        except DirectoryLinkError:
+            raise HTTPException(404, "Role not found") from None
