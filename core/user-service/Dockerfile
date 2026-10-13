@@ -14,6 +14,7 @@ COPY core/events ./core/events
 COPY core/models ./core/models
 COPY core/lib/controlplane-api ./core/lib/controlplane-api
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
+COPY core/user-service/contracts ./core/user-service/contracts
 COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
 COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
 COPY core/auth-service ./core/auth-service
