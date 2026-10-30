@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "operator-ban-store"
+version = "0.1.0"
+requires-python = ">=3.13"
+description = "User-service-owned read-only operator ban contract"
+dependencies = ["sqlalchemy>=2.0.43"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/operator_ban_store"]
