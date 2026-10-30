@@ -1,0 +1,16 @@
+{
+  "repository": "FyberLabs/user-service",
+  "source_repository": "FyberLabs/panopticon",
+  "source_revision": "2d92d13f38d491c298631b9b9296979c1fbadd19",
+  "selected_paths": [
+    "core/user-service"
+  ],
+  "filtered_history_head": "8c57b279914e7b9563f198bfc2d9c90f14d7234f",
+  "retained_files": 32,
+  "inventory_sha256": "8fd9af2bd632920cf978030b6cb67fa2c2cad32f26da1d1d4772e9f4029fec48",
+  "blob_and_mode_equality_verified": true,
+  "rename_predecessors_followed": false,
+  "standalone_release_verified": false,
+  "cutover_verified": false,
+  "actions_enabled": false
+}
