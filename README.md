@@ -1,19 +1,34 @@
 # user-service
 
-Private component extraction from `FyberLabs/panopticon`.
+User and operator-account service implementation under `core/user-service`.
+The separately installable read-only operator ban contract is under
+`core/user-service/contracts`. Its public module is `operator_ban_store`, version
+0.1.0. It returns boolean predicates while preserving caller transactions and RLS.
 
-Source commit: `2d92d13f38d491c298631b9b9296979c1fbadd19`.
+## Contract development
 
-Retained paths:
+Use Python 3.13 and uv 0.11.26. The runtime needs SQLAlchemy only. PostgreSQL
+integration tests use an immutable private controlplane-db revision as a dev
+dependency; provide existing HTTPS read access to that repository.
 
-- `core/user-service`
+```sh
+cd core/user-service/contracts
+TEST_DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/postgres bash scripts/check-package.sh
+```
 
-The import retains selected-path Git history and verifies every retained blob and
-file mode against that exact source. Rename predecessor paths are not followed.
-Source paths stay in their original layout for review. See `EXTRACTION.json`.
+Use only a disposable PostgreSQL server with database/role creation permission.
+Tests create a unique database, apply platform migrations, validate explicit
+scope and RLS, then drop that database. Checks run from source, an external wheel
+and a rebuilt sdist; wheel bytes must match source. No deployed database is used.
 
-This is a history import, not a standalone release or runtime cutover. Dependency
-closure, workspace/lock configuration, compatibility packages, contract snapshots,
-CI/runner eligibility and destination-specific credentials must be reviewed before
-adoption. Actions remain disabled. No credential, deployment ref or runtime is
-copied or switched; the original monorepo remains intact.
+The hosted main-only workflow validates this contract. Actions remains disabled
+until DEPENDENCY_READ_TOKEN has contents:read on hyperme-sh/controlplane-db and
+hosted-worker policy is configured. It uses pinned actions, a disposable PostgreSQL
+service, read-only contents and a repository-specific Git authentication header.
+
+## Service readiness
+
+The service application, Dockerfile and service integration tests retain their
+existing layout and dependencies. Full standalone service dependency closure,
+container builds, owning-service/Hypermesh integration and consumer adoption are
+not established by contract tests. No release or deployment workflow is enabled.
