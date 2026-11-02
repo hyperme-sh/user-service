@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.domain.operator.audit import operator_audit
-from api.domain.operator.bans import BanError, NoUserSuspend, ban_book
+from api.domain.operator.bans import BanBook, BanError, NoUserSuspend, ban_book
 from api.domain.operator.claims import (
     CONSOLE,
     PROGRAM,
@@ -206,21 +206,29 @@ async def list_bans(
 ) -> dict:
     claims = require_support(request)
     tenant_id = _tenant(claims)
-    rows = [
-        row
-        for row in ban_book().rows
-        if row.tenant_id == tenant_id
-        and (subject_kind is None or row.subject_kind == subject_kind)
-        and (subject_id is None or row.subject_id == subject_id)
-    ]
+    session = _db()
+    if session is not None:
+        from user_service.infrastructure.operator_store import list_bans as stored_bans
+
+        rows = await stored_bans(session, tenant_id, subject_kind=subject_kind,
+                                 subject_id=subject_id)
+    else:
+        rows = [
+            row
+            for row in ban_book().rows
+            if row.tenant_id == tenant_id
+            and (subject_kind is None or row.subject_kind == subject_kind)
+            and (subject_id is None or row.subject_id == subject_id)
+        ]
     return {"items": [row.public() for row in rows]}
 
 
 @router.post("/bans", status_code=status.HTTP_201_CREATED)
 async def create_ban(request: Request, body: BanBody) -> dict:
     claims = require_support(request)
+    session = _db()
     try:
-        row = ban_book().ban(
+        row = (BanBook() if session is not None else ban_book()).ban(
             tenant_id=_tenant(claims),
             subject_kind=body.subject_kind,
             subject_id=body.subject_id,
@@ -230,11 +238,13 @@ async def create_ban(request: Request, body: BanBody) -> dict:
         )
     except BanError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    session = _db()
     if session is not None:
         from user_service.infrastructure.operator_store import insert_ban
 
-        await insert_ban(session, row)
+        try:
+            await insert_ban(session, row)
+        except BanError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     audit = _audit(
         claims,
         action="ban",
@@ -260,20 +270,20 @@ async def create_ban(request: Request, body: BanBody) -> dict:
 @router.post("/bans/{ban_id}/lift")
 async def lift_ban(request: Request, ban_id: uuid.UUID, body: LiftBody) -> dict:
     claims = require_support(request)
+    session = _db()
     try:
-        row = ban_book().lift(
-            tenant_id=_tenant(claims),
-            ban_id=ban_id,
-            lift_reason=body.reason,
-            lifted_by=_actor(claims),
-        )
+        if session is not None:
+            from user_service.infrastructure.operator_store import lift_ban as stored_lift
+
+            row = await stored_lift(session, _tenant(claims), ban_id,
+                                    lift_reason=body.reason, lifted_by=_actor(claims))
+        else:
+            row = ban_book().lift(
+                tenant_id=_tenant(claims), ban_id=ban_id,
+                lift_reason=body.reason, lifted_by=_actor(claims),
+            )
     except BanError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    session = _db()
-    if session is not None:
-        from user_service.infrastructure.operator_store import update_lift
-
-        await update_lift(session, row)
     audit = _audit(
         claims,
         action="lift_ban",
