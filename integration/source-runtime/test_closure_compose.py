@@ -14,8 +14,8 @@ import pytest
 def compose(tmp_path, request):
     docker = shutil.which("docker")
     if not docker or subprocess.run([docker, "compose", "version"], capture_output=True, check=False).returncode:
-        pytest.skip("Docker Compose CLI unavailable")
-    root = Path(__file__).parents[3]
+        pytest.fail("Docker Compose CLI required for source-runtime validation")
+    root = Path(os.environ["CLOSURE_RUNTIME_ROOT"]).resolve()
     empty = tmp_path / "empty.env"
     empty.write_text("")
     private = tmp_path / "private.env"

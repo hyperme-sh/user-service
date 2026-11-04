@@ -26,12 +26,40 @@ until DEPENDENCY_READ_TOKEN has contents:read on hyperme-sh/controlplane-db and
 shared-runner qualification is configured. It uses pinned actions, a disposable PostgreSQL
 service, read-only contents and a repository-specific Git authentication header.
 
-## Service readiness
+## Standalone service development
 
-The service application, Dockerfile and service integration tests retain their
-existing layout and dependencies. Full standalone service dependency closure,
-container builds, owning-service/Hypermesh integration and consumer adoption are
-not established by contract tests. Service deployment remains unqualified; package channels are described below.
+The repository root builds `user-service`; `core/user-service/contracts` remains
+an independently packaged operator-ban contract. Runtime dependencies use exact
+private Git revisions in standard metadata and `uv.lock`. The service wheel
+installs `user_service` directly, without workspace paths or `PYTHONPATH`.
+
+Use Python 3.13+, uv 0.11.26, Docker and existing read access to the listed private
+repositories. The full source/wheel/rebuilt-sdist suite starts disposable
+PostgreSQL and Keycloak containers. Missing native prerequisites fail validation.
+
+```sh
+bash scripts/check-package.sh
+```
+
+For container qualification, provide `DEPENDENCY_READ_TOKEN_FILE` as a protected,
+short-lived read-only GitHub credential file and `TEST_DATABASE_URL` pointing to
+an owned disposable PostgreSQL server with database creation privileges:
+
+```sh
+bash scripts/check-container.sh
+```
+
+The build uses a BuildKit secret, installs the frozen production graph, and
+runs as uid 65532. Container checks create and remove a unique migrated database,
+then exercise real health/version/authentication HTTP behavior. They do not
+apply migrations at application startup or deploy a service. The existing
+operator-contract release channel remains separate from service qualification.
+
+The standalone workflow uses the existing main-only shared-runner lane and
+requires read access to all pinned private runtime/test repositories. It does
+not add an approval gate, publish a service image, or enable closure. The
+external source Compose checks live in `integration/source-runtime`; separated
+plane delivery and shared/Hypermesh consumer adoption remain distinct gates.
 
 ## Release channels
 
@@ -48,10 +76,10 @@ new main revision. The publisher verifies the run, source, workflow and artifact
 digest independently of release metadata. Repository immutable releases must be
 enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
 
-## Private closure adoption (draft)
+## Private closure adoption
 
-The staged private closure implementation and source #720 retirement guard are
+The private closure implementation and source #720 retirement guard are
 in `core/user-service`. See [the adoption gates](docs/closure-adoption.md).
-This draft requires reviewed identity/tenancy/database/core/auth/owner dependency
-adoption, exact immutable service pins and owning standalone validation before
-merge or activation. Operator-contract checks do not qualify these service files.
+The follow-up adopts owner dependencies and standalone service validation.
+See the adoption document for exact revisions, validation results, and remaining
+consumer/deployment gates. All closure flags remain default-off.

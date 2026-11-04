@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "user-service"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@6bef00ce7fc630df5523dcd254f85d40d13d135e",
+    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@2a02092f9da1dbd0d04ee08528757dec12f57ffc",
+    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@0cc954f1f7e0cd88e2b47fbf9db00328854f2184",
+    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@d241123db7b706d4400d68b7b8b4ff38b2a75dd4",
+    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@fbdeb1c11f17fa192b7505355c64d1f0af1234dc",
+    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@13c0029d8d7766d03013e59433d20b7d314342a4",
+    "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@d8bc887460c08f30c6a1dcb951bac042bad326a7",
+    "spanopticon-models @ git+https://github.com/hyperme-sh/controlplane-models.git@476185cea7a8b37130b10f2bc31505925e88b07c",
+    "fastapi>=0.135.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.12.0",
+    "pyjwt[crypto]>=2.10.1",
+    "sqlalchemy>=2.0.43",
+    "uvicorn>=0.37.0",
+    "starlette>=0.48.0",
+]
+
+[dependency-groups]
+dev = [
+    "asgi-lifespan>=2.1.0", "pytest>=8.4.0", "pytest-asyncio>=1.2.0",
+    "respx>=0.22.0", "testcontainers>=4.9.0", "cryptography>=45.0.0",
+    "spanopticon-tests @ git+https://github.com/hyperme-sh/controlplane-tests.git@9201d61f03b6cef77dc46da211eb6cd0c3789aa3",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["core/user-service/src/user_service"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/core/user-service/src", "/core/user-service/tests", "/core/user-service/scripts", "/scripts", "/pyproject.toml", "/uv.lock", "/README.md", "/docs", "/integration"]
+
+[tool.pytest.ini_options]
+testpaths = ["core/user-service/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
