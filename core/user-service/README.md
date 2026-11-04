@@ -128,7 +128,7 @@ To prepare a new dedicated private role for DBA review, run:
 
 ```sh
 python core/user-service/scripts/prepare_closure_database_role.py \
-  --role panopticon_account_closure --database panopticon > closure-role.sql
+  --role spanopticon_account_closure --database spanopticon > closure-role.sql
 ```
 
 This command prints a transaction and never connects or applies it. The plan

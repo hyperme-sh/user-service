@@ -54,7 +54,7 @@ open. No source PR is reported merged merely because its files are imported.
 archives the exact reviewed owner commit into a disposable directory, overlays
 this component's service code/tests, and runs its owning PostgreSQL/HTTP/Keycloak
 suite using the owner's existing test Python. It adapts matching source module
-paths, auth discriminator and configuration prefix for the component namespace;
+paths, issuer/tenant-claim identifiers, auth discriminator and configuration prefix for the component namespace;
 frozen migration and registry bytes remain unchanged. It does not test the
 currently extracted dependency packages, qualify issuer/claim cutover, or supply
 standalone dependency pins. The complete namespace cutover remains coordinated.
@@ -65,3 +65,8 @@ No Actions/runner policy, deployment configuration, production grants, secrets,
 provider identities or enablement flags are changed. All closure flags stay
 explicitly default-off. Production retention and test-environment policy require
 their existing owner decisions; this port changes neither.
+
+Historical source references and the explicit external harness adapter retain
+legacy spellings only to identify their actual owner inputs. Coordinate their
+reviewed line fingerprints with the organization naming registry when integrating
+this draft; do not add an authentication fallback for the old namespace.
