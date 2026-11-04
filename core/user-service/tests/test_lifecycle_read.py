@@ -178,6 +178,13 @@ async def test_membership_retirement_is_global_and_first_timestamp_is_immutable(
                         keycloak_sub=subject,
                     )
     finally:
+        # This module shares the service database. Remove only this test's
+        # retirement marker so later complete-snapshot cases stay independent.
+        async with maker.begin() as session:
+            await session.execute(
+                text("DELETE FROM identity_retirements WHERE subject=:subject"),
+                {"subject": subject},
+            )
         await engine.dispose()
 
 
