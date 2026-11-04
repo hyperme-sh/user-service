@@ -21,10 +21,10 @@ separate.
   discriminator and existing durable operator-ban fixes. No old namespace is
   accepted as a compatibility authentication credential.
 
-## Merge blockers and owner handoffs
+## Historical source-port blockers and owner handoffs
 
-The component currently has no standalone service lock or resolved dependency
-closure. Existing operator-contract pins validate only that contract. This draft
+At the PR #16 source-port gate, the component had no standalone service lock or
+resolved dependency closure. Existing operator-contract pins validate only that contract. This draft
 keeps that contract and its exact pins unchanged; it does not invent service pins
 or treat workspace placeholders as installable dependencies.
 
@@ -120,9 +120,12 @@ consistent SQL email normalization for credential ownership, ambiguity detection
 and deletion, including Unicode whitespace. These changes retain caller-owned
 transactions and explicit tenant scopes.
 
-Standalone validation is in progress in this follow-up; record final results
-before marking it ready. Local source-harness results above do not count as
-installed-component qualification. Existing CI runs on the main-only lane;
+Standalone qualification runs the full 344-case native suite from Python 3.13
+source, an external installed wheel, and a rebuilt sdist. Container checks use
+the frozen production graph and a unique migrated disposable database. Final
+results are recorded in PR #20 and the documentation roadmap; every native case
+must pass without skips before readiness is claimed. Local source-harness
+results above do not count as installed-component qualification. Existing CI runs on the main-only lane;
 local results are separate from hosted CI. No GitHub approval requirements,
 release channels, live grants, provider identities or deployment flags change.
 
@@ -135,3 +138,12 @@ Standalone checks exposed one additional source prerequisite: core subscription
 audits must use the persisted creator after the database retirement fence, not
 the original request field. Core #12 includes that correction, with an owner
 regression and the real user-service erasure/payment-consumer case.
+
+Merge the owner adoption PRs in dependency order: database and identity, then
+tenancy and API, core, auth, and this service follow-up. Spanopticon #8 supplies
+the release-configuration fix used by the service workflow. These are advisory
+reviewed code changes; no human approval prerequisite is configured.
+
+The standalone CI job retains the existing main-only runner boundary. A green
+PR release-configuration check is configuration evidence; it is not a substitute
+for the local native package checks or a claim that hosted standalone CI ran.
