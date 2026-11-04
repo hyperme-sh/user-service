@@ -19,7 +19,7 @@ COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
 COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
 COPY core/auth-service ./core/auth-service
 COPY core/user-service ./core/user-service
-# panopticon-tests is a workspace member; uv validates [tool.uv.sources] even with --no-dev.
+# spanopticon-tests is a workspace member; uv validates [tool.uv.sources] even with --no-dev.
 COPY core/tests ./core/tests
 ARG CONTROLPLANE_SERVICEBUS=0
 RUN uv sync --frozen --no-dev --package user-service \

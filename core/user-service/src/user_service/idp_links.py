@@ -1,6 +1,6 @@
 """Prove the signed-in organization owner controls an identity-provider org.
 
-The link is saved on the (s)panopticon organization. Key Vault does not hold it.
+The link is saved on the spanopticon organization. Key Vault does not hold it.
 """
 
 from __future__ import annotations
