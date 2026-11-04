@@ -104,7 +104,7 @@ def _session_claims(request: Request) -> dict:
         hdr = uuid.UUID(header)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid X-Tenant-ID") from exc
-    claimed = claims.get("tenant_id") or claims.get("https://panopticon.dev/tenant_id")
+    claimed = claims.get("tenant_id") or claims.get("https://spanopticon.dev/tenant_id")
     if str(hdr) != str(claimed):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "X-Tenant-ID must match the session tenant")
     return claims
@@ -323,7 +323,7 @@ async def password_reset(request: Request, body: MailBody) -> dict:
 
     claims = require_support(request)
     action_url = (
-        "https://panopticon.internal/account/reset?token=" + secrets.token_urlsafe(32)
+        "https://spanopticon.internal/account/reset?token=" + secrets.token_urlsafe(32)
     )
     forwarder = MailForwarder.from_env(quota=mail_quota())
     message = prepare_password_reset(email=body.email, action_url=action_url)

@@ -31,11 +31,11 @@ def rls_isolation_role_ready(migrated_postgres):
     engine = create_engine(migrated_postgres)
     try:
         with engine.begin() as cx:
-            cx.execute(text('CREATE ROLE panopticon_rls_tester NOINHERIT NOBYPASSRLS'))
-            cx.execute(text('GRANT panopticon_rls_tester TO CURRENT_USER'))
+            cx.execute(text('CREATE ROLE spanopticon_rls_tester NOINHERIT NOBYPASSRLS'))
+            cx.execute(text('GRANT spanopticon_rls_tester TO CURRENT_USER'))
         yield
     finally:
         with engine.begin() as cx:
-            cx.execute(text('DROP OWNED BY panopticon_rls_tester'))
-            cx.execute(text('DROP ROLE panopticon_rls_tester'))
+            cx.execute(text('DROP OWNED BY spanopticon_rls_tester'))
+            cx.execute(text('DROP ROLE spanopticon_rls_tester'))
         engine.dispose()

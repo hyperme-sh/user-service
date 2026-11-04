@@ -83,7 +83,7 @@ def create_app(
 
     app = FastAPI(
         lifespan=lifespan,
-        title="Panopticon User Service",
+        title="(s)panopticon User Service",
         description="Tenant-scoped users, groups, organizations (RLS + Postgres events).",
         version="0.1.0",
     )
