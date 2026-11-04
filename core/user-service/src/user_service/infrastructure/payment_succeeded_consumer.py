@@ -60,7 +60,9 @@ def build_payment_succeeded_consumer(database_url: str):
                     return
                 sub_svc = container.resolve(SubscriptionPlanService)
                 tenant_svc = container.resolve(TenantService)
-                uid = str(payload.user_id) if payload.user_id else None
+                # Creator metadata follows the current owned ledger; queued hints
+                # cannot restore an erased customer reference.
+                uid = str(billing.user_id) if billing.user_id else None
                 plan_uuid = await sub_svc.ensure_paid_plan_for_tenant(
                     str(tid),
                     user_id=uid,

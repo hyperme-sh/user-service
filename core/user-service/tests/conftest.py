@@ -14,7 +14,6 @@ from auth_service.deps import get_current_tenant, get_current_user
 from auth_service.schemas import AuthMeResponse
 from spanopticon_tests.fixtures.postgres import (
     normalize_sync_sqlalchemy_url,
-    run_alembic_upgrade,
 )
 from testcontainers.postgres import PostgresContainer
 
@@ -53,7 +52,8 @@ def postgres_sync_url(postgres_container: PostgresContainer) -> str:
 
 @pytest.fixture(scope="session")
 def migrated_sync_url(postgres_sync_url: str) -> str:
-    run_alembic_upgrade(postgres_sync_url)
+    from controlplane_db.migrations import upgrade
+    upgrade(postgres_sync_url, chains=["platform", "events"])
     return postgres_sync_url
 
 
@@ -164,3 +164,8 @@ def _published_payloads_follow_wire_contracts(monkeypatch):
         validate_event_envelope(ControlPlaneEventEnvelope(service='contract-test', **kwargs))
         return await original(self, **kwargs)
     monkeypatch.setattr(NoOpTenantEventPublisher, 'publish', checked)
+
+
+@pytest.fixture(scope="session")
+def closure_sync_url(migrated_sync_url):
+    return migrated_sync_url
