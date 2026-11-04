@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from controlplane_api.config import settings
 
+import asyncio
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -170,7 +171,7 @@ async def _persist_audit(row) -> None:
 
 @router.get("/session")
 async def operator_session(request: Request) -> dict:
-    claims = require_console(request)
+    claims = await asyncio.to_thread(require_console, request)
     perms = sorted(permissions_from_claims(claims))
     return {
         "tenant_id": str(_tenant(claims)),
@@ -185,13 +186,13 @@ async def operator_session(request: Request) -> dict:
 
 @router.get("/plugins")
 async def operator_plugins(request: Request) -> dict:
-    require_console(request)
+    await asyncio.to_thread(require_console, request)
     return {"plugins": plugin_registry()}
 
 
 @router.get("/plugins/{plugin_id}")
 async def operator_plugin(request: Request, plugin_id: str) -> dict:
-    require_console(request)
+    await asyncio.to_thread(require_console, request)
     row = plugin_by_id(plugin_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown plugin")
@@ -204,7 +205,7 @@ async def list_bans(
     subject_kind: str | None = None,
     subject_id: uuid.UUID | None = None,
 ) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     tenant_id = _tenant(claims)
     session = _db()
     if session is not None:
@@ -225,7 +226,7 @@ async def list_bans(
 
 @router.post("/bans", status_code=status.HTTP_201_CREATED)
 async def create_ban(request: Request, body: BanBody) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     try:
         row = (BanBook() if session is not None else ban_book()).ban(
@@ -269,7 +270,7 @@ async def create_ban(request: Request, body: BanBody) -> dict:
 
 @router.post("/bans/{ban_id}/lift")
 async def lift_ban(request: Request, ban_id: uuid.UUID, body: LiftBody) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     try:
         if session is not None:
@@ -321,7 +322,7 @@ async def password_reset(request: Request, body: MailBody) -> dict:
     The response never includes the link. Unconfigured mail fails closed.
     """
 
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     action_url = (
         "https://spanopticon.internal/account/reset?token=" + secrets.token_urlsafe(32)
     )
@@ -348,7 +349,7 @@ async def password_reset(request: Request, body: MailBody) -> dict:
 
 @router.get("/audit")
 async def list_audit(request: Request) -> dict:
-    claims = require_console(request)
+    claims = await asyncio.to_thread(require_console, request)
     if not support_allowed(permissions_from_claims(claims)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, SUPPORT_REQUIRED)
     rows = operator_audit().for_tenant(_tenant(claims))
@@ -357,14 +358,14 @@ async def list_audit(request: Request) -> dict:
 
 @router.get("/peers")
 async def list_peers(request: Request) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     rows = peer_book().for_tenant(_tenant(claims))
     return {"items": [row.public() for row in rows]}
 
 
 @router.post("/peers", status_code=status.HTTP_201_CREATED)
 async def save_peer(request: Request, body: PeerBody) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     ok, detail = ping_health(body.base_url, fetch=_default_ping)
     row = peer_book().save(
         tenant_id=_tenant(claims),
@@ -405,7 +406,7 @@ def _default_ping(url: str) -> tuple[bool, str]:
 async def catalog_health(request: Request) -> dict:
     """Catalog hop health. payments-access is not the Stripe case."""
 
-    require_support(request)
+    await asyncio.to_thread(require_support, request)
     hops = [
         ("turn", "http://127.0.0.1:8012/health"),
         ("oracles", "http://127.0.0.1:8013/health"),
@@ -426,7 +427,7 @@ async def catalog_health(request: Request) -> dict:
 async def soft_delete_user(request: Request, user_id: uuid.UUID, body: ReasonBody) -> dict:
     """Soft-delete is not a ban and does not write operator_bans."""
 
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     deleted_at = datetime.now(UTC).isoformat()
     if session is not None:
@@ -456,7 +457,7 @@ async def soft_delete_user(request: Request, user_id: uuid.UUID, body: ReasonBod
 async def clear_model_preference(request: Request, user_id: uuid.UUID, body: ReasonBody) -> dict:
     """Clear another user's model_name. Not a cert-suite edit."""
 
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     if session is not None:
         from controlplane_tenancy.directory import clear_model_preference as clear_owned_preference
@@ -480,7 +481,7 @@ async def directory_users(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     if session is None:
         return {"items": [], "total": 0, "limit": limit, "offset": offset, "q": q}
@@ -512,7 +513,7 @@ async def directory_orgs(
     request: Request,
     q: str | None = Query(default=None, max_length=256),
 ) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     if session is None:
         return {"items": [], "q": q}
@@ -531,7 +532,7 @@ async def directory_orgs(
 
 @router.post("/users/{user_id}/membership")
 async def edit_membership(request: Request, user_id: uuid.UUID, body: MembershipBody) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     if session is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
@@ -566,7 +567,7 @@ async def edit_membership(request: Request, user_id: uuid.UUID, body: Membership
 
 @router.post("/users/{user_id}/role")
 async def edit_role(request: Request, user_id: uuid.UUID, body: RoleBody) -> dict:
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     session = _db()
     if session is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
@@ -591,7 +592,7 @@ async def edit_role(request: Request, user_id: uuid.UUID, body: RoleBody) -> dic
 async def record_suspend(request: Request) -> dict:
     """Temporary verbs only. This route never writes operator_bans."""
 
-    claims = require_support(request)
+    claims = await asyncio.to_thread(require_support, request)
     body = await request.json()
     kind = str(body.get("subject_kind") or "")
     verb = str(body.get("verb") or "")

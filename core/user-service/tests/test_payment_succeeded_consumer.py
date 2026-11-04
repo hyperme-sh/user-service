@@ -37,7 +37,7 @@ async def test_payment_succeeded_runs_subscription_and_tenant_update(monkeypatch
             from types import SimpleNamespace
 
             return SimpleNamespace(
-                scope="invoice", payment_type="stripe_invoice", status="succeeded"
+                scope="invoice", payment_type="stripe_invoice", status="succeeded", user_id=uid
             )
 
         async def commit(self):
@@ -211,6 +211,7 @@ async def test_usd_events_require_an_owned_paid_invoice(
         payload=PaymentSucceededPayload(
             tenant_id=seed.ta,
             billing_record_id=billing_id,
+            user_id=uuid.uuid4(),
             currency="usd",
             amount_cents=2500,
             stripe_payment_intent_id="pi_real",
@@ -227,7 +228,9 @@ async def test_usd_events_require_an_owned_paid_invoice(
                 key=None, value=env.model_dump_json().encode(), headers={}
             )
         if kind == "invoice":
-            sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once()
+            sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once_with(
+                str(seed.ta), user_id=None, plan_id="payment_succeeded"
+            )
             tenant_svc.update_tenant.assert_awaited_once()
         else:
             sub_svc.ensure_paid_plan_for_tenant.assert_not_awaited()

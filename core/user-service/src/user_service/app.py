@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -27,6 +28,10 @@ from user_service.infrastructure.payment_succeeded_consumer import (
 from user_service.interfaces.api.operator_routes import router as operator_router
 from user_service.interfaces.api.routes import router as user_api_router
 from user_service.middleware import UserServiceDbMiddleware
+from user_service.account_closure import router as closure_router
+from user_service.closure_proxy import router as closure_actions_router
+from user_service.closure_proxy import read_router as lifecycle_read_router
+from user_service.closure_public_database import check_public_database
 
 logger = get_logger(__name__)
 
@@ -40,11 +45,21 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if any(os.environ.get(name) for name in (
+            "ACCOUNT_CLOSURE_WORKER_DATABASE_URL", "ACCOUNT_CLOSURE_KEYCLOAK_CLIENT_SECRET",
+        )):
+            raise RuntimeError("Private closure credentials cannot be mounted in the public service")
         configure_logging()
         engine = create_async_engine(normalize_database_url(settings.database_url))
+        try:
+            await check_public_database(engine)
+        except BaseException:
+            await engine.dispose()
+            raise
         maker = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
         configure_session_maker(maker)
         app.state.async_engine = engine
+        app.state.session_maker = maker
 
         if test_event_sink is not None:
 
@@ -131,6 +146,9 @@ def create_app(
     app.include_router(version_router)
     app.include_router(user_api_router, prefix="/api/v1")
     app.include_router(operator_router, prefix="/api/v1")
+    app.include_router(closure_router, prefix="/api/v1")
+    app.include_router(closure_actions_router, prefix="/api/v1")
+    app.include_router(lifecycle_read_router, prefix="/api/v1")
     add_optional_service_cors(app, env_var="USER_SERVICE_CORS_ORIGINS")
     logger.info("User service: UserServiceDbMiddleware + /api/v1 routes + optional CORS")
     from controlplane_api.metrics import install_http_metrics

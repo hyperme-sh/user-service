@@ -47,3 +47,11 @@ organization policy may shorten it). Expired evidence fails closed: validate a
 new main revision. The publisher verifies the run, source, workflow and artifact
 digest independently of release metadata. Repository immutable releases must be
 enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
+
+## Private closure adoption (draft)
+
+The staged private closure implementation and source #720 retirement guard are
+in `core/user-service`. See [the adoption gates](docs/closure-adoption.md).
+This draft requires reviewed identity/tenancy/database/core/auth/owner dependency
+adoption, exact immutable service pins and owning standalone validation before
+merge or activation. Operator-contract checks do not qualify these service files.

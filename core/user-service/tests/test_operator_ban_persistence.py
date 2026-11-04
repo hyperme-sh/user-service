@@ -1,7 +1,5 @@
 """Durable endpoint behavior across independent sessions and empty local books."""
 import uuid
-from pathlib import Path
-import importlib.util
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -9,11 +7,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from api.domain.operator.bans import ban_book
 from user_service.interfaces.api import operator_routes as routes
 
-# Reuse the isolated migrated database fixture from the contract tests.
-spec = importlib.util.spec_from_file_location('ban_database_fixtures', Path(__file__).parents[1] / 'contracts/tests/conftest.py')
-fixtures = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(fixtures)
-migrated_postgres = fixtures.migrated_postgres
+# Owning-service tests share the service's disposable migrated PostgreSQL.
+# The separately packaged contract retains its independent migration fixture.
+@pytest.fixture(scope="session")
+def migrated_postgres(migrated_sync_url):
+    return migrated_sync_url
 
 @pytest.mark.asyncio
 async def test_endpoints_use_durable_tenant_records_after_restart(migrated_postgres, monkeypatch):
