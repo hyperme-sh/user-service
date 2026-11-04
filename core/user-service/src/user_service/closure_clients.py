@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 
@@ -11,6 +12,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, St
 
 LIMIT = 100_000
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+OWNER_RPC_DEADLINE_SECONDS = 5
 
 
 class OwnerUnavailable(RuntimeError):
@@ -93,22 +95,23 @@ class ClosureOwners:
             }
             if tenant is not None:
                 headers["X-Tenant-ID"] = str(tenant)
-            async with self.client.stream(
-                "POST" if body is not None else "GET",
-                service_url(name) + path,
-                headers=headers,
-                json=body,
-                follow_redirects=False,
-                timeout=5,
-            ) as response:
-                if response.status_code != 200:
-                    raise OwnerUnavailable()
-                payload = bytearray()
-                async for chunk in response.aiter_bytes():
-                    payload.extend(chunk)
-                    if len(payload) > MAX_RESPONSE_BYTES:
+            async with asyncio.timeout(OWNER_RPC_DEADLINE_SECONDS):
+                async with self.client.stream(
+                    "POST" if body is not None else "GET",
+                    service_url(name) + path,
+                    headers=headers,
+                    json=body,
+                    follow_redirects=False,
+                    timeout=5,
+                ) as response:
+                    if response.status_code != 200:
                         raise OwnerUnavailable()
-                value = json.loads(payload)
+                    payload = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        payload.extend(chunk)
+                        if len(payload) > MAX_RESPONSE_BYTES:
+                            raise OwnerUnavailable()
+                    value = json.loads(payload)
             if not isinstance(value, dict):
                 raise OwnerUnavailable()
             return value

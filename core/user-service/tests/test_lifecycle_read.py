@@ -965,3 +965,29 @@ async def http_client(app, auth_context):
         del app.state.session_maker
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             yield client
+
+
+async def test_retirement_only_identity_prevents_complete_denial_snapshot(
+    http_client, closure_sync_url, authority, seed
+):
+    subject = str(uuid.uuid4())
+    engine = create_engine(closure_sync_url)
+    path = "/api/v1/internal/account-lifecycle/denials"
+    headers = {**authority, "X-Tenant-ID": str(seed.ta)}
+    assert (await http_client.get(path, headers=headers)).status_code == 200
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO identity_retirements(subject,retired_at) VALUES(:subject,now())"), {"subject": subject})
+    try:
+        response = await http_client.post("/api/v1/internal/account-lifecycle/check", headers=authority, json={"subject": subject})
+        assert response.json() == {"blocked": True}
+        for tenant in (seed.ta, seed.tb):
+            response = await http_client.get(path, headers={**authority, "X-Tenant-ID": str(tenant)})
+            assert response.status_code == 503
+            assert response.json() == {"detail": "Account denial inventory incomplete"}
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT count(*) FROM account_lifecycles WHERE subject=:subject"), {"subject": subject}).scalar_one() == 0
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM identity_retirements WHERE subject=:subject"), {"subject": subject})
+        engine.dispose()
+    assert (await http_client.get(path, headers=headers)).status_code == 200

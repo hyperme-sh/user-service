@@ -27,6 +27,11 @@ def main():
     parser.add_argument(
         "--python", type=Path, help="Owner harness Python (defaults to its .venv)"
     )
+    parser.add_argument(
+        "--pytest-args",
+        nargs=argparse.REMAINDER,
+        help="Optional focused pytest arguments inside the disposable harness",
+    )
     args = parser.parse_args()
     owner = args.owner_root.resolve()
     python = args.python or owner / ".venv/bin/python"
@@ -75,7 +80,12 @@ def main():
             flush=True,
         )
         subprocess.run(
-            [str(python), "-m", "pytest", "tests", "-q", "--override-ini", "addopts="],
+            [
+                str(python),
+                "-m",
+                "pytest",
+                *(args.pytest_args or ["tests", "-q", "--override-ini", "addopts="]),
+            ],
             cwd=root / "core/user-service",
             env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, paths))},
             check=True,

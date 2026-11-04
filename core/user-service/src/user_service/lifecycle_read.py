@@ -7,6 +7,7 @@ from datetime import datetime
 
 import httpx
 from api.infrastructure.persistence.db_session import get_db_session
+from controlplane_db.models import IdentityRetirement
 from controlplane_identity.account_lifecycle import (
     authorized_call,
     service_secret,
@@ -117,15 +118,25 @@ async def denials(request: Request, session: AsyncSession = Depends(get_db_sessi
     # This must be a complete snapshot, never a silently truncated page. A
     # closing principal whose scope discovery/inventory is pending prevents a
     # new gateway bootstrap; existing durable local denials remain usable.
+    # A retirement without its original lifecycle inventory also blocks a
+    # complete snapshot. Do not mint an empty root or silently omit it.
     rows = (
         await session.execute(
             select(AccountLifecycle.subject, AccountLifecycle.effects)
+            .select_from(AccountLifecycle)
+            .join(
+                IdentityRetirement,
+                IdentityRetirement.subject == AccountLifecycle.subject,
+                full=True,
+            )
             .order_by(AccountLifecycle.subject)
             .limit(100_001)
         )
     ).all()
     if len(rows) > 100_000 or any(
-        row.effects.get("scope_discovery") is not True for row in rows
+        not isinstance(row.effects, dict)
+        or row.effects.get("scope_discovery") is not True
+        for row in rows
     ):
         raise HTTPException(503, "Account denial inventory incomplete")
     scopes = (

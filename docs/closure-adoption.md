@@ -72,9 +72,17 @@ legacy spellings only to identify their actual owner inputs. Coordinate their
 reviewed line fingerprints with the organization naming registry when integrating
 this draft; do not add an authentication fallback for the old namespace.
 
-Current component source validation: all 335 owning-service cases pass in the
+Current component source validation: all 337 owning-service cases pass in the
 namespace-adapted external owner harness, including real PostgreSQL, private
 HTTP/TLS and native Keycloak tests. This preserves destination durable-ban
 coverage. The operator permission/retirement callback runs off the server event
 loop, and service tests use their own disposable migrated database. These results
 do not supply the missing standalone dependency pins or container acceptance.
+
+
+Component review also bounded the whole owner RPC to five seconds, including
+response streaming, rather than only individual HTTPX waits. A timed-out stream
+closes and the client can process the next call. Retirement-only subjects now
+prevent a denial snapshot from claiming completeness until their original
+inventory is reconciled; no empty lifecycle root is manufactured. Both regression
+cases failed before correction and pass afterward in the owner harness.
