@@ -53,6 +53,7 @@ def main():
         # registry bytes stay intact. This is not qualification of installed deps.
         replacements = {
             "panopticon_models": "spanopticon_models",
+            "panopticon_tests": "spanopticon_tests",
             "panopticon_auth": "spanopticon_auth",
             "https://panopticon.internal/": "https://spanopticon.internal/",
             "https://panopticon.dev/tenant_id": "https://spanopticon.dev/tenant_id",
@@ -67,6 +68,9 @@ def main():
             path.write_text(text)
         (root / "core/models/src/panopticon_models").rename(
             root / "core/models/src/spanopticon_models"
+        )
+        (root / "core/tests/src/panopticon_tests").rename(
+            root / "core/tests/src/spanopticon_tests"
         )
         paths = [
             root / "core/user-service/src",

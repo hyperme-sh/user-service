@@ -10,7 +10,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from controlplane_db import migrations
-from panopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
+from spanopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
 from sqlalchemy import create_engine, text
 from test_closure_jobs import jobs as jobs  # noqa: PLC0414
 from testcontainers.postgres import PostgresContainer
