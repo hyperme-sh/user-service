@@ -72,8 +72,9 @@ legacy spellings only to identify their actual owner inputs. Coordinate their
 reviewed line fingerprints with the organization naming registry when integrating
 this draft; do not add an authentication fallback for the old namespace.
 
-Current component source validation: all 337 owning-service cases pass in the
-namespace-adapted external owner harness, including real PostgreSQL, private
+Component source validation: 335 owning-service cases passed before the review
+follow-ups, and both new regressions pass in focused checks. Full current results
+are recorded in PR #16. The external owner harness exercises real PostgreSQL, private
 HTTP/TLS and native Keycloak tests. This preserves destination durable-ban
 coverage. The operator permission/retirement callback runs off the server event
 loop, and service tests use their own disposable migrated database. These results
