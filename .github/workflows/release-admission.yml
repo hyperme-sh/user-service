@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   release-admission:
-    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@189bf6d7de0acd9740237306e1b2d76944d31002
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@affc1e60e47d6956ce58c81ebf4a124c9ffa1ec5
     with:
       release-line: '0.24'
       baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
