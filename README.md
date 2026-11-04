@@ -31,7 +31,7 @@ service, read-only contents and a repository-specific Git authentication header.
 The service application, Dockerfile and service integration tests retain their
 existing layout and dependencies. Full standalone service dependency closure,
 container builds, owning-service/Hypermesh integration and consumer adoption are
-not established by contract tests. No release or deployment workflow is enabled.
+not established by contract tests. Service deployment remains unqualified; package channels are described below.
 
 ## Release channels
 
