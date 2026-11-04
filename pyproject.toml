@@ -8,8 +8,8 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@6bef00ce7fc630df5523dcd254f85d40d13d135e",
-    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@2a02092f9da1dbd0d04ee08528757dec12f57ffc",
-    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@0cc954f1f7e0cd88e2b47fbf9db00328854f2184",
+    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@2df6e19e6b11d1fdcd118bafcfa2bc626863f638",
+    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@92ba54dd1f0fde38b3c439ea151f51a0ac3aa78b",
     "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@d241123db7b706d4400d68b7b8b4ff38b2a75dd4",
     "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@fbdeb1c11f17fa192b7505355c64d1f0af1234dc",
     "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@13c0029d8d7766d03013e59433d20b7d314342a4",

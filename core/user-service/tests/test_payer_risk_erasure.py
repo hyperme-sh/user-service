@@ -24,7 +24,7 @@ OLD_SUBJECT = str(uuid.uuid4())
 
 @pytest.fixture(scope="module")
 def jobs_url(require_docker):
-    with PostgresContainer("postgres:16-alpine") as pg:
+    with PostgresContainer("postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416") as pg:
         # Exercise actual adoption/backfill, not a caller-supplied retention clock.
         base_jobs_url = normalize_sync_sqlalchemy_url(pg.get_connection_url())
         migrations.upgrade(base_jobs_url)

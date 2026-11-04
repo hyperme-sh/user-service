@@ -87,10 +87,25 @@ async def test_failures_do_not_redirect_or_expose_provider_body(forwarding, code
 async def test_public_app_has_only_forwarding_closure_routes():
     from user_service.app import create_app
     app = create_app(test_event_sink=[])
-    routes = [route for route in app.routes if "account-lifecycle" in getattr(route, "path", "")
-              or getattr(route, "path", "").endswith(("/me/account-closure", "/operator/account-closures", "/operator/account-closures/hold"))]
-    assert len(routes) == 10
-    assert all(route.endpoint.__module__ == "user_service.closure_proxy" for route in routes)
+    # Resolve real dispatch rather than relying on eager app.routes flattening;
+    # FastAPI also supports deferred include_router expansion.
+    from user_service.middleware import UserServiceDbMiddleware
+    app.user_middleware = [entry for entry in app.user_middleware if entry.cls is not UserServiceDbMiddleware]
+    paths = {path: methods for path, methods in app.openapi()["paths"].items()
+             if "account-lifecycle" in path or path.endswith((
+                 "/me/account-closure", "/operator/account-closures", "/operator/account-closures/hold"))}
+    assert sum(len(methods) for methods in paths.values()) == 10
+    observed = []
+    async def observe(scope, receive, send):
+        await app(scope, receive, send)
+        observed.append(scope["endpoint"])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=observe), base_url="http://public") as client:
+        for path, methods in paths.items():
+            for method in methods:
+                await client.request(method.upper(), path, json={})
+    assert len(observed) == 10
+    assert all(endpoint.__module__ == "user_service.closure_proxy" for endpoint in observed)
+
 
 
 @pytest.mark.parametrize("name", ["ACCOUNT_CLOSURE_WORKER_DATABASE_URL", "ACCOUNT_CLOSURE_KEYCLOAK_CLIENT_SECRET"])

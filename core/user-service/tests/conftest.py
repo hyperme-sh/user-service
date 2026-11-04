@@ -41,7 +41,7 @@ def require_docker() -> None:
 
 @pytest.fixture(scope="session")
 def postgres_container(require_docker: None):
-    with PostgresContainer("postgres:16-alpine") as pg:
+    with PostgresContainer("postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416") as pg:
         yield pg
 
 

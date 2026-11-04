@@ -959,9 +959,17 @@ async def http_client(app, auth_context):
     from auth_service.deps import get_current_tenant, get_current_user
     from user_service.lifecycle_read import router
 
-    app.router.routes[:] = [route for route in app.routes
-                           if not getattr(route, "path", "").startswith("/api/v1/internal/account-lifecycle")]
+    # Build the explicit same-process test boundary rather than editing the
+    # production app's route list (which may contain deferred included routers).
+    from fastapi import FastAPI
+    from user_service.interfaces.api.operator_routes import router as operator_router
+    from user_service.middleware import UserServiceDbMiddleware
+    public = app
+    app = FastAPI(lifespan=public.router.lifespan_context)
+    app.exception_handlers = public.exception_handlers.copy()
+    app.add_middleware(UserServiceDbMiddleware)
     app.include_router(router, prefix="/api/v1")
+    app.include_router(operator_router, prefix="/api/v1")
     user, tenant = auth_context
     app.dependency_overrides[get_current_user] = user
     app.dependency_overrides[get_current_tenant] = tenant

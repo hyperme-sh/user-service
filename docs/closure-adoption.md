@@ -102,8 +102,8 @@ than workspace placeholders; the operator-contract project is unchanged.
 | controlplane-identity | `fbdeb1c11f17fa192b7505355c64d1f0af1234dc` | [#9](https://github.com/hyperme-sh/controlplane-identity/pull/9) |
 | controlplane-tenancy | `13c0029d8d7766d03013e59433d20b7d314342a4` | [#11](https://github.com/hyperme-sh/controlplane-tenancy/pull/11) |
 | controlplane-api | `6bef00ce7fc630df5523dcd254f85d40d13d135e` | [#12](https://github.com/hyperme-sh/controlplane-api/pull/12) |
-| controlplane-core | `0cc954f1f7e0cd88e2b47fbf9db00328854f2184` | [#12](https://github.com/hyperme-sh/controlplane-core/pull/12) |
-| auth-service | `2a02092f9da1dbd0d04ee08528757dec12f57ffc` | [#16](https://github.com/hyperme-sh/auth-service/pull/16) |
+| controlplane-core | `92ba54dd1f0fde38b3c439ea151f51a0ac3aa78b` | [#12](https://github.com/hyperme-sh/controlplane-core/pull/12) |
+| auth-service | `2df6e19e6b11d1fdcd118bafcfa2bc626863f638` | [#16](https://github.com/hyperme-sh/auth-service/pull/16) |
 
 The database owner preserves both existing platform histories and joins them at
 `platform_0079_closure_merge`. Neither the source checkpoint/closure branch nor
@@ -130,3 +130,8 @@ Issue #5 can close after external wheel/import validation passes. Issue #3
 remains open for shared/Hypermesh consumer integration, and #14 remains open
 for coordinated private runtime acceptance. TEST policy #13 remains a separate
 activation blocker. None of these gates is closed by file presence alone.
+
+Standalone checks exposed one additional source prerequisite: core subscription
+audits must use the persisted creator after the database retirement fence, not
+the original request field. Core #12 includes that correction, with an owner
+regression and the real user-service erasure/payment-consumer case.

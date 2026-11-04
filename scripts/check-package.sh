@@ -5,7 +5,7 @@ unset PYTHONPATH UV_NO_SYNC SKIP_TESTCONTAINERS
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 uv lock --check
-uv sync --frozen
+uv sync --frozen --python 3.13
 # Do not accept an unavailable Docker daemon as successful native qualification.
 docker info >/dev/null
 uv run --frozen pytest --junitxml="$scratch/source.xml"

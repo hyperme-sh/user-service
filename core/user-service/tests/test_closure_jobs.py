@@ -18,7 +18,7 @@ from user_service.models import AccountLifecycle, AccountLifecycleScope
 
 @pytest.fixture(scope="module")
 def jobs_url(require_docker):
-    with PostgresContainer("postgres:16-alpine") as container:
+    with PostgresContainer("postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416") as container:
         url = normalize_sync_sqlalchemy_url(container.get_connection_url())
         upgrade(url)
         yield url

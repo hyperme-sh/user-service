@@ -13,7 +13,7 @@ from user_service.closure_idp import IdentityEffectUnavailable, KeycloakClosureC
 def native_keycloak(require_docker):
     secret = uuid.uuid4().hex + uuid.uuid4().hex
     with (
-        DockerContainer("quay.io/keycloak/keycloak:26.5")
+        DockerContainer("quay.io/keycloak/keycloak:26.5@sha256:8d44614c74798322c4e07fbe0ecb15cfbb5879d69b484628555f58ade06f0d8c")
         .with_env("KC_BOOTSTRAP_ADMIN_USERNAME", "closure-test-admin")
         .with_env("KC_BOOTSTRAP_ADMIN_PASSWORD", secret)
         .with_exposed_ports(8080)
