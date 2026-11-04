@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
 from datetime import datetime
 
@@ -45,6 +47,10 @@ class Permit(Principal):
     closed_at: datetime
 
 
+KEY_STATUS_DEADLINE_SECONDS = 3
+MAX_KEY_STATUS_BYTES = 64 * 1024
+
+
 async def key_blocked(principal: Principal) -> bool:
     # Exchange sessions can wrap API-key subjects. Do not accept a missing key,
     # missing tenant, nested key owner, unavailable owner, or non-boolean reply.
@@ -52,21 +58,30 @@ async def key_blocked(principal: Principal) -> bool:
         identifier = uuid.UUID(principal.subject.removeprefix("apikey:"))
         if principal.tenant_id is None:
             return True
-        async with httpx.AsyncClient(
-            timeout=3, trust_env=False, follow_redirects=False
-        ) as client:
-            response = await client.post(
-                service_url("ACCOUNT_CLOSURE_KEYS_URL")
-                + "/api/v1/api-keys/internal/account-status",
-                headers={
-                    "X-Account-Lifecycle-Token": service_secret(
-                        "ACCOUNT_CLOSURE_GUARD_TOKEN"
-                    ),
-                    "X-Tenant-ID": str(principal.tenant_id),
-                },
-                json={"key_id": str(identifier)},
-            )
-        result = response.json() if response.status_code == 200 else None
+        async with asyncio.timeout(KEY_STATUS_DEADLINE_SECONDS):
+            async with httpx.AsyncClient(
+                timeout=3, trust_env=False, follow_redirects=False
+            ) as client:
+                async with client.stream(
+                    "POST",
+                    service_url("ACCOUNT_CLOSURE_KEYS_URL")
+                    + "/api/v1/api-keys/internal/account-status",
+                    headers={
+                        "X-Account-Lifecycle-Token": service_secret(
+                            "ACCOUNT_CLOSURE_GUARD_TOKEN"
+                        ),
+                        "X-Tenant-ID": str(principal.tenant_id),
+                    },
+                    json={"key_id": str(identifier)},
+                ) as response:
+                    if response.status_code != 200:
+                        return True
+                    payload = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=4096):
+                        if len(payload) + len(chunk) > MAX_KEY_STATUS_BYTES:
+                            return True
+                        payload.extend(chunk)
+                    result = json.loads(payload)
         return not (isinstance(result, dict) and result.get("blocked") is False)
     except Exception:
         return True
