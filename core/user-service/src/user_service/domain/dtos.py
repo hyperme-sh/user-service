@@ -5,8 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
-from panopticon_models.acl import SociACLAttributes
-from panopticon_models.http_common import Page
+from spanopticon_models.acl import SociACLAttributes
+from spanopticon_models.http_common import Page
 
 
 class UserCreateBody(BaseModel):

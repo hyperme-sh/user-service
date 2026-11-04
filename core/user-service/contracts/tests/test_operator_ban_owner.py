@@ -56,16 +56,16 @@ async def test_async_ban_checks_scope_subjects_active_rows_and_uncommitted_state
 async def test_sync_and_async_owner_do_not_widen_rls(ban_owner, rls_isolation_role_ready):
     engine, maker, ta, tb, user, _, _, lifted = ban_owner
     with engine.begin() as connection:
-        connection.execute(text("GRANT SELECT ON operator_bans TO panopticon_rls_tester"))
+        connection.execute(text("GRANT SELECT ON operator_bans TO spanopticon_rls_tester"))
     with engine.connect() as connection:
         assert subject_banned_sync(connection, ta, 'user', user)
         assert not subject_banned_sync(connection, ta, 'user', lifted)
-        connection.execute(text("SET LOCAL ROLE panopticon_rls_tester"))
+        connection.execute(text("SET LOCAL ROLE spanopticon_rls_tester"))
         connection.execute(text("SELECT set_config('app.current_tenant_id', :tid, true)"), {"tid": str(ta)})
         assert subject_banned_sync(connection, ta, 'user', user)
         assert not subject_banned_sync(connection, tb, 'user', lifted)
     async with maker() as session:
-        await session.execute(text("SET LOCAL ROLE panopticon_rls_tester"))
+        await session.execute(text("SET LOCAL ROLE spanopticon_rls_tester"))
         await session.execute(text("SELECT set_config('app.current_tenant_id', :tid, true)"), {"tid": str(ta)})
         assert await active_ban(session, ta, users=(user,))
         assert not await active_ban(session, tb, users=(lifted,))

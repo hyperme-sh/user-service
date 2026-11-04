@@ -85,7 +85,7 @@ class OperatorAudit(Base):
 
 
 class OperatorPeer(Base):
-    """Another Panopticon recorded on this plane. Not a chain store."""
+    """Another (s)panopticon recorded on this plane. Not a chain store."""
 
     __tablename__ = "operator_peers"
     __table_args__ = (Index("ix_operator_peers_tenant", "tenant_id"),)
