@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "repository": "hyperme-sh/user-service",
+  "component": "user-service",
+  "line": "0.24",
+  "version_files": [
+    "core/user-service/pyproject.toml",
+    "core/user-service/contracts/pyproject.toml"
+  ]
+}
