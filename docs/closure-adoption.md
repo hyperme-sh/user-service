@@ -63,10 +63,18 @@ The source harness is external development evidence only. The contract's own
 source/wheel/sdist checks remain separate and do not establish service readiness.
 No Actions/runner policy, deployment configuration, production grants, secrets,
 provider identities or enablement flags are changed. All closure flags stay
-explicitly default-off. Production retention and test-environment policy require
-their existing owner decisions; this port changes neither.
+explicitly default-off. The approved TEST-mode retention/hold exemption remains tracked in #13 and
+is an activation blocker for TEST until implemented. This port does not change
+that requirement or the production retention policy.
 
 Historical source references and the explicit external harness adapter retain
 legacy spellings only to identify their actual owner inputs. Coordinate their
 reviewed line fingerprints with the organization naming registry when integrating
 this draft; do not add an authentication fallback for the old namespace.
+
+Current component source validation: all 335 owning-service cases pass in the
+namespace-adapted external owner harness, including real PostgreSQL, private
+HTTP/TLS and native Keycloak tests. This preserves destination durable-ban
+coverage. The operator permission/retirement callback runs off the server event
+loop, and service tests use their own disposable migrated database. These results
+do not supply the missing standalone dependency pins or container acceptance.
