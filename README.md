@@ -21,9 +21,9 @@ Tests create a unique database, apply platform migrations, validate explicit
 scope and RLS, then drop that database. Checks run from source, an external wheel
 and a rebuilt sdist; wheel bytes must match source. No deployed database is used.
 
-The hosted main-only workflow validates this contract. Actions remains disabled
+The shared-runner main-only workflow validates this contract. Actions remains disabled
 until DEPENDENCY_READ_TOKEN has contents:read on hyperme-sh/controlplane-db and
-hosted-worker policy is configured. It uses pinned actions, a disposable PostgreSQL
+shared-runner qualification is configured. It uses pinned actions, a disposable PostgreSQL
 service, read-only contents and a repository-specific Git authentication header.
 
 ## Service readiness
