@@ -4122,7 +4122,7 @@ wheels = [
 
 [[package]]
 name = "user-service"
-version = "0.24.0"
+version = "0.24.1"
 source = { editable = "." }
 dependencies = [
     { name = "auth-service" },

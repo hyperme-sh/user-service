@@ -1,0 +1,55 @@
+name: Service preparation
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  service:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17@sha256:3b0cda93be7c8dba2ed484d19393d93845dc3dafb88973e248ba8e6d99d784e1
+        env:
+          POSTGRES_PASSWORD: service-test-only
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Prepare exact owner artifact output
+        run: |
+          output=$(mktemp -d "$RUNNER_TEMP/user-service-dist.XXXXXX")
+          echo "SERVICE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
+          echo "RELEASE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: '0.11.26'
+          python-version: '3.13'
+      - name: Qualify source and installed owner artifacts
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
+        run: |
+          bash scripts/check-package.sh --fixtures
+          bash core/user-service/contracts/scripts/check-package.sh --fixtures
+      - name: Bind both validated owner wheels
+        run: |
+          uv run --project core/user-service --frozen --no-sync pytest -q tests_tools
+          archive=$(python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR")
+          exported=$(mktemp -d "$RUNNER_TEMP/user-owner-contract.XXXXXX")
+          python3 scripts/owner_artifact.py export "$archive" "$exported/contract"
+          if [[ -f releases/candidate/release.json ]]; then
+            python3 scripts/verify_release_candidate.py releases/candidate/release.json "$exported/contract/contract.json" "$exported/contract/evidence.json" user-service
+          fi
+      - name: Retain validated owner artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: prepared-dist
+          path: ${{ env.SERVICE_ARTIFACT_DIR }}/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
