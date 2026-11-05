@@ -57,6 +57,10 @@ jobs:
           printf '%s' "$DEPENDENCY_READ_TOKEN" > "$token_file"
           unset DEPENDENCY_READ_TOKEN
           DEPENDENCY_READ_TOKEN_FILE="$token_file" bash scripts/check-container.sh
+      - name: Bind both validated owner wheels
+        run: |
+          uv run --project core/user-service --frozen pytest -q tests_tools
+          python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR"
       - name: Retain validated owner artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
