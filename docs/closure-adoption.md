@@ -207,5 +207,8 @@ Merge the reviewed ticket alignment before accepting the Hypermesh integration;
 payment, edge and service changes remain default-off code adoption. Record final
 component merges and main-only hosted validation separately from PR configuration
 checks. Issue #13 remains a TEST activation blocker; overall source #369 and
-deployment/cutover remain open. Source #720 is reviewed port provenance, not a
-claimed source merge.
+deployment/cutover remain open. A fresh source check confirms Panopticon #720
+merged at `d6d9541b72db2eb3f86cb8aedc071794eba116e3` on 2026-11-04; its reviewed
+head remains `7356887667b0f142bac7504223ebf9446e0f5411`. Earlier open-source-PR
+notes above describe the historical adoption gate. That source merge does not
+establish component merge, hosted validation or deployment acceptance.
