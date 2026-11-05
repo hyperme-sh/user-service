@@ -94,6 +94,37 @@ async def insert_audit(session: AsyncSession, row: OperatorAuditRow) -> None:
     await session.flush()
 
 
+async def list_audit(
+    session: AsyncSession, tenant_id: uuid.UUID, *, limit: int, offset: int
+) -> list[OperatorAuditRow]:
+    rows = await session.scalars(
+        select(OperatorAudit)
+        .where(OperatorAudit.tenant_id == tenant_id)
+        .order_by(OperatorAudit.created_at.desc(), OperatorAudit.id.desc())
+        .limit(limit).offset(offset)
+        .execution_options(populate_existing=True)
+    )
+    return [OperatorAuditRow(**{
+        name: getattr(row, name) for name in OperatorAuditRow.__dataclass_fields__
+    }) for row in rows]
+
+
+async def active_user_bans(
+    session: AsyncSession, tenant_id: uuid.UUID, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, BanRecord]:
+    if not user_ids:
+        return {}
+    rows = await session.scalars(
+        select(OperatorBan).where(
+            OperatorBan.tenant_id == tenant_id,
+            OperatorBan.subject_kind == "user",
+            OperatorBan.subject_id.in_(user_ids),
+            OperatorBan.lifted_at.is_(None),
+        ).execution_options(populate_existing=True)
+    )
+    return {row.subject_id: _ban_record(row) for row in rows}
+
+
 async def insert_peer(session: AsyncSession, row: PeerRecord) -> None:
     session.add(
         OperatorPeer(

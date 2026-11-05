@@ -11,6 +11,7 @@ import asyncio
 import secrets
 import uuid
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -348,12 +349,25 @@ async def password_reset(request: Request, body: MailBody) -> dict:
 
 
 @router.get("/audit")
-async def list_audit(request: Request) -> dict:
+async def list_audit(
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
     claims = await asyncio.to_thread(require_console, request)
     if not support_allowed(permissions_from_claims(claims)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, SUPPORT_REQUIRED)
-    rows = operator_audit().for_tenant(_tenant(claims))
-    return {"items": [row.public() for row in rows]}
+    tenant_id = _tenant(claims)
+    session = _db()
+    if session is not None:
+        from user_service.infrastructure.operator_store import list_audit as stored_audit
+
+        rows = await stored_audit(session, tenant_id, limit=limit, offset=offset)
+    else:
+        rows = sorted(operator_audit().for_tenant(tenant_id),
+                      key=lambda row: (row.created_at, row.id), reverse=True)
+        rows = rows[offset:offset + limit]
+    return {"items": [row.public() for row in rows], "limit": limit, "offset": offset}
 
 
 @router.get("/peers")
@@ -486,15 +500,17 @@ async def directory_users(
     if session is None:
         return {"items": [], "total": 0, "limit": limit, "offset": offset, "q": q}
     from user_service.infrastructure.persistence.repos import SqlUserRepository
+    from user_service.infrastructure.operator_store import active_user_bans
     from user_service.interfaces.api.routes import _user_to_response
 
     users, total = await SqlUserRepository(session).list_active_paged(
         _tenant(claims), offset=offset, limit=limit, q=q
     )
+    bans = await active_user_bans(session, _tenant(claims), [user.id for user in users])
     items = []
     for user in users:
         payload = _user_to_response(user).model_dump(mode="json")
-        ban = ban_book().active_row(_tenant(claims), "user", user.id)
+        ban = bans.get(user.id)
         payload["active_ban"] = None if ban is None else ban.public()
         payload["deleted_at"] = user.deleted_at.isoformat() if user.deleted_at else None
         items.append(payload)
