@@ -9,8 +9,8 @@
       "contract_sha256": "06ad3e485659e4f72a3ad348573b7b74bad2a0f04a70f0c474ab7ccbbbc22d9e",
       "artifact": {
         "kind": "package",
-        "uri": "urn:sha256:e0c509a9fd7f549892fe573651e882258ebdabcb9d32a9e6dca408c2f62c1f6f",
-        "sha256": "e0c509a9fd7f549892fe573651e882258ebdabcb9d32a9e6dca408c2f62c1f6f"
+        "uri": "urn:sha256:aaa6fb541743ff0bca44f4ed6d9e8c45a85ba6f2ae3a3aa9d5fdf3ebf5eb4c7d",
+        "sha256": "aaa6fb541743ff0bca44f4ed6d9e8c45a85ba6f2ae3a3aa9d5fdf3ebf5eb4c7d"
       }
     }
   }
