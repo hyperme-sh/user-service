@@ -38,11 +38,11 @@ service and read-only contents.
 
 `core/user-service` builds `user-service`; `core/user-service/contracts` remains
 an independently packaged operator-ban contract. Runtime dependencies use exact
-private Git revisions in its standard metadata and `uv.lock`. The service wheel
+public Git revisions in its standard metadata and `uv.lock`. The service wheel
 installs `user_service` directly, without workspace paths or `PYTHONPATH`.
 
-Use Python 3.13+, uv 0.11.26, Docker and existing read access to the listed private
-repositories. The full source/wheel/rebuilt-sdist suite starts disposable
+Use Python 3.13+, uv 0.11.26 and Docker. Runtime and development dependencies
+are public and install without private credentials. The full source/wheel/rebuilt-sdist suite starts disposable
 PostgreSQL and Keycloak containers. Missing native prerequisites fail validation.
 
 ```sh
@@ -337,3 +337,10 @@ PostgreSQL role. Source/wheel/sdist consumers retain the mandatory native tests
 and no-skips assertion. Deployed configuration and delivery qualification remain
 tracked separately in issue #41; this implementation does not provision roles,
 credentials, SMTP, listeners or deployments in an existing environment.
+
+## Interactive identity adoption
+
+The immutable API/core/auth/identity graph includes ordinary JWT age-confirmation
+enforcement. Seven consumer regressions cover missing evidence, positive evidence
+and machine/service exemptions in all three package forms. Package versions and
+accepted artifacts remain unchanged; full deployment acceptance is separate.
