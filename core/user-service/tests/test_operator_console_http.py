@@ -103,3 +103,52 @@ async def test_ban_and_lift_do_not_return_a_mail_secret():
         )
         assert lifted.status_code == 200, lifted.text
         assert lifted.json()["active"] is False
+
+
+@pytest.mark.parametrize("path", ["audit", "directory/users"])
+@pytest.mark.parametrize("permissions", [[], ["operator:console"], ["operator:support"]])
+async def test_console_reads_require_both_console_and_support(path, permissions):
+    transport = httpx.ASGITransport(app=_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(f"/api/v1/operator/{path}", headers=_headers(permissions))
+        assert response.status_code == 403, response.text
+
+
+@pytest.mark.parametrize("query", ["limit=0", "limit=201", "offset=-1"])
+async def test_audit_rejects_unbounded_or_negative_pagination(query):
+    transport = httpx.ASGITransport(app=_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(f"/api/v1/operator/audit?{query}",
+                                    headers=_headers(["operator:console", "operator:support"]))
+        assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize("path", ["audit", "directory/users"])
+async def test_console_reads_refuse_cross_tenant_header(path):
+    headers = _headers(["operator:console", "operator:support"])
+    headers["X-Tenant-ID"] = str(uuid.uuid4())
+    transport = httpx.ASGITransport(app=_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(f"/api/v1/operator/{path}", headers=headers)
+        assert response.status_code == 403, response.text
+
+
+async def test_authorized_audit_reads_preserve_public_fields_and_page_metadata(monkeypatch):
+    from api.domain.operator.audit import operator_audit
+    from user_service.interfaces.api import operator_routes
+
+    monkeypatch.setattr(operator_routes, "_db", lambda: None)
+    headers = _headers(["operator:console", "operator:support"])
+    operator_audit().clear()
+    try:
+        row = operator_audit().append(
+            tenant_id=uuid.UUID(headers["X-Tenant-ID"]), actor="operator-1", action="role",
+            target_kind="user", target_id=str(uuid.uuid4()), reason="reviewed",
+        )
+        transport = httpx.ASGITransport(app=_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/operator/audit?limit=1&offset=0", headers=headers)
+            assert response.status_code == 200, response.text
+            assert response.json() == {"items": [row.public()], "limit": 1, "offset": 0}
+    finally:
+        operator_audit().clear()

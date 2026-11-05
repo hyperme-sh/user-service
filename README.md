@@ -197,3 +197,23 @@ The native HTTP regression suite covers stale tokens, account and tenant
 deactivation, removed bindings, same-tenant horizontal writes, cross-tenant
 targets, legitimate self edits, and current administrators. Source adoption and
 deployed runtime adoption are separate; this change does not deploy the service.
+
+## Operator console reads
+
+Database-backed directory pages read active user bans from tenant-scoped durable
+records for that page. Process-local entries cannot hide a committed ban or
+restore a lifted one. Group/device bans do not become user bans.
+
+`GET /api/v1/operator/audit` reads durable tenant history whenever a session is
+available. It preserves the existing public row fields and requires both console
+and support authority. Results are newest first, ordered by creation timestamp
+then UUID descending, with `limit` defaulting to 50 (maximum 200) and `offset`
+defaulting to zero. Transient local diagnostics are not merged into durable
+history. Reads never commit the caller's transaction or promote local-only rows
+to the database.
+
+Without a session, isolated test applications retain tenant-scoped, paginated
+in-memory audit history and empty directory responses. Database errors do not
+switch a session-backed read to local state. Native tests exercise committed
+ban/lift/role history across independent sessions, rollback visibility,
+timestamp ties, tenant isolation and HTTP authorization/pagination boundaries.
