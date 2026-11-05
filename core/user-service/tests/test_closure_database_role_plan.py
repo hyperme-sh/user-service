@@ -92,6 +92,11 @@ async def test_private_role_plan_closes_real_profile_without_source_dml(jobs, jo
             assert row.state == "deleted" and row.financial_deleted_at is not None, (row.last_error, row.effects)
             assert user.keycloak_sub is None and user.deleted_at is not None
             assert user.email != f"{subject}@example.invalid"
+            if test_retention:
+                assert row.effects["test_financial_erasure"] == {
+                    "complete": True, "roots_complete": True, "remaining": 0,
+                    "deleted": 1, "tables": {"payer_mismatch_accounts": 1},
+                }
         if test_retention:
             async with native.transaction() as session:
                 assert await session.scalar(text("SELECT count(*) FROM payer_mismatch_accounts WHERE account_key=:key"), {"key": hashlib.sha256(subject.encode()).hexdigest()}) == 0

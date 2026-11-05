@@ -127,6 +127,16 @@ async def test_worker_deletes_recent_unsettled_test_finances_but_preserves_produ
             assert remaining == risk == (0 if test_data else 1)
             assert (row.state == "deleted") is test_data
             assert (row.financial_deleted_at is not None) is test_data
+            if test_data:
+                assert row.effects["test_financial_erasure"] == {
+                    "complete": True,
+                    "roots_complete": True,
+                    "remaining": 0,
+                    "deleted": 2,
+                    "tables": {"billing_records": 1, "payer_mismatch_accounts": 1},
+                }
+            else:
+                assert "test_financial_erasure" not in row.effects
             assert (
                 row.financial_hold is True
             )  # TEST ignores the fence; it does not forge its release.

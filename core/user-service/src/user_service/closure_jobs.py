@@ -501,6 +501,18 @@ class ClosureJobs:
                 text("SELECT public.account_lock_financial_inventory(:s,:at,NULL)"), values
             )
             row = await self.owned(session, work)
+            test_erasure = None
+            if "test_financial_erasure" in row.effects:
+                from user_service.test_retention import (
+                    completed_test_receipt,
+                    database_test_data,
+                )
+
+                if not await database_test_data(session):
+                    raise ValueError("Private TEST completion authority unavailable")
+                test_erasure = completed_test_receipt(
+                    row.effects["test_financial_erasure"]
+                )
             # Flush renewal before native completion clears the claim. An ORM
             # commit must not restore its pre-completion claim_until snapshot.
             await session.flush()
@@ -515,6 +527,11 @@ class ClosureJobs:
                     or type(receipt["remaining"]) is not int or receipt["remaining"] < 0
                     or receipt["complete"] != (receipt["remaining"] == 0)):
                 raise ValueError("Native financial completion proof unavailable")
+            if receipt["complete"] and test_erasure is not None:
+                # The native owner compacts identity-bearing effects. Restore
+                # only validated aggregate counts after refreshing its cleared
+                # claim, atomically with completion in this same transaction.
+                row.effects = {**row.effects, "test_financial_erasure": test_erasure}
             return copy.deepcopy(receipt)
 
     async def test_data_enabled(self):
