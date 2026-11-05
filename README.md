@@ -107,19 +107,22 @@ for its PostgreSQL checks; the full service retains its existing qualified
 private dependency closure while downstream core/auth coordination proceeds.
 This staged package alignment is not complete fleet dependency qualification.
 
-### Prepared dependency adoption
+### Prepared owner artifacts
 
-The preparation branch aligns all ten active private dependencies to 0.24 and
-prepares both owning packages as 0.24.1. Auth is pinned to the exact unmerged
-preparation commit; its wheel is verified against successful PR CI and the Actions
-artifact digest. Other fixtures come from existing immutable qualification
-artifacts. No additional release is published.
+The preparation branch retains the current private dependency pins and prepares
+both owning packages as 0.24.1. Exact clean Git checkouts supply the dependency
+fixtures; their manifest records source revisions and wheel digests. These are
+locally built fixtures qualified by PR consumers, not published 0.24 baselines.
+The older synchronized foundation artifacts lack account-closure interfaces used
+by this service, so adopting them would regress its current functionality.
+Dependency alignment must first preserve those interfaces in the foundation owners
+(see [dependency qualification](https://github.com/hyperme-sh/user-service/issues/32)).
 
 `bash scripts/check-package.sh --fixtures` runs source, installed-wheel and
 rebuilt-sdist native consumers without private Git credentials. The complete
 active graph is verified against root metadata, lock entries and transitive wheel
 metadata. Optional private extras are not selected by this service; the verifier
 rejects explicit extras rather than silently dropping them. The PR lane retains
-qualified owner artifacts only. The non-root image build with this new dependency
-graph and deployed/provider acceptance remain separate. Keep preparation PRs ready
-and unmerged where merging would trigger publication.
+qualified owner artifacts only. Non-root image qualification and deployed/provider
+acceptance remain separate. Keep preparation PRs ready and unmerged where merging
+would trigger publication.

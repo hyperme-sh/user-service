@@ -19,7 +19,7 @@ def root(tmp_path):
     return tmp_path
 
 
-def test_real_published_fixtures_match_pins(root):
+def test_exact_source_fixtures_match_pins(root):
     assert module.verify(root)
 
 
