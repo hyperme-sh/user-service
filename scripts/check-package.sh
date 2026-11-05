@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-unset PYTHONPATH UV_NO_SYNC SKIP_TESTCONTAINERS
+unset PYTHONPATH UV_NO_SYNC SKIP_TESTCONTAINERS DEPENDENCY_FIXTURE_MANIFEST
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 sync_options=()
@@ -13,6 +13,7 @@ case "${1:-}" in
   --fixtures)
     fixture_paths=$(python3 core/user-service/scripts/verify_dependency_fixtures.py "$PWD/core/user-service")
     mapfile -t fixture_wheels <<< "$fixture_paths"
+    export DEPENDENCY_FIXTURE_MANIFEST="$PWD/core/user-service/tests_artifacts/dependencies/manifest.json"
     run_options=(--no-sync)
     sync_options+=(--no-install-package controlplane-api)
     export_options+=(--no-emit-package controlplane-api)
