@@ -21,10 +21,9 @@ Tests create a unique database, apply platform migrations, validate explicit
 scope and RLS, then drop that database. Checks run from source, an external wheel
 and a rebuilt sdist; wheel bytes must match source. No deployed database is used.
 
-The shared-runner main-only workflow validates this contract. Actions remains disabled
-until DEPENDENCY_READ_TOKEN has contents:read on hyperme-sh/controlplane-db and
-shared-runner qualification is configured. It uses pinned actions, a disposable PostgreSQL
-service, read-only contents and a repository-specific Git authentication header.
+The enabled shared-runner main-only workflow validates this contract with scoped
+read access to hyperme-sh/controlplane-db, pinned actions, a disposable PostgreSQL
+service and read-only contents.
 
 ## Standalone service development
 
@@ -52,8 +51,7 @@ bash scripts/check-container.sh
 The build uses a BuildKit secret, installs the frozen production graph, and
 runs as uid 65532. Container checks create and remove a unique migrated database,
 then exercise real health/version/authentication HTTP behavior. They do not
-apply migrations at application startup or deploy a service. The existing
-operator-contract release channel remains separate from service qualification.
+apply migrations at application startup or deploy a service. Publication requires successful full-service and contract qualification.
 
 The standalone workflow uses the existing main-only shared-runner lane and
 requires read access to all pinned private runtime/test repositories. It does
@@ -63,7 +61,8 @@ plane delivery and shared/Hypermesh consumer adoption remain distinct gates.
 
 ## Release channels
 
-Successful main-push validation retains the validated Python wheel and source distribution for the extracted contract only and publishes
+Successful full-service main-push validation retains both owner wheels and source
+distributions, plus a deterministic archive binding both wheels, and publishes
 an immutable `test-<commit>` GitHub prerelease. Push a `vMAJOR.MINOR.PATCH`
 tag at that tested commit to promote the exact files to a stable release,
 without rebuilding. Repository visibility applies to all package assets.
@@ -83,3 +82,22 @@ in `core/user-service`. See [the adoption gates](docs/closure-adoption.md).
 The follow-up adopts owner dependencies and standalone service validation.
 See the adoption document for exact revisions, validation results, and remaining
 consumer/deployment gates. All closure flags remain default-off.
+
+### Published owner artifacts
+
+Test-channel publication follows successful `Standalone service` main validation.
+That job validates the full service and operator-ban library in source, wheel and
+rebuilt-sdist contexts, then qualifies the standalone container before retaining
+the exact tested wheels and source archives together. The publisher downloads
+those bytes without rebuilding. A contract-only run cannot publish a new owner
+release. Existing immutable releases retain their original scope and provenance.
+
+This artifact inventory does not establish deployed readiness or coordinated
+release acceptance; version alignment, accepted baselines and downstream consumer
+qualification are tracked separately.
+
+The `user_service-VERSION.owner.zip` archive contains exactly the full-service
+and operator-ban wheels at the same version. `scripts/owner_artifact.py` verifies
+both wheel identities and complete runtime inventories without importing code.
+The archive digest binds both distributions; its exported runtime contract does
+not yet establish installer/dependency metadata compatibility.

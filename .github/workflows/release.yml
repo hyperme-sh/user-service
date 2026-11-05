@@ -1,7 +1,7 @@
 name: Package release channels
 on:
   workflow_run:
-    workflows: ["Operator ban contract"]
+    workflows: ["Standalone service"]
     types: [completed]
     branches: [main]
   push:
@@ -38,5 +38,5 @@ jobs:
       - name: Publish or promote exact tested artifacts
         uses: hyperme-sh/.github/actions/release-channel@45b5987d7000ab44bddc4e5ec3a0ff7674d3b137
         with:
-          workflow: .github/workflows/contract.yml
+          workflow: .github/workflows/service.yml
           token: ${{ github.token }}
