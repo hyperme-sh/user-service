@@ -106,3 +106,19 @@ Both owning distributions now use 0.24.0. The contract consumes database 0.24
 for its PostgreSQL checks; the full service retains its existing qualified
 private dependency closure while downstream core/auth coordination proceeds.
 This staged package alignment is not complete fleet dependency qualification.
+
+## Test qualification and stable acceptance
+
+GitHub `test-<commit>` prereleases are development snapshots. Their embedded
+package version does not reserve a stable version. Artifact and consumer evidence
+lives under `releases/qualification`; the current wheel binding is still checked
+by package CI, alongside any future explicit stable candidate. Earlier test
+snapshot receipts are preserved there with an explicit non-stable classification.
+
+`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
+actual immutable stable GitHub release. The pinned shared guard verifies the live
+release channel, stable tag source and asset digests; a test snapshot cannot
+become accepted through a provenance label. No stable baseline is recorded until
+that release exists. Stable publication remains closed without a valid baseline;
+first stable bootstrap and coordinated release qualification remain separate.
+No stable version, approval prerequisite or deployment is introduced here.
