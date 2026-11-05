@@ -470,8 +470,12 @@ async def soft_delete_user(request: Request, user_id: uuid.UUID, body: ReasonBod
         ok = await SqlUserRepository(session).soft_delete(_tenant(claims), user_id)
         if not ok:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-    if ban_book().active_row(_tenant(claims), "user", user_id) is not None:
-        pass
+    if session is not None:
+        from user_service.infrastructure.operator_store import active_ban
+
+        banned = await active_ban(session, _tenant(claims), "user", user_id) is not None
+    else:
+        banned = ban_book().active_row(_tenant(claims), "user", user_id) is not None
     audit = _audit(
         claims,
         action="soft_delete",
@@ -483,7 +487,7 @@ async def soft_delete_user(request: Request, user_id: uuid.UUID, body: ReasonBod
     return {
         "user_id": str(user_id),
         "deleted_at": deleted_at,
-        "banned": ban_book().active_row(_tenant(claims), "user", user_id) is not None,
+        "banned": banned,
     }
 
 

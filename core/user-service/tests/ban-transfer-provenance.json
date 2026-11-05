@@ -1,0 +1,11 @@
+{
+  "repository": "FyberLabs/panopticon",
+  "commit": "2cd00fd9a7ebb950999571a81be7cb0a24d9264e",
+  "source": "core/user-service/tests/test_operator_ban_persistence.py",
+  "source_sha256": "f34861fcd5c07618c535cb5551e78a8f34c8aea67985388d004de524ae4cc6ab",
+  "transferred_tests": [
+    "test_concurrent_lifts_have_one_committed_winner",
+    "test_directory_and_soft_delete_use_durable_bans"
+  ],
+  "adaptation": "Reuse owning-service disposable migrated PostgreSQL fixture; transferred function bodies unchanged."
+}
