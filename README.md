@@ -167,3 +167,13 @@ rejects this path. Candidate metadata identifies built artifacts; it does not
 establish an accepted baseline or publish anything. The exact-pinned publisher
 independently validates tested bytes and serializes any later explicit first
 stable publication. Test snapshots remain qualification evidence only.
+
+## Coordinated closure dependencies
+
+The service now follows merged auth `774f64af` and core `dd5833c8`, with
+matching API, identity, tenancy, database, events and operator-ban pins. Exact
+source wheel fixtures bind that complete graph and are consumer-test inputs,
+not stable release evidence. The operator-ban test dependency uses the same
+DB revision. This addresses the missing-closure-API blocker in #32 without
+reverting to older foundations or changing the packaged runtime contract.
+Plane consumer and non-root image qualification remain separate checks.

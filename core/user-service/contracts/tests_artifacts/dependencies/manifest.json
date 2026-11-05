@@ -3,14 +3,16 @@
   "dependencies": [
     {
       "distribution": "controlplane-db",
-      "version": "0.24.0",
-      "dependency_revision": "6ee52fe3e775548956cada649715fdde80f6cd1d",
-      "artifact_revision": "6ee52fe3e775548956cada649715fdde80f6cd1d",
-      "wheel": "controlplane_db-0.24.0-py3-none-any.whl",
-      "sha256": "f9944d506da43dbc0da1d0142226096c37c1073d97b726ae05a770ab8d64f4c8",
-      "source_url": "https://github.com/hyperme-sh/controlplane-db/releases/download/test-6ee52fe3e775548956cada649715fdde80f6cd1d/controlplane_db-0.24.0-py3-none-any.whl",
+      "version": "1.0.0",
+      "dependency_revision": "482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea",
+      "artifact_revision": "482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea",
+      "wheel": "controlplane_db-1.0.0-py3-none-any.whl",
+      "sha256": "914292d7efefa4c0d8fddfde7dcad16b2167be4fbb61d78524bda37aa94c00e0",
+      "source_url": "https://github.com/hyperme-sh/controlplane-db/tree/482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea",
       "run_id": 41940733018,
-      "artifact_id": 13374864982
+      "artifact_id": 13374864982,
+      "delivery": "local_build_from_exact_clean_git_revision",
+      "qualification": "Exact-revision consumer fixture; not a published or accepted stable baseline"
     }
   ]
 }

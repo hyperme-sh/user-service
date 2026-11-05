@@ -13,7 +13,7 @@ dependencies = ["sqlalchemy>=2.0.43"]
 packages = ["src/operator_ban_store"]
 
 [dependency-groups]
-dev = ["pytest>=8.4.0", "pytest-asyncio>=1.2.0", "asyncpg>=0.30.0", "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@6ee52fe3e775548956cada649715fdde80f6cd1d"]
+dev = ["pytest>=8.4.0", "pytest-asyncio>=1.2.0", "asyncpg>=0.30.0", "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/tests", "/scripts", "/pyproject.toml", "/uv.lock", "/README.md"]
