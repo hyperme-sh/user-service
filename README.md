@@ -83,3 +83,16 @@ in `core/user-service`. See [the adoption gates](docs/closure-adoption.md).
 The follow-up adopts owner dependencies and standalone service validation.
 See the adoption document for exact revisions, validation results, and remaining
 consumer/deployment gates. All closure flags remain default-off.
+
+### Published owner artifacts
+
+Test-channel publication follows successful `Standalone service` main validation.
+That job validates the full service and operator-ban library in source, wheel and
+rebuilt-sdist contexts, then qualifies the standalone container before retaining
+the exact tested wheels and source archives together. The publisher downloads
+those bytes without rebuilding. A contract-only run cannot publish a new owner
+release. Existing immutable releases retain their original scope and provenance.
+
+This artifact inventory does not establish deployed readiness or coordinated
+release acceptance; version alignment, accepted baselines and downstream consumer
+qualification are tracked separately.
