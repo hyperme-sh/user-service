@@ -57,15 +57,22 @@ Anonymous calls to `/api/v1/users` are rejected. Optional `USER_SERVICE_CORS_ORI
 
 Build the image from the repository root. The runtime user is uid 65532 and the command is `python -m user_service.main`. Public dependencies need no GitHub token. A private fork can pass a short-lived read token as the BuildKit secret `dependency_read_token`; that secret is not copied into a layer.
 
+The container has its own loopback interface. `DATABASE_URL` and `KEYCLOAK_JWKS_URL` are opened from inside the container, so they use an address that routes to the host, such as `host.docker.internal` with `--add-host host.docker.internal:host-gateway`. `KEYCLOAK_ISSUER` is the access token `iss` value. When Keycloak minted tokens as `http://127.0.0.1:8081/realms/controlplane`, keep that issuer string while `KEYCLOAK_JWKS_URL` uses `host.docker.internal`. `HOST=0.0.0.0` lets the published port 8000 reach the process. Postgres and Keycloak must listen on the host ports those names reach.
+
 ```sh
 docker build -f core/user-service/Dockerfile -t user-service:local .
 docker run --rm -p 8000:8000 \
-  -e DATABASE_URL \
-  -e KEYCLOAK_ISSUER \
-  -e KEYCLOAK_JWKS_URL \
+  --add-host host.docker.internal:host-gateway \
+  -e HOST=0.0.0.0 \
+  -e PORT=8000 \
+  -e DATABASE_URL='postgresql+asyncpg://controlplane:controlplane@host.docker.internal:5432/controlplane' \
+  -e KEYCLOAK_ISSUER='http://127.0.0.1:8081/realms/controlplane' \
+  -e KEYCLOAK_JWKS_URL='http://host.docker.internal:8081/realms/controlplane/protocol/openid-connect/certs' \
   -e SERVICE_NAME=user-service \
   user-service:local
 ```
+
+On Linux, `--network host` puts the container in the host network namespace, so the `127.0.0.1` database and JWKS URLs from the checkout example reach those servers. In that mode the process binds `PORT` on the host directly.
 
 Install the ban contract on its own. Its only runtime dependency is SQLAlchemy `>=2.0.43`.
 
@@ -80,14 +87,14 @@ banned = await active_ban(session, tenant_id, users=[user_id], groups=[group_id]
 # subject_banned_sync(connection, tenant_id, "user", user_id)
 ```
 
-Operator password reset is two processes. The public route `POST /api/v1/operator/mail/password-reset` needs console and support authority, an active user in the current tenant, a bound Keycloak subject, and a matching email. It returns `sent`, `kind`, `user_id`, and `detail`. It does not return a token or an action URL. The public process holds only `PASSWORD_RESET_AUTHORITY_URL`, `PASSWORD_RESET_OPERATIONS_TOKEN` (32–512 ASCII characters), and an optional `PASSWORD_RESET_AUTHORITY_CA`. Run the private app separately:
+Operator password reset is two processes. The public route `POST /api/v1/operator/mail/password-reset` needs console and support authority, an active user in the current tenant, a bound Keycloak subject, and a matching email. It returns `sent`, `kind`, `user_id`, and `detail`. It does not return a token or an action URL. The public process sets `PASSWORD_RESET_AUTHORITY_URL`, `PASSWORD_RESET_OPERATIONS_TOKEN`, and an optional `PASSWORD_RESET_AUTHORITY_CA`. The private authority sets the same `PASSWORD_RESET_OPERATIONS_TOKEN`. The public client sends that variable as `X-Password-Reset-Token`. The private app reads `PASSWORD_RESET_OPERATIONS_TOKEN` in `operations_secret()` at startup and on each request; a missing variable raises `PasswordResetUnavailable` before the app serves traffic. Run the private app separately:
 
 ```sh
 uv run --project core/user-service --frozen \
   python -m uvicorn user_service.password_reset_authority:create_app --factory --host 127.0.0.1 --port 8444
 ```
 
-That process needs `PASSWORD_RESET_DATABASE_URL` (`postgresql+asyncpg`, `SELECT` on `public.users` and `public.tenants` only), `PASSWORD_RESET_KEYCLOAK_URL`, `PASSWORD_RESET_KEYCLOAK_REALM`, `PASSWORD_RESET_KEYCLOAK_CLIENT_ID=operator-password-reset`, and `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET`. Keycloak sends an `UPDATE_PASSWORD` action with a 600-second lifespan. The public app rejects startup if those private variables are set in its environment.
+That process needs `PASSWORD_RESET_OPERATIONS_TOKEN`, `PASSWORD_RESET_DATABASE_URL` (`postgresql+asyncpg`, `SELECT` on `public.users` and `public.tenants` only), `PASSWORD_RESET_KEYCLOAK_URL`, `PASSWORD_RESET_KEYCLOAK_REALM`, `PASSWORD_RESET_KEYCLOAK_CLIENT_ID=operator-password-reset`, and `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET`. Keycloak sends an `UPDATE_PASSWORD` action with a 600-second lifespan. The public app rejects startup if `PASSWORD_RESET_DATABASE_URL` or `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET` is set in its environment.
 
 The closure worker is off unless both `ACCOUNT_CLOSURE_WORKER_ENABLED=true` and `ACCOUNT_CLOSURE_ENFORCEMENT_ENABLED=true`. It uses `ACCOUNT_CLOSURE_WORKER_DATABASE_URL`, not the public `DATABASE_URL`.
 
