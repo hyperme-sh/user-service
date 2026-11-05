@@ -63,7 +63,7 @@ def qualify(image, admin, service_url, database):
             digest = subprocess.check_output(['docker','image','inspect',image,'--format','{{.Id}}'],text=True).strip()
             private_url = service_url.set(drivername='postgresql+asyncpg', username=role, password=password,
                 host='host.docker.internal' if service_url.host in ('localhost','127.0.0.1') else service_url.host)
-            environment = {**os.environ,
+            fixture_environment = {
                 'ACCOUNT_CLOSURE_IMAGE': 'ghcr.io/hyperme-sh/user-service@' + digest,
                 'FASTAPI_ENV':'test', 'ACCOUNT_CLOSURE_ENFORCEMENT_ENABLED':'true',
                 'ACCOUNT_CLOSURE_AUTHORITY_ENABLED':'true', 'ACCOUNT_CLOSURE_WORKER_ENABLED':'false',
@@ -76,7 +76,10 @@ def qualify(image, admin, service_url, database):
                 'KEYCLOAK_ISSUER':'http://127.0.0.1:1/realms/owned-fixture',
                 'ACCOUNT_CLOSURE_TLS_CERT_FILE':'/fixture/cert.pem',
                 'ACCOUNT_CLOSURE_TLS_KEY_FILE':'/fixture/key.pem'}
-            names = [name for name in environment if name.startswith('ACCOUNT_CLOSURE_') or name in ('KEYCLOAK_ISSUER','FASTAPI_ENV')]
+            # Never forward ambient deployment credentials or owner URLs into
+            # the owned fixture, even if the caller has them configured.
+            environment = {**os.environ, **fixture_environment}
+            names = list(fixture_environment)
             probe = """
 import asyncio, httpx
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -144,7 +147,7 @@ except Exception as error:
             path='/api/v1/internal/account-lifecycle/check'
             assert call(path,body={'subject':subject}) == (200,{'blocked':False})
             with owned.connect() as connection:
-                connection.execute(text('INSERT INTO tenants(id,name,is_active) VALUES(:id,'owned TLS fixture',true)'),{'id':tenant})
+                connection.execute(text("INSERT INTO tenants(id,name,is_active) VALUES(:id,'owned TLS fixture',true)"),{'id':tenant})
                 connection.execute(text('INSERT INTO identity_retirements(subject,retired_at) VALUES(:s,now())'),{'s':subject})
             assert call(path,body={'subject':subject}) == (200,{'blocked':True})
             with owned.connect() as connection:
