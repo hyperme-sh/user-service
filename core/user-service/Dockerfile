@@ -22,6 +22,6 @@ COPY --from=build /build/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ARG GIT_SHA=
 ARG BUILT_AT=
-ENV GIT_SHA=${GIT_SHA} BUILT_AT=${BUILT_AT}
+ENV GIT_SHA=${GIT_SHA} BUILT_AT=${BUILT_AT} SERVICE_NAME=user-service
 USER 65532:65532
 CMD ["/app/.venv/bin/python", "-I", "-m", "user_service.main"]

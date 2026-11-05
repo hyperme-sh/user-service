@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 image = sys.argv[1]
+expected_sha = sys.argv[2]
 admin_url = make_url(os.environ['TEST_DATABASE_URL'])
 database = 'closure_container_' + uuid.uuid4().hex
 admin = create_engine(admin_url, isolation_level='AUTOCOMMIT')
@@ -47,7 +48,10 @@ try:
                 raise RuntimeError('Standalone HTTP container did not become healthy') from None
             time.sleep(.25)
     with urllib.request.urlopen(base + '/version', timeout=2) as response:
-        assert isinstance(json.load(response), dict)
+        version = json.load(response)
+        assert version['git_sha'] == expected_sha
+        assert version['service'] == 'user-service'
+        assert version['built_at'] != 'unknown'
     try:
         urllib.request.urlopen(base + '/api/v1/users', timeout=2)
     except urllib.error.HTTPError as error:
