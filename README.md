@@ -1,9 +1,18 @@
 # user-service
 
+## Current version authority
+
+Current development version: `0.1.0`. The services remain before the unreleased
+0.24.0 milestone. Earlier 0.24/1.0 preparation and publication notes below are
+historical and do not authorize those versions. Existing tags and historical
+artifacts remain untouched. Development uses exact source pins and rebuilt
+artifacts; no prior release is required. Version changes, tags and publication
+require the owner's explicit authorization to the agent.
+
 User and operator-account service implementation under `core/user-service`.
 The separately installable read-only operator ban contract is under
 `core/user-service/contracts`. Its public module is `operator_ban_store`, version
-0.24.0. It returns boolean predicates while preserving caller transactions and RLS.
+0.1.0. It returns boolean predicates while preserving caller transactions and RLS.
 
 ## Contract development
 
@@ -107,7 +116,7 @@ both wheel identities and complete runtime inventories without importing code.
 The archive digest binds both distributions; its exported runtime contract does
 not yet establish installer/dependency metadata compatibility.
 
-Both owning distributions now use 0.24.0. The contract consumes database 0.24
+Both owning distributions use 0.1.0. The contract consumes database 0.1.0
 for its PostgreSQL checks; the full service retains its existing qualified
 private dependency closure while downstream core/auth coordination proceeds.
 This staged package alignment is not complete fleet dependency qualification.
@@ -115,7 +124,7 @@ This staged package alignment is not complete fleet dependency qualification.
 ### Prepared owner artifacts
 
 The preparation branch retains the current private dependency pins and prepares
-both owning packages as 0.24.1. Exact clean Git checkouts supply the dependency
+both owning packages as 0.1.0. Exact clean Git checkouts supply the dependency
 fixtures; their manifest records source revisions and wheel digests. These are
 locally built fixtures qualified by PR consumers, not published 0.24 baselines.
 The older synchronized foundation artifacts lack account-closure interfaces used
