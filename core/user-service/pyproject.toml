@@ -27,7 +27,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "asgi-lifespan>=2.1.0", "pytest>=8.4.0", "pytest-asyncio>=1.2.0",
-    "respx>=0.22.0", "testcontainers>=4.9.0", "cryptography>=45.0.0",
+    "respx>=0.22.0", "testcontainers>=4.15.0", "cryptography>=45.0.0",
     "spanopticon-tests @ git+https://github.com/hyperme-sh/controlplane-tests.git@4b95bbd5847f19a757164f092a8ed1e5e43a7aca",
 ]
 

@@ -15,7 +15,7 @@ from auth_service.schemas import AuthMeResponse
 from spanopticon_tests.fixtures.postgres import (
     normalize_sync_sqlalchemy_url,
 )
-from testcontainers.postgres import PostgresContainer
+from testcontainers.community.postgres import PostgresContainer
 
 Seed = namedtuple("Seed", ["ta", "tb", "ra", "rb"])
 

@@ -13,7 +13,7 @@ from controlplane_db import migrations
 from spanopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
 from sqlalchemy import create_engine, text
 from test_closure_jobs import jobs as jobs  # noqa: PLC0414
-from testcontainers.postgres import PostgresContainer
+from testcontainers.community.postgres import PostgresContainer
 from user_service.closure_erasure import PersonalErasure
 from user_service.closure_jobs import ClosureClaimLost
 from user_service.closure_worker import ClosureWorker
