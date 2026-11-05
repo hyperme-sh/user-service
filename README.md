@@ -177,3 +177,23 @@ retention checks; it records only a completed receipt and retries unavailable
 owners. Missing configuration means that owner has not been enabled and must
 block verification rollout acceptance. Verification also uses the existing
 read-only lifecycle check on each request and before delivery.
+
+## User mutation authority
+
+User creation and deletion require a current, active tenant administrator bound
+to the authenticated identity-provider subject. A cached administrator token
+claim cannot replace a removed role, disabled account, or inactive tenant. The
+existing portal invitation controls continue to apply.
+
+Profile updates require the same current administrator authority or an active
+subject binding to the target user's own account. Email claims and local user
+IDs alone do not establish self. Ordinary users may update their own first and
+last names. Replacing any SociACL document requires current administrator
+authority, including self updates: the document contains verification assurance
+and internal policy notes, and partial replacements could erase those fields.
+All mutations retain token/header tenant matching and tenant-scoped targets.
+
+The native HTTP regression suite covers stale tokens, account and tenant
+deactivation, removed bindings, same-tenant horizontal writes, cross-tenant
+targets, legitimate self edits, and current administrators. Source adoption and
+deployed runtime adoption are separate; this change does not deploy the service.

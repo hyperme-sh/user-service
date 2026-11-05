@@ -38,7 +38,7 @@
       "user_service/interfaces/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "user_service/interfaces/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "user_service/interfaces/api/operator_routes.py": "5946169d1d89cdae45a3b3ce1952102b3286ad9a8758bc3b1f1db26c5f2485d9",
-      "user_service/interfaces/api/routes.py": "e2bde484795adb0ef0ed0bfcaa83554b7efd0c0f1bf02fb6bc99d3cae7fb6cea",
+      "user_service/interfaces/api/routes.py": "7e016f5d44d4f4df0f66b9b646d9efb78816c75b14ea8b3d455397bf4e2b8b30",
       "user_service/lifecycle_policy.py": "87e7af3443b1b008fdf809d162e37b5ebd7c2d85660cc16271631bf227c63701",
       "user_service/lifecycle_read.py": "3395e4c24d58ff475a3664552448a3d88ea866ae5312261b6224ddef4fdeaaf6",
       "user_service/main.py": "5f8fb045bc487b3e6426c0d6ade9cd2ceecf2440f58849c554e4fdf85d988c0b",
