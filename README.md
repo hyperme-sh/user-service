@@ -49,9 +49,13 @@ PostgreSQL and Keycloak containers. Missing native prerequisites fail validation
 bash scripts/check-package.sh
 ```
 
-For container qualification, provide `DEPENDENCY_READ_TOKEN_FILE` as a protected,
-short-lived read-only GitHub credential file and `TEST_DATABASE_URL` pointing to
-an owned disposable PostgreSQL server with database creation privileges:
+Public container builds need no GitHub credential. Run package qualification
+first (the fixture mode needs no private Git access) to prepare the local container
+check tooling; the container script reuses that validated environment. For container qualification,
+provide `TEST_DATABASE_URL` pointing to an owned disposable PostgreSQL server
+with database creation privileges. Private forks may additionally provide
+`DEPENDENCY_READ_TOKEN_FILE` as a protected, short-lived read-only GitHub
+credential file; the optional BuildKit secret is never copied into a layer:
 
 ```sh
 bash scripts/check-container.sh
