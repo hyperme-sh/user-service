@@ -147,7 +147,7 @@ this change. Public application CRUD grants remain owned by its deployment.
 `compose.account-closure.yaml` is an explicit opt-in overlay with an
 `account-closure` profile. It is not included by the default VM wrapper. It
 prepares separate authority and polling containers using the same reviewed
-`ghcr.io/fyberlabs/user-service@sha256:...` image. The runtime entrypoint rejects
+`ghcr.io/hyperme-sh/user-service@sha256:...` image. The runtime entrypoint rejects
 a tag or a missing digest. Both containers run as UID/GID 65532 with a read-only
 filesystem, no capabilities, no privilege escalation and bounded memory/PIDs.
 They publish no host port. The authority waits for healthy PostgreSQL and

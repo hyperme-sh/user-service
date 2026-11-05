@@ -1,0 +1,50 @@
+{
+  "coverage": "complete packaged runtime of both owner distributions; installer metadata compatibility is separate",
+  "packaged_file_sha256": {
+    "operator-ban-store": {
+      "operator_ban_store/__init__.py": "5e13de07380f8354a56ee3a708e82541005b1278c62957267e37da898b4b937d"
+    },
+    "user-service": {
+      "user_service/__init__.py": "b45cfa1e4a8db4b4788c6a7d80299bbcd8e292731a602187420993f2e2f8cea8",
+      "user_service/account_closure.py": "f79bfa09ecfc7058d1ea1add1eb155780ea74bb3e7697f33787f037648226bf9",
+      "user_service/app.py": "6311d9c030ae36814ddda336470ca5566affb769059659482c8afa7039e20b89",
+      "user_service/closure_actions.py": "edf52214e917349bea926827c2ca91264cc4357a4c60444a77951a92e71503ce",
+      "user_service/closure_authority.py": "23ec7f17522f954dd72b55ca73439fcc81762fd8d0bd8133e2fc8365182b01b8",
+      "user_service/closure_authorization.py": "0824d463889500a2adbf7ec2993ae5c1394a4991dd9f983e70099054d8a99081",
+      "user_service/closure_clients.py": "b9fc2bc945b457b6738eec84787eedcd0f21e9006c6fec269ebbdfd443bb6b16",
+      "user_service/closure_daemon.py": "8ce8730a40bc70713a83214da96370475a0dadfbb2718ba24eeaf51276bd7fe1",
+      "user_service/closure_directory.py": "68dd794197ae28ba78eb95e592a4fe26f69375e8d34b572fe6a37184dc00f707",
+      "user_service/closure_erasure.py": "02a5bdfa09956a5759cb884751c6abfdede722112588a2ee40ce8b701634789a",
+      "user_service/closure_health.py": "ac557553406c61157603533ee76ec567344c1694029c52fcc731425e16339cd9",
+      "user_service/closure_idp.py": "f4a621178a54777182c3c48d0358ed254b969dab1eed8e083c939936838eee95",
+      "user_service/closure_inventory.py": "1e9cf47318680b7817685e8367be0f1236821b1dbc68090dad84e2a10d0bc79a",
+      "user_service/closure_jobs.py": "7b805f7e9075c923b5c601c28f775f8f9020c6cdf5f59370060f34e227683e9e",
+      "user_service/closure_processor.py": "d0749e714e182daa594bba818728d5df62070c96b916ff94e0af42da94a5363b",
+      "user_service/closure_proxy.py": "7b10273084dd24ffcef7ceb6c69125950727c440fa326d6419cf18bd8d44015c",
+      "user_service/closure_public_database.py": "3c26be78565ad2e4d466ba24db53aa37636f20cfbab9f8fe1142a0ccce6f6fe6",
+      "user_service/closure_runtime.py": "dbf8b84a5d07f36b80e825f073177402db60d29fee769b57d9f9f84f66cb41a6",
+      "user_service/closure_transport.py": "0c9127cdf50e0720700fa20d5e74ea1b2ec7ffd1feb24a9450fec4b82a617aeb",
+      "user_service/closure_worker.py": "68edff63a45f0ddd8f7223fc44a1173f5ce2448a93b2b6a5346a6e3c6ecd66eb",
+      "user_service/deps.py": "0c71caec80758825b3c2e855a4edd0ba85d51622fcd8b2387bfe56162dcbd01d",
+      "user_service/domain/__init__.py": "58b34f561a9da79a1d72dcf9179f672eb55cd12838687f6c21a7ace9c48be388",
+      "user_service/domain/dtos.py": "5c58ee197bc223aee600d4a1a6649171e3781a95de41de7c039c6cf460390e6d",
+      "user_service/domain/ports.py": "efd2ca428770b52c232edb6c193dbe7790f647e79c90a0c7729a8d1ae3f3c35c",
+      "user_service/idp_links.py": "a5d3e0fc69c298fab751c1c4a553dd3064875ad33c3077614044d7d8fac7f9fc",
+      "user_service/infrastructure/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "user_service/infrastructure/operator_store.py": "b9c0ee6a2c6e8d377071ae270f106d8dc066671a3bc093365caaae120a5ae840",
+      "user_service/infrastructure/payment_succeeded_consumer.py": "e72bacbf9cc2cac2d8193311ca2b440c4b51f8d91f309d75415375ebbaada796",
+      "user_service/infrastructure/persistence/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "user_service/infrastructure/persistence/repos.py": "e56f461985743e1f48f07acda1fd0b7811da212d50d0c69bcd9cec5d058677e1",
+      "user_service/interfaces/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "user_service/interfaces/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "user_service/interfaces/api/operator_routes.py": "5946169d1d89cdae45a3b3ce1952102b3286ad9a8758bc3b1f1db26c5f2485d9",
+      "user_service/interfaces/api/routes.py": "e2bde484795adb0ef0ed0bfcaa83554b7efd0c0f1bf02fb6bc99d3cae7fb6cea",
+      "user_service/lifecycle_policy.py": "87e7af3443b1b008fdf809d162e37b5ebd7c2d85660cc16271631bf227c63701",
+      "user_service/lifecycle_read.py": "3395e4c24d58ff475a3664552448a3d88ea866ae5312261b6224ddef4fdeaaf6",
+      "user_service/main.py": "5f8fb045bc487b3e6426c0d6ade9cd2ceecf2440f58849c554e4fdf85d988c0b",
+      "user_service/middleware.py": "192cc62a7274eb00f52310124a24cf3785bd899a72d5353c7632af9fabc5a4aa",
+      "user_service/models.py": "a7bcba35e2a5ee1fd28944709daef4fc868c01c8c532104c195d033a23bd219d"
+    }
+  },
+  "schema_version": 1
+}

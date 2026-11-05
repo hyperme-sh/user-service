@@ -42,7 +42,7 @@ def certificates(tmp_path, monkeypatch):
     monkeypatch.setenv("ACCOUNT_CLOSURE_TLS_CERT_FILE", str(cert_path))
     monkeypatch.setenv("ACCOUNT_CLOSURE_TLS_KEY_FILE", str(key_path))
     monkeypatch.setenv("ACCOUNT_CLOSURE_AUTHORITY_CA_FILE", str(cert_path))
-    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/fyberlabs/user-service@sha256:" + "a" * 64)
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/hyperme-sh/user-service@sha256:" + "a" * 64)
     return cert_path, key_path
 
 
@@ -115,7 +115,7 @@ def test_invalid_tls_or_image_cannot_start_listener(certificates, monkeypatch, f
     elif failure == "invalid_cert":
         cert.write_text("invalid")
     else:
-        monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/fyberlabs/user-service:test")
+        monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/hyperme-sh/user-service:test")
     with pytest.raises(WorkerUnavailable):
         closure_runtime.authority_config()
 
@@ -150,3 +150,11 @@ async def test_private_startup_failure_is_sanitized(monkeypatch):
     with pytest.raises(WorkerUnavailable, match="Account closure worker unavailable"):
         async with LifespanManager(closure_authority.create_app()):
             pytest.fail("unavailable authority started")
+
+
+@pytest.mark.parametrize("image", ["ghcr.io/fyberlabs/user-service@sha256:" + "a" * 64,
+    "ghcr.io/hyperme-sh/user-service:test", "ghcr.io/hyperme-sh/other@sha256:" + "a" * 64])
+def test_private_runtime_refuses_unqualified_owner_images(monkeypatch, image):
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", image)
+    with pytest.raises(WorkerUnavailable):
+        closure_runtime.check_image()

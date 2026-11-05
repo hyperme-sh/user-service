@@ -50,8 +50,16 @@ bash scripts/check-container.sh
 
 The build uses a BuildKit secret, installs the frozen production graph, and
 runs as uid 65532. Container checks create and remove a unique migrated database,
-then exercise real health/version/authentication HTTP behavior. They do not
-apply migrations at application startup or deploy a service. Publication requires successful full-service and contract qualification.
+then exercise real health/version/authentication HTTP behavior. The same image
+also starts the private authority with a generated short-lived TLS certificate
+and a unique database role produced by the owner's least-privilege role plan.
+Authenticated readiness, reader/writer separation, committed retirement reads,
+incomplete-inventory denial and untrusted-certificate rejection are exercised
+over HTTPS. Only explicit fixture configuration enters that container. This
+does not qualify a deployed issuer, owner mutation, scheduler or registry manifest;
+the image reference uses the local image digest for this owned fixture only.
+The checks do not apply migrations at application startup or deploy a service.
+Publication requires successful full-service and contract qualification.
 
 The standalone workflow uses the existing main-only shared-runner lane and
 requires read access to all pinned private runtime/test repositories. It does
@@ -61,19 +69,16 @@ plane delivery and shared/Hypermesh consumer adoption remain distinct gates.
 
 ## Release channels
 
-Successful full-service main-push validation retains both owner wheels and source
-distributions, plus a deterministic archive binding both wheels, and publishes
-an immutable `test-<commit>` GitHub prerelease. Push a `vMAJOR.MINOR.PATCH`
-tag at that tested commit to promote the exact files to a stable release,
-without rebuilding. Repository visibility applies to all package assets.
-Package metadata versions are preserved; these are GitHub distribution snapshots,
-not automatic PyPI publication or service deployment.
+Main validation retains its exact qualified files in Actions artifacts. It does
+not create GitHub releases or tags. Historical `test-<commit>` prereleases remain
+qualification evidence and do not establish an accepted stable release.
 
-Promotion requires the original Actions artifact (90-day requested retention;
-organization policy may shorten it). Expired evidence fails closed: validate a
-new main revision. The publisher verifies the run, source, workflow and artifact
-digest independently of release metadata. Repository immutable releases must be
-enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
+Stable publication requires an explicit `vMAJOR.MINOR.PATCH` tag, the exact
+successful main validation artifact, compatible declared contracts and an actual
+immutable stable baseline. The publisher independently verifies that evidence;
+successful caller jobs alone cannot establish acceptance. Missing evidence and
+first-stable bootstrap remain closed. Package qualification, coordinated consumer
+acceptance and runtime deployment remain separate.
 
 ## Private closure adoption
 
@@ -106,6 +111,62 @@ Both owning distributions now use 0.24.0. The contract consumes database 0.24
 for its PostgreSQL checks; the full service retains its existing qualified
 private dependency closure while downstream core/auth coordination proceeds.
 This staged package alignment is not complete fleet dependency qualification.
+
+### Prepared owner artifacts
+
+The preparation branch retains the current private dependency pins and prepares
+both owning packages as 0.24.1. Exact clean Git checkouts supply the dependency
+fixtures; their manifest records source revisions and wheel digests. These are
+locally built fixtures qualified by PR consumers, not published 0.24 baselines.
+The older synchronized foundation artifacts lack account-closure interfaces used
+by this service, so adopting them would regress its current functionality.
+Dependency alignment must first preserve those interfaces in the foundation owners
+(see [dependency qualification](https://github.com/hyperme-sh/user-service/issues/32)).
+
+`bash scripts/check-package.sh --fixtures` runs source, installed-wheel and
+rebuilt-sdist native consumers without private Git credentials. The complete
+active graph is verified against root metadata, lock entries and transitive wheel
+metadata. Optional private extras are not selected by this service; the verifier
+rejects explicit extras rather than silently dropping them. The PR lane retains
+qualified owner artifacts only. Non-root image qualification and deployed/provider
+acceptance remain separate. Keep preparation PRs ready and unmerged where merging
+would trigger publication.
+
+## Test qualification and stable acceptance
+
+GitHub `test-<commit>` prereleases are development snapshots. Their embedded
+package version does not reserve a stable version. Artifact and consumer evidence
+lives under `releases/qualification`; the current wheel binding is still checked
+by package CI, alongside any future explicit stable candidate. Earlier test
+snapshot receipts are preserved there with an explicit non-stable classification.
+
+`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
+actual immutable stable GitHub release. The pinned shared guard verifies the live
+release channel, stable tag source and asset digests; a test snapshot cannot
+become accepted through a provenance label. No stable baseline is recorded until
+that release exists. Stable publication remains closed without a valid baseline;
+first stable bootstrap and coordinated release qualification remain separate.
+No stable version, approval prerequisite or deployment is introduced here.
+
+### Actions qualification and stable publication
+
+Main merges and workflow completion do not publish GitHub test releases. Exact
+qualification files remain in Actions artifacts with finite retention. The pinned
+publisher independently verifies a real immutable stable baseline and refuses
+qualification snapshots, even if a caller job reports success. Existing valid
+stable records are retained; no release, version change, deployment or human
+approval prerequisite is introduced by this correction.
+
+
+### Initial stable declaration
+
+When there is no accepted stable release, the pinned admission workflow checks
+this repository's complete live release inventory and the exact owning package
+versions against `releases/candidate`. A stable release or incomplete inventory
+rejects this path. Candidate metadata identifies built artifacts; it does not
+establish an accepted baseline or publish anything. The exact-pinned publisher
+independently validates tested bytes and serializes any later explicit first
+stable publication. Test snapshots remain qualification evidence only.
 
 ## Verification erasure owner
 

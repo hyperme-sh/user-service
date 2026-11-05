@@ -17,7 +17,7 @@ from user_service.closure_worker import WorkerUnavailable
 
 
 def check_image():
-    if not re.fullmatch(r"ghcr\.io/fyberlabs/user-service@sha256:[0-9a-f]{64}",
+    if not re.fullmatch(r"ghcr\.io/hyperme-sh/user-service@sha256:[0-9a-f]{64}",
                         os.environ.get("ACCOUNT_CLOSURE_IMAGE", "")):
         raise WorkerUnavailable()
 
