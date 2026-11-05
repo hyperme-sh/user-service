@@ -22,7 +22,27 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
+    environment: controlplane-libs-read
     steps:
+      - name: Mint repository-scoped dependency token
+        id: dependency-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
+          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
+          owner: hyperme-sh
+          permission-contents: read
+          repositories: |
+            auth-service
+            controlplane-api
+            controlplane-core
+            controlplane-db
+            controlplane-events
+            controlplane-identity
+            controlplane-models
+            controlplane-tenancy
+            controlplane-tests
+            user-service
       - name: Prepare exact owner artifact output
         run: |
           output=$(mktemp -d "$RUNNER_TEMP/user-service-dist.XXXXXX")
@@ -37,7 +57,7 @@ jobs:
           python-version: '3.13'
       - name: Validate installed service and standalone container
         env:
-          DEPENDENCY_READ_TOKEN: ${{ secrets.DEPENDENCY_READ_TOKEN }}
+          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
           TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
         shell: bash
         run: |
