@@ -1,9 +1,10 @@
-# Private closure source adoption (draft)
+# Private closure adoption
 
-This source port prepares the user-service implementation needed for source PR
+The source port in merged PR #16 prepares the user-service implementation needed for source PR
 #720, including its private authority, native lifecycle reader, worker and
-prerequisite user-owned closure implementation. It does not complete component
-integration and must not merge or activate before the dependency gates below.
+prerequisite user-owned closure implementation. Its source-harness evidence did not establish standalone installation. The
+follow-up below addresses dependency and packaging gates; activation remains
+separate.
 
 ## Provenance
 
@@ -20,10 +21,10 @@ integration and must not merge or activate before the dependency gates below.
   discriminator and existing durable operator-ban fixes. No old namespace is
   accepted as a compatibility authentication credential.
 
-## Merge blockers and owner handoffs
+## Historical source-port blockers and owner handoffs
 
-The component currently has no standalone service lock or resolved dependency
-closure. Existing operator-contract pins validate only that contract. This draft
+At the PR #16 source-port gate, the component had no standalone service lock or
+resolved dependency closure. Existing operator-contract pins validate only that contract. This draft
 keeps that contract and its exact pins unchanged; it does not invent service pins
 or treat workspace placeholders as installable dependencies.
 
@@ -87,3 +88,76 @@ closes and the client can process the next call. Retirement-only subjects now
 prevent a denial snapshot from claiming completeness until their original
 inventory is reconciled; no empty lifecycle root is manufactured. Both regression
 cases failed before correction and pass afterward in the owner harness.
+
+## Standalone dependency adoption follow-up
+
+PR #16 merged at `51a3fd0913cf6b894ccffc277f41bc499d09e1d4` before this
+follow-up. Historical blockers above describe that port, not completion of this
+new gate. The existing service project now uses installable immutable dependencies rather
+than workspace placeholders; the operator-contract project is unchanged.
+
+| Dependency | Exact revision | Adoption PR |
+| --- | --- | --- |
+| controlplane-db | `a14a4a35b5dbb45b7b9050ad35fcc65b4ef8fc79` | [#11](https://github.com/hyperme-sh/controlplane-db/pull/11) |
+| controlplane-identity | `fbdeb1c11f17fa192b7505355c64d1f0af1234dc` | [#9](https://github.com/hyperme-sh/controlplane-identity/pull/9) |
+| controlplane-tenancy | `9528e2e58463c44fd0affa58089d6fb1215da605` | [#11](https://github.com/hyperme-sh/controlplane-tenancy/pull/11) |
+| controlplane-api | `6bef00ce7fc630df5523dcd254f85d40d13d135e` | [#12](https://github.com/hyperme-sh/controlplane-api/pull/12) |
+| controlplane-core | `3aa01d738c3a20d0da37506a2b44d186a8496500` | [#12](https://github.com/hyperme-sh/controlplane-core/pull/12) |
+| auth-service | `4766edb227942d8a481a9b5b4d3c1af9f079fb58` | [#16](https://github.com/hyperme-sh/auth-service/pull/16) |
+
+The database owner preserves both existing platform histories and joins them at
+`platform_0079_closure_merge`. Neither the source checkpoint/closure branch nor
+the destination share-lookup hardening revision was rewritten. Fresh installs
+and upgrades from both previous platform heads pass all native migration tests;
+existing frozen baselines and previously common revision bytes remain intact.
+Payment and Hypermesh producer chains use the same adopted database resource
+package, without importing a product checkout or changing producer deployment.
+
+The identity async review fixes preserve offline context across worker threads
+and provide explicit async tenant/host-setup session decoders. Auth bridges its
+async consumers and applies retirement checks to introspection. Tenancy uses a
+consistent SQL email normalization for credential ownership, ambiguity detection
+and deletion, including Unicode whitespace. These changes retain caller-owned
+transactions and explicit tenant scopes.
+
+Standalone qualification runs the full 344-case native suite from Python 3.13
+source, an external installed wheel, and a rebuilt sdist. Container checks use
+the frozen production graph and a unique migrated disposable database. Final
+results are recorded in PR #20 and the documentation roadmap; every native case
+must pass without skips before readiness is claimed. Local source-harness
+results above do not count as installed-component qualification. Existing CI runs on the main-only lane;
+local results are separate from hosted CI. No GitHub approval requirements,
+release channels, live grants, provider identities or deployment flags change.
+
+Issue #5 can close after external wheel/import validation passes. Issue #3
+remains open for shared/Hypermesh consumer integration, and #14 remains open
+for coordinated private runtime acceptance. TEST policy #13 remains a separate
+activation blocker. None of these gates is closed by file presence alone.
+
+Standalone checks exposed one additional source prerequisite: core subscription
+audits must use the persisted creator after the database retirement fence, not
+the original request field. Core #12 includes that correction, with an owner
+regression and the real user-service erasure/payment-consumer case.
+
+Merge the owner adoption PRs in dependency order: database and identity, then
+tenancy and API, core, auth, and this service follow-up. The existing release version-source paths and reusable policy pin are preserved. These are advisory
+reviewed code changes; no human approval prerequisite is configured.
+
+The standalone CI job retains the existing main-only runner boundary. A green
+PR release-configuration check is configuration evidence; it is not a substitute
+for the local native package checks or a claim that hosted standalone CI ran.
+
+Security re-review showed that a general version-source move exception could
+redirect admission to a decoy manifest. The service instead retains its
+original metadata path and corrects the standalone wheel configuration there.
+The proposed exception in Spanopticon #8 is withdrawn; no release-policy
+relaxation is needed.
+
+Merged database main subsequently adopted lab/enforcement resources. The
+follow-up rebases onto that owner revision and preserves all 64 current-main
+resources plus the 50 imported source resources byte-for-byte. A second no-DDL
+merge, hypermesh_0087_closure_lab_merge, joins the lab and closure branches.
+Database checks cover fresh installs, both earlier platform heads and both
+earlier Hypermesh heads, including retained lab receipts, RLS and private worker
+preflight. The refreshed owner graph is used consistently by tenancy/core/auth
+and this service.

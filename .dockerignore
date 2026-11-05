@@ -1,0 +1,11 @@
+*
+!scripts/
+!scripts/private-git-credential.py
+!core/
+!core/user-service/
+!core/user-service/pyproject.toml
+!core/user-service/uv.lock
+!core/user-service/src/
+!core/user-service/src/**
+**/__pycache__
+**/*.pyc
