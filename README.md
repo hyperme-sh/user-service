@@ -168,6 +168,12 @@ establish an accepted baseline or publish anything. The exact-pinned publisher
 independently validates tested bytes and serializes any later explicit first
 stable publication. Test snapshots remain qualification evidence only.
 
+## Contract database qualification
+
+The operator-ban contract test dependency follows the same closure-capable DB
+revision as the service graph recorded in `docs/closure-owner-graph.json`.
+Exact-source test fixtures are consumer evidence, not stable release acceptance.
+
 ## Verification erasure owner
 
 When verification is enabled, configure `ACCOUNT_CLOSURE_VERIFICATION_ENABLED=true`, `ACCOUNT_CLOSURE_VERIFICATION_URL` and

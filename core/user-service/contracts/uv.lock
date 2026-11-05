@@ -80,8 +80,8 @@ wheels = [
 
 [[package]]
 name = "controlplane-db"
-version = "0.24.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-db.git?rev=6ee52fe3e775548956cada649715fdde80f6cd1d#6ee52fe3e775548956cada649715fdde80f6cd1d" }
+version = "1.0.0"
+source = { git = "https://github.com/hyperme-sh/controlplane-db.git?rev=482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea#482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -288,7 +288,7 @@ requires-dist = [{ name = "sqlalchemy", specifier = ">=2.0.43" }]
 [package.metadata.requires-dev]
 dev = [
     { name = "asyncpg", specifier = ">=0.30.0" },
-    { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=6ee52fe3e775548956cada649715fdde80f6cd1d" },
+    { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea" },
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
 ]
