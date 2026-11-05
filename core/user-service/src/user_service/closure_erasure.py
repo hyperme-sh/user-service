@@ -23,6 +23,14 @@ class PersonalErasure:
             await self.jobs.release(work, error="owner_unavailable")
             return None
         failed = False
+        from user_service.verification_erasure import erase_verification
+        if work.effects.get("verification_erasure", {}).get("complete") is not True:
+            try:
+                receipt = await erase_verification(work.subject)
+                if receipt.get("complete") is True:
+                    work = await self.jobs.effect(work, "verification_erasure", receipt)
+            except OwnerUnavailable:
+                failed = True
         try:
             await self.jobs.purge_profile(work)
         except (ValueError, DBAPIError):

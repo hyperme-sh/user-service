@@ -167,3 +167,13 @@ rejects this path. Candidate metadata identifies built artifacts; it does not
 establish an accepted baseline or publish anything. The exact-pinned publisher
 independently validates tested bytes and serializes any later explicit first
 stable publication. Test snapshots remain qualification evidence only.
+
+## Verification erasure owner
+
+When verification is enabled, configure `ACCOUNT_CLOSURE_VERIFICATION_ENABLED=true`, `ACCOUNT_CLOSURE_VERIFICATION_URL` and
+`ACCOUNT_CLOSURE_VERIFICATION_TOKEN` (the owner's dedicated admin credential).
+Personal erasure calls the private owner endpoint after the existing closure and
+retention checks; it records only a completed receipt and retries unavailable
+owners. Missing configuration means that owner has not been enabled and must
+block verification rollout acceptance. Verification also uses the existing
+read-only lifecycle check on each request and before delivery.
