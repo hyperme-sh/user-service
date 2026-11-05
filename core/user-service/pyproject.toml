@@ -35,12 +35,12 @@ dev = [
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["core/user-service/src/user_service"]
+packages = ["src/user_service"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/core/user-service/src", "/core/user-service/tests", "/core/user-service/scripts", "/scripts", "/pyproject.toml", "/uv.lock", "/README.md", "/docs", "/integration"]
+include = ["/src", "/tests", "/scripts", "/pyproject.toml", "/uv.lock"]
 
 [tool.pytest.ini_options]
-testpaths = ["core/user-service/tests"]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

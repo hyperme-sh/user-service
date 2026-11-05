@@ -19,4 +19,4 @@ assert not enforcement_enabled()
 assert not any(name in os.environ for name in ("DEPENDENCY_READ_TOKEN", "ACCOUNT_CLOSURE_WORKER_ENABLED"))
 assert os.geteuid() == 65532
 '
-uv run --frozen python scripts/check-container.py "$image"
+uv run --project core/user-service --frozen python scripts/check-container.py "$image"

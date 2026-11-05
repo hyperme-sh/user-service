@@ -93,7 +93,7 @@ cases failed before correction and pass afterward in the owner harness.
 
 PR #16 merged at `51a3fd0913cf6b894ccffc277f41bc499d09e1d4` before this
 follow-up. Historical blockers above describe that port, not completion of this
-new gate. The root project now uses installable immutable dependencies rather
+new gate. The existing service project now uses installable immutable dependencies rather
 than workspace placeholders; the operator-contract project is unchanged.
 
 | Dependency | Exact revision | Adoption PR |
@@ -140,10 +140,15 @@ the original request field. Core #12 includes that correction, with an owner
 regression and the real user-service erasure/payment-consumer case.
 
 Merge the owner adoption PRs in dependency order: database and identity, then
-tenancy and API, core, auth, and this service follow-up. Spanopticon #8 supplies
-the release-configuration fix used by the service workflow. These are advisory
+tenancy and API, core, auth, and this service follow-up. The existing release version-source paths and reusable policy pin are preserved. These are advisory
 reviewed code changes; no human approval prerequisite is configured.
 
 The standalone CI job retains the existing main-only runner boundary. A green
 PR release-configuration check is configuration evidence; it is not a substitute
 for the local native package checks or a claim that hosted standalone CI ran.
+
+Security re-review showed that a general version-source move exception could
+redirect admission to a decoy manifest. The service instead retains its
+original metadata path and corrects the standalone wheel configuration there.
+The proposed exception in Spanopticon #8 is withdrawn; no release-policy
+relaxation is needed.

@@ -4,21 +4,21 @@ cd "$(dirname "$0")/.."
 unset PYTHONPATH UV_NO_SYNC SKIP_TESTCONTAINERS
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-uv lock --check
-uv sync --frozen --python 3.13
+uv lock --project core/user-service --check
+uv sync --project core/user-service --frozen --python 3.13
 # Do not accept an unavailable Docker daemon as successful native qualification.
 docker info >/dev/null
-uv run --frozen pytest --junitxml="$scratch/source.xml"
-uv build --out-dir "$scratch/dist"
+uv run --project core/user-service --frozen pytest core/user-service/tests --junitxml="$scratch/source.xml"
+uv build core/user-service --out-dir "$scratch/dist"
 python3 scripts/verify_wheel.py "$scratch/dist"
-uv export --frozen --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
+uv export --project core/user-service --frozen --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
 uv pip install --python "$scratch/venv/bin/python" --no-deps "$scratch"/dist/*.whl
 mkdir -p "$scratch/owner"
 cp -R core/user-service/tests core/user-service/scripts "$scratch/owner/"
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/wheel.xml" owner/tests)
-uv run --frozen python - "$scratch" <<'PY'
+uv run --project core/user-service --frozen python - "$scratch" <<'PY'
 import pathlib, sys, tarfile
 root = pathlib.Path(sys.argv[1])
 with tarfile.open(next((root / 'dist').glob('*.tar.gz'))) as archive:

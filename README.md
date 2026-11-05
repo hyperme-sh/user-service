@@ -28,9 +28,9 @@ service, read-only contents and a repository-specific Git authentication header.
 
 ## Standalone service development
 
-The repository root builds `user-service`; `core/user-service/contracts` remains
+`core/user-service` builds `user-service`; `core/user-service/contracts` remains
 an independently packaged operator-ban contract. Runtime dependencies use exact
-private Git revisions in standard metadata and `uv.lock`. The service wheel
+private Git revisions in its standard metadata and `uv.lock`. The service wheel
 installs `user_service` directly, without workspace paths or `PYTHONPATH`.
 
 Use Python 3.13+, uv 0.11.26, Docker and existing read access to the listed private
