@@ -41,8 +41,9 @@ esac
 if (( $# > 1 )); then echo 'Unexpected arguments' >&2; exit 2; fi
 uv sync --project core/user-service --frozen --python 3.13 "${sync_options[@]}"
 if (( ${#fixture_wheels[@]} )); then
-  uv pip install --python core/user-service/.venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
+  uv pip install --no-config --python core/user-service/.venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
 fi
+core/user-service/.venv/bin/python core/user-service/scripts/verify_preparation_environment.py "$PWD/core/user-service"
 # Do not accept an unavailable Docker daemon as successful native qualification.
 docker info >/dev/null
 uv run --project core/user-service --frozen "${run_options[@]}" pytest core/user-service/tests --junitxml="$scratch/source.xml"
@@ -52,7 +53,7 @@ python3 scripts/verify_wheel.py "$scratch/dist"
 uv export --project core/user-service --frozen "${export_options[@]}" --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
-uv pip install --python "$scratch/venv/bin/python" --no-deps "${fixture_wheels[@]}" "$scratch"/dist/*.whl
+uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps "${fixture_wheels[@]}" "$scratch"/dist/*.whl
 mkdir -p "$scratch/owner"
 cp -R core/user-service/tests core/user-service/scripts "$scratch/owner/"
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/wheel.xml" owner/tests)
@@ -64,7 +65,7 @@ with tarfile.open(next((root / 'dist').glob('*.tar.gz'))) as archive:
 PY
 uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 python3 scripts/verify_wheel.py "$scratch/rebuilt"
-uv pip install --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
+uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/sdist.xml" owner/tests)
 python3 - "$scratch" <<'PY'
 import pathlib, sys, xml.etree.ElementTree as ET
