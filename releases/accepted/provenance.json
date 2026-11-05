@@ -1,24 +1,27 @@
 {
   "repository": "hyperme-sh/user-service",
-  "revision": "cb9f9b10a596339742c812235524309880bfece6",
-  "release_id": 434675950,
+  "revision": "344d8c14cffcdffe5d07b9fa29da33837092a3c7",
+  "release_id": 434682488,
   "immutable": true,
-  "tag": "test-cb9f9b10a596339742c812235524309880bfece6",
-  "run_id": 41950844714,
-  "artifact_id": 13380579098,
+  "tag": "test-344d8c14cffcdffe5d07b9fa29da33837092a3c7",
+  "run_id": 41951969168,
+  "artifact_id": 13382045687,
   "assets": {
-    "operator_ban_store-0.1.0-py3-none-any.whl": "sha256:f02a682f0ddd6591cc58ef8e23d32ef9c80e83772d5d144ee0fcd6f06d0d2928",
-    "operator_ban_store-0.1.0.tar.gz": "sha256:69fde7ef0e1d09c5fe41d3bc9c16cf4990c731bf1c6e8f50014ea44b4fcdea90",
-    "user_service-0.1.0-py3-none-any.whl": "sha256:914f61f43279cc050ed68a5982efe03af65da3588a14ee5447cb955661cfff70",
-    "user_service-0.1.0.owner.zip": "sha256:a20b330498d437228074822b554c8177ce93aa07e6ea1e81a5a4f17e3eae5c16",
-    "user_service-0.1.0.tar.gz": "sha256:03874b80d19c313243c68d7cb276bdffb85664ddaff32319b27809faff4a6eb5"
+    "operator_ban_store-0.24.0-py3-none-any.whl": "sha256:b26fc97ffd31af5ce2d54173147829e27e3e8821a84d8cfe00f1cca512cbae44",
+    "operator_ban_store-0.24.0.tar.gz": "sha256:090f650716bbfb1de14c34dad17240ff3a5c2870a9853e9b41d2d4d3fad4f885",
+    "user_service-0.24.0-py3-none-any.whl": "sha256:ade312db368d101c37b18c8c60d3b08eb3574c0b7a2e7ca4841412f5f4b2d2d3",
+    "user_service-0.24.0.owner.zip": "sha256:d1c8d3184320318b2c95bf48eb475f8cbca9605845cc2a13a715be22ba68a799",
+    "user_service-0.24.0.tar.gz": "sha256:2a784b5cac6765e2d48eaf1f943dfe4ded19d8fb4e83c3f1386b434c36e75a7b"
   },
-  "published_release_url": "https://github.com/hyperme-sh/user-service/releases/tag/test-cb9f9b10a596339742c812235524309880bfece6",
+  "published_release_url": "https://github.com/hyperme-sh/user-service/releases/tag/test-344d8c14cffcdffe5d07b9fa29da33837092a3c7",
   "checks": [
     "successful same-repository main-push package run",
     "live Actions artifact digest",
     "release bytes equal tested bytes",
     "immutable release and tag revision",
     "asset digests equal manifest"
-  ]
+  ],
+  "consumer_qualification": "344 full-service consumers pass in source, wheel and rebuilt-sdist contexts, five operator-ban consumers per context, 9 dependency fixture tests, 16 owner/candidate tests and non-root HTTP container checks. Actual downloaded service wheel passes all 344 with no skips.",
+  "alignment_status": "Staged owner 0.24 artifact baseline; full-service private dependency closure still uses older core/auth/foundation pins and is not complete fleet alignment.",
+  "limitations": "No deployed closure/provider acceptance or installer metadata compatibility completion."
 }

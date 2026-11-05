@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "line": "0.1",
+  "line": "0.24",
   "components": {
     "user-service": {
-      "version": "0.1.0",
+      "version": "0.24.0",
       "contract": "contract.json",
       "contract_sha256": "18b6b33dae22ceb13a7bb3268ca6534228dd96aa1a4129fd11d711735eb5f481",
       "artifact": {
         "kind": "package",
-        "uri": "urn:sha256:a20b330498d437228074822b554c8177ce93aa07e6ea1e81a5a4f17e3eae5c16",
-        "sha256": "a20b330498d437228074822b554c8177ce93aa07e6ea1e81a5a4f17e3eae5c16"
+        "uri": "urn:sha256:d1c8d3184320318b2c95bf48eb475f8cbca9605845cc2a13a715be22ba68a799",
+        "sha256": "d1c8d3184320318b2c95bf48eb475f8cbca9605845cc2a13a715be22ba68a799"
       }
     }
   }
