@@ -168,15 +168,12 @@ establish an accepted baseline or publish anything. The exact-pinned publisher
 independently validates tested bytes and serializes any later explicit first
 stable publication. Test snapshots remain qualification evidence only.
 
-## Coordinated closure dependencies
+## Contract database qualification
 
-The service now follows merged auth `774f64af` and core `dd5833c8`, with
-matching API, identity, tenancy, database, events and operator-ban pins. Exact
-source wheel fixtures bind that complete graph and are consumer-test inputs,
-not stable release evidence. The operator-ban test dependency uses the same
-DB revision. This addresses the missing-closure-API blocker in #32 without
-reverting to older foundations or changing the packaged runtime contract.
-Plane consumer and non-root image qualification remain separate checks.
+The operator-ban contract test dependency follows the same closure-capable DB
+revision as the service graph recorded in `docs/closure-owner-graph.json`.
+Exact-source test fixtures are consumer evidence, not stable release acceptance.
+
 ## Verification erasure owner
 
 When verification is enabled, configure `ACCOUNT_CLOSURE_VERIFICATION_ENABLED=true`, `ACCOUNT_CLOSURE_VERIFICATION_URL` and

@@ -211,8 +211,8 @@ wheels = [
 
 [[package]]
 name = "auth-service"
-version = "0.2.0"
-source = { git = "https://github.com/hyperme-sh/auth-service.git?rev=774f64afe1a3790b0efb47b3bdd08ef5c50bca70#774f64afe1a3790b0efb47b3bdd08ef5c50bca70" }
+version = "0.24.0"
+source = { git = "https://github.com/hyperme-sh/auth-service.git?rev=718bb53af7bf5ff3e3e0bba55d78b6a354809f9e#718bb53af7bf5ff3e3e0bba55d78b6a354809f9e" }
 dependencies = [
     { name = "bcrypt" },
     { name = "controlplane-api" },
@@ -3776,8 +3776,8 @@ wheels = [
 
 [[package]]
 name = "spanopticon-models"
-version = "0.2.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-models.git?rev=476185cea7a8b37130b10f2bc31505925e88b07c#476185cea7a8b37130b10f2bc31505925e88b07c" }
+version = "0.24.0"
+source = { git = "https://github.com/hyperme-sh/controlplane-models.git?rev=a9d39ec27b44f15442eaa7d78485bd84ec744dc2#a9d39ec27b44f15442eaa7d78485bd84ec744dc2" }
 dependencies = [
     { name = "pydantic", extra = ["email"] },
     { name = "solana" },
@@ -3785,8 +3785,8 @@ dependencies = [
 
 [[package]]
 name = "spanopticon-tests"
-version = "0.2.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-tests.git?rev=9201d61f03b6cef77dc46da211eb6cd0c3789aa3#9201d61f03b6cef77dc46da211eb6cd0c3789aa3" }
+version = "0.24.0"
+source = { git = "https://github.com/hyperme-sh/controlplane-tests.git?rev=4b95bbd5847f19a757164f092a8ed1e5e43a7aca#4b95bbd5847f19a757164f092a8ed1e5e43a7aca" }
 dependencies = [
     { name = "alembic" },
     { name = "psycopg", extra = ["binary"] },
@@ -4155,7 +4155,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "auth-service", git = "https://github.com/hyperme-sh/auth-service.git?rev=774f64afe1a3790b0efb47b3bdd08ef5c50bca70" },
+    { name = "auth-service", git = "https://github.com/hyperme-sh/auth-service.git?rev=718bb53af7bf5ff3e3e0bba55d78b6a354809f9e" },
     { name = "controlplane-api", git = "https://github.com/hyperme-sh/controlplane-api.git?rev=ba971e08bcbf6ec45ec8e6f0ae26220378aa7cdb" },
     { name = "controlplane-core", git = "https://github.com/hyperme-sh/controlplane-core.git?rev=dd5833c8ebc65bed48fe14968b7f7b5f43418fcb" },
     { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea" },
@@ -4166,7 +4166,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
-    { name = "spanopticon-models", git = "https://github.com/hyperme-sh/controlplane-models.git?rev=476185cea7a8b37130b10f2bc31505925e88b07c" },
+    { name = "spanopticon-models", git = "https://github.com/hyperme-sh/controlplane-models.git?rev=a9d39ec27b44f15442eaa7d78485bd84ec744dc2" },
     { name = "sqlalchemy", specifier = ">=2.0.43" },
     { name = "starlette", specifier = ">=0.48.0" },
     { name = "uvicorn", specifier = ">=0.37.0" },
@@ -4179,7 +4179,7 @@ dev = [
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "respx", specifier = ">=0.22.0" },
-    { name = "spanopticon-tests", git = "https://github.com/hyperme-sh/controlplane-tests.git?rev=9201d61f03b6cef77dc46da211eb6cd0c3789aa3" },
+    { name = "spanopticon-tests", git = "https://github.com/hyperme-sh/controlplane-tests.git?rev=4b95bbd5847f19a757164f092a8ed1e5e43a7aca" },
     { name = "testcontainers", specifier = ">=4.9.0" },
 ]
 

@@ -1,5 +1,45 @@
 # Private closure adoption
 
+## Final standalone owner graph
+
+The remaining #3/#14 integration adopts the reviewed closure-aware owner graph
+from merged auth/core and their exact transitive requirements. Older pin tables
+below are historical checkpoints. Package versions and release policy are
+preserved; this is component integration, not a stable release or activation.
+
+| Distribution | Version | Exact selected revision |
+| --- | --- | --- |
+| auth-service | 0.24.0 | `718bb53af7bf5ff3e3e0bba55d78b6a354809f9e` |
+| controlplane-api | 0.24.1 | `ba971e08bcbf6ec45ec8e6f0ae26220378aa7cdb` |
+| controlplane-core | 1.0.0 | `dd5833c8ebc65bed48fe14968b7f7b5f43418fcb` |
+| controlplane-db | 1.0.0 | `482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea` |
+| controlplane-events | 0.24.0 | `ae5aa86dc53b1a9e25ae4527fefeea6da6fb66ea` |
+| controlplane-identity | 1.0.0 | `797bb4303075e3e7fb54dd42a1451bfe3fd089fa` |
+| controlplane-tenancy | 1.0.0 | `26c6207cfa446e819992baaa0df53f3b694f6ced` |
+| operator-ban-store | 0.24.0 | `344d8c14cffcdffe5d07b9fa29da33837092a3c7` |
+| spanopticon-models | 0.24.0 | `a9d39ec27b44f15442eaa7d78485bd84ec744dc2` |
+| spanopticon-tests | 0.24.0 | `4b95bbd5847f19a757164f092a8ed1e5e43a7aca` |
+
+DB `482943cb` and tenancy `26c6207c` are the reviewed heads of merged owner
+PRs #11; their merge commits are `a167fe14` and `fc84f637`. API `ba971e08`
+and identity `797bb430` are merged owner commits. Core `dd5833c8` is merged
+owner #19, following closure adoption #12. Auth `718bb53a` retains merged
+retirement adoption #16 and its current 0.24 package metadata. Direct and
+transitive requirements select the same owner revisions without foreign uv
+overrides or monorepo path injection.
+
+Read-only PR fixtures are rebuilt from exact clean Git archives and retain
+source/archive and wheel hashes. They are explicitly local qualification inputs,
+not published releases or accepted stable baselines. The preparation lane now
+checks the actual owner bundle against both current qualification and any future
+stable candidate, matching main's enforced byte binding. Final source, installed
+wheel, rebuilt-sdist, HTTP/identity/portal/operator and container results must be
+recorded at the accepted integration head before closing the issues.
+
+All private authority/worker/enforcement examples remain default-off. TEST policy
+#13, production/provider cutover and umbrella account closure are separate gates.
+
+
 The source port in merged PR #16 prepares the user-service implementation needed for source PR
 #720, including its private authority, native lifecycle reader, worker and
 prerequisite user-owned closure implementation. Its source-harness evidence did not establish standalone installation. The

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "source_repository": "FyberLabs/panopticon",
+  "reviewed_source_revision": "7356887667b0f142bac7504223ebf9446e0f5411",
+  "source_merge_revision": "d6d9541b72db2eb3f86cb8aedc071794eba116e3",
+  "scope": "standalone component integration; activation, TEST policy and deployment remain separate",
+  "dependencies": [
+    {
+      "distribution": "auth-service",
+      "version": "0.24.0",
+      "revision": "718bb53af7bf5ff3e3e0bba55d78b6a354809f9e",
+      "wheel_sha256": "edd49a8293f271b08c39ebce657605b6adbdf4aec4981d818cc2f003f641b58b",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "controlplane-api",
+      "version": "0.24.1",
+      "revision": "ba971e08bcbf6ec45ec8e6f0ae26220378aa7cdb",
+      "wheel_sha256": "9ec5d27b8e27048b4fcfc9c2bae1c4e32f648fbb50632bdcf2df880938d7f103",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "controlplane-core",
+      "version": "1.0.0",
+      "revision": "dd5833c8ebc65bed48fe14968b7f7b5f43418fcb",
+      "wheel_sha256": "ce4c5cebb54e0ac07e6178b8a4650ee77a288ffae84450c02658d27620891c90",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "controlplane-db",
+      "version": "1.0.0",
+      "revision": "482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea",
+      "wheel_sha256": "914292d7efefa4c0d8fddfde7dcad16b2167be4fbb61d78524bda37aa94c00e0",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "controlplane-events",
+      "version": "0.24.0",
+      "revision": "ae5aa86dc53b1a9e25ae4527fefeea6da6fb66ea",
+      "wheel_sha256": "3956b4d78429e7158b053d9d0d4c425659e6f82a2b9ead8f1614bfae6d15939f",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "controlplane-identity",
+      "version": "1.0.0",
+      "revision": "797bb4303075e3e7fb54dd42a1451bfe3fd089fa",
+      "wheel_sha256": "8860adc609fc2429a08c3321e177d044560967e4673e84e4119531ffcf9b94dd",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "controlplane-tenancy",
+      "version": "1.0.0",
+      "revision": "26c6207cfa446e819992baaa0df53f3b694f6ced",
+      "wheel_sha256": "baf203d5c64eeac1dc07d11d3aad3570edf3287c1a175fa658a790e38a23e2a9",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "operator-ban-store",
+      "version": "0.24.0",
+      "revision": "344d8c14cffcdffe5d07b9fa29da33837092a3c7",
+      "wheel_sha256": "b26fc97ffd31af5ce2d54173147829e27e3e8821a84d8cfe00f1cca512cbae44",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "spanopticon-models",
+      "version": "0.24.0",
+      "revision": "a9d39ec27b44f15442eaa7d78485bd84ec744dc2",
+      "wheel_sha256": "92afd89a4be594799a744c08125e279ef22a7b6b62f40400c67bbb555fe4f25b",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    },
+    {
+      "distribution": "spanopticon-tests",
+      "version": "0.24.0",
+      "revision": "4b95bbd5847f19a757164f092a8ed1e5e43a7aca",
+      "wheel_sha256": "e98fcd352825bc4e96ab2cf689c4e945612311eeb72af6c97dfa9998ccb710ff",
+      "qualification": "local_build_from_exact_clean_git_revision"
+    }
+  ]
+}

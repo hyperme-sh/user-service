@@ -9,8 +9,6 @@
       "wheel": "controlplane_db-1.0.0-py3-none-any.whl",
       "sha256": "914292d7efefa4c0d8fddfde7dcad16b2167be4fbb61d78524bda37aa94c00e0",
       "source_url": "https://github.com/hyperme-sh/controlplane-db/tree/482943cbcd78ffd1a3d2ad4e1088ed7ed0cdeaea",
-      "run_id": 41940733018,
-      "artifact_id": 13374864982,
       "delivery": "local_build_from_exact_clean_git_revision",
       "qualification": "Exact-revision consumer fixture; not a published or accepted stable baseline"
     }
