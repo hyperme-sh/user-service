@@ -14,7 +14,7 @@
       "user_service/closure_clients.py": "b9fc2bc945b457b6738eec84787eedcd0f21e9006c6fec269ebbdfd443bb6b16",
       "user_service/closure_daemon.py": "8ce8730a40bc70713a83214da96370475a0dadfbb2718ba24eeaf51276bd7fe1",
       "user_service/closure_directory.py": "68dd794197ae28ba78eb95e592a4fe26f69375e8d34b572fe6a37184dc00f707",
-      "user_service/closure_erasure.py": "02a5bdfa09956a5759cb884751c6abfdede722112588a2ee40ce8b701634789a",
+      "user_service/closure_erasure.py": "aeaae2a43c5cdd0297ea70dae985d8ef59f959813f3633ccbc67873188610140",
       "user_service/closure_health.py": "ac557553406c61157603533ee76ec567344c1694029c52fcc731425e16339cd9",
       "user_service/closure_idp.py": "f4a621178a54777182c3c48d0358ed254b969dab1eed8e083c939936838eee95",
       "user_service/closure_inventory.py": "1e9cf47318680b7817685e8367be0f1236821b1dbc68090dad84e2a10d0bc79a",
@@ -43,7 +43,8 @@
       "user_service/lifecycle_read.py": "3395e4c24d58ff475a3664552448a3d88ea866ae5312261b6224ddef4fdeaaf6",
       "user_service/main.py": "5f8fb045bc487b3e6426c0d6ade9cd2ceecf2440f58849c554e4fdf85d988c0b",
       "user_service/middleware.py": "192cc62a7274eb00f52310124a24cf3785bd899a72d5353c7632af9fabc5a4aa",
-      "user_service/models.py": "a7bcba35e2a5ee1fd28944709daef4fc868c01c8c532104c195d033a23bd219d"
+      "user_service/models.py": "a7bcba35e2a5ee1fd28944709daef4fc868c01c8c532104c195d033a23bd219d",
+      "user_service/verification_erasure.py": "7bfa5f21147055e97abc6ac5e5e4efa9b547b41f2b0fdaed0fab550e67a6c3a2"
     }
   },
   "schema_version": 1
