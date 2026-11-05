@@ -83,3 +83,13 @@ in `core/user-service`. See [the adoption gates](docs/closure-adoption.md).
 The follow-up adopts owner dependencies and standalone service validation.
 See the adoption document for exact revisions, validation results, and remaining
 consumer/deployment gates. All closure flags remain default-off.
+
+## Verification erasure owner
+
+When verification is enabled, configure `ACCOUNT_CLOSURE_VERIFICATION_ENABLED=true`, `ACCOUNT_CLOSURE_VERIFICATION_URL` and
+`ACCOUNT_CLOSURE_VERIFICATION_TOKEN` (the owner's dedicated admin credential).
+Personal erasure calls the private owner endpoint after the existing closure and
+retention checks; it records only a completed receipt and retries unavailable
+owners. Missing configuration means that owner has not been enabled and must
+block verification rollout acceptance. Verification also uses the existing
+read-only lifecycle check on each request and before delivery.
