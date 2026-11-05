@@ -161,3 +161,51 @@ Database checks cover fresh installs, both earlier platform heads and both
 earlier Hypermesh heads, including retained lab receipts, RLS and private worker
 preflight. The refreshed owner graph is used consistently by tenancy/core/auth
 and this service.
+
+## Separated consumer and private runtime follow-up
+
+The six owner PRs above and service #20 have merged. Service #20's merge commit
+is `304c9f142c78ab9accfad4cb8115bd14286744f8`; consumer fixtures install that
+immutable service distribution, without monorepo source-path injection.
+
+- [Ticket #15](https://github.com/hyperme-sh/hypermesh-ticket/pull/15) aligns its
+  identity pin while preserving signed ticket vectors.
+- [Payment #21](https://github.com/hyperme-sh/payment-service/pull/21) adopts the
+  same dependency graph and the frozen native financial-authority lookup helper.
+  Native ownership remains authoritative after profile scrubbing; contact-only,
+  UUID-collision and ambiguous mappings cannot become financial authority. This
+  helper does not add deletion endpoints or change financial policy.
+- [Edge #24](https://github.com/hyperme-sh/controlplane-edge/pull/24) exercises
+  this installed service's forwarding router and preserves native bearer
+  authority only on the exact self/operator closure methods. Private paths stay
+  unavailable through the edge, including preflight. Failed retirement checks
+  cannot fall through to development JWT decoding.
+- The Hypermesh owner adopts the same graph without foreign workspace overrides,
+  purpose-bound owner inventory/closure, exact physical model-cleanup receipts,
+  and native PostgreSQL consumers of this service's committed bans and lifts.
+  Running leases and newer lab/enforcement state remain preserved; gateway
+  receiver adoption and provider acceptance remain separate.
+
+The separated private runtime now requires the canonical
+`ghcr.io/hyperme-sh/user-service@sha256:...` image namespace. Public and private
+configuration examples under `core/user-service/examples` ship in the source
+distribution with every activation flag false. Public configuration contains no
+writer credential, private database URL or worker Keycloak secret.
+
+`scripts/check-container.sh` now qualifies both installed applications. In an
+owned disposable database it applies the owner's SQL role plan to a unique
+private role, then starts the authority as uid 65532 with generated short-lived
+TLS material. Real HTTPS checks verify authenticated readiness, reader/writer
+separation, committed canonical retirement, incomplete-inventory refusal and
+untrusted-certificate rejection. Ambient owner configuration is not forwarded.
+Only the fixture enables enforcement/authority, and its issuer is an unreachable
+local test address. This is not live Keycloak, owner mutation, worker/scheduler,
+published registry-manifest or deployed acceptance. The local image config digest
+is fixture input only.
+
+Merge the reviewed ticket alignment before accepting the Hypermesh integration;
+payment, edge and service changes remain default-off code adoption. Record final
+component merges and main-only hosted validation separately from PR configuration
+checks. Issue #13 remains a TEST activation blocker; overall source #369 and
+deployment/cutover remain open. Source #720 is reviewed port provenance, not a
+claimed source merge.
