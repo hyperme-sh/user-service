@@ -133,7 +133,28 @@ async def require_live_role_admin(session, tenant_id, me):
     if not me.sub or await get_active_tenant_role_member(
         session, tenant_id, keycloak_sub=me.sub, role="admin"
     ) is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Active org admin role required to manage role assignments")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Active org admin role required")
+
+
+async def require_profile_editor(session, tenant_id, me, user_id, body):
+    # Only a durable IdP subject binding establishes self. Token email and a
+    # coincidentally matching local user ID must not confer write authority.
+    from controlplane_db.models import Tenant
+
+    actor = (
+        await SqlUserRepository(session).get_by_keycloak_sub(tenant_id, me.sub)
+        if me.sub else None
+    )
+    tenant = await session.get(Tenant, tenant_id)
+    self_edit = (
+        actor is not None and actor.is_active and actor.id == user_id
+        and tenant is not None and tenant.is_active
+    )
+    # SociACL is a replacement document, including assurance and internal notes.
+    # Even an apparent self-description could erase those trusted fields.
+    # Self service therefore permits names only; all SociACL writes need admin.
+    if not self_edit or "sociacl_attributes" in body.model_fields_set:
+        await require_live_role_admin(session, tenant_id, me)
 
 
 def _require_flag(controls: PortalControls, flag: str, detail: str) -> None:
@@ -154,6 +175,7 @@ async def create_user(
     session: AsyncSession = Depends(get_db_session),
 ):
     # Invite only. Enrollment does not self-join through this HTTP door.
+    await require_live_role_admin(session, tenant_id, me)
     controls = await actor_portal_controls(session, tenant_id, me)
     _require_flag(
         controls,
@@ -217,6 +239,7 @@ async def update_user(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    await require_profile_editor(session, tenant_id, me, user_id, body)
     repo = SqlUserRepository(session)
     u = await repo.update(tenant_id, user_id, body)
     if u is None:
@@ -235,6 +258,7 @@ async def delete_user(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    await require_live_role_admin(session, tenant_id, me)
     controls = await actor_portal_controls(session, tenant_id, me)
     _require_flag(
         controls,
