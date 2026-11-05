@@ -106,3 +106,20 @@ Both owning distributions now use 0.24.0. The contract consumes database 0.24
 for its PostgreSQL checks; the full service retains its existing qualified
 private dependency closure while downstream core/auth coordination proceeds.
 This staged package alignment is not complete fleet dependency qualification.
+
+### Prepared dependency adoption
+
+The preparation branch aligns all ten active private dependencies to 0.24 and
+prepares both owning packages as 0.24.1. Auth is pinned to the exact unmerged
+preparation commit; its wheel is verified against successful PR CI and the Actions
+artifact digest. Other fixtures come from existing immutable qualification
+artifacts. No additional release is published.
+
+`bash scripts/check-package.sh --fixtures` runs source, installed-wheel and
+rebuilt-sdist native consumers without private Git credentials. The complete
+active graph is verified against root metadata, lock entries and transitive wheel
+metadata. Optional private extras are not selected by this service; the verifier
+rejects explicit extras rather than silently dropping them. The PR lane retains
+qualified owner artifacts only. The non-root image build with this new dependency
+graph and deployed/provider acceptance remain separate. Keep preparation PRs ready
+and unmerged where merging would trigger publication.
