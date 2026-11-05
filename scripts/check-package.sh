@@ -67,12 +67,12 @@ uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 python3 scripts/verify_wheel.py "$scratch/rebuilt"
 uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/sdist.xml" owner/tests)
-python3 - "$scratch" <<'PY'
-import pathlib, sys, xml.etree.ElementTree as ET
-for path in pathlib.Path(sys.argv[1]).glob('*.xml'):
-    root = ET.parse(path).getroot()
-    assert not list(root.iter('skipped')), f'Native qualification skipped cases: {path.name}'
-PY
+python3 scripts/verify-test-results.py "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml"
+if [[ -n "${TEST_EVIDENCE_DIR:-}" ]]; then
+  mkdir -p "$TEST_EVIDENCE_DIR"
+  cp "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml" "$TEST_EVIDENCE_DIR/"
+fi
+
 # Local/container qualification can retain exactly the tested service artifacts.
 if [[ -n "${SERVICE_ARTIFACT_DIR:-}" ]]; then
   mkdir -p "$SERVICE_ARTIFACT_DIR"

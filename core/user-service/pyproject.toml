@@ -5,6 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "user-service"
 version = "0.1.0"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@82fc8c2ca21531f1a3f7a695257b3465c4a347da",
@@ -38,7 +40,7 @@ allow-direct-references = true
 packages = ["src/user_service"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/examples", "/pyproject.toml", "/uv.lock"]
+include = ["/LICENSE", "/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/examples", "/pyproject.toml", "/uv.lock"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
