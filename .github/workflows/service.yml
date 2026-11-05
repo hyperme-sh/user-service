@@ -23,6 +23,11 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
+      - name: Prepare exact owner artifact output
+        run: |
+          output=$(mktemp -d "$RUNNER_TEMP/user-service-dist.XXXXXX")
+          echo "SERVICE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
+          echo "RELEASE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -45,9 +50,28 @@ jobs:
           export GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1="$PWD/scripts/private-git-credential.py"
           export GIT_CONFIG_KEY_2=credential.useHttpPath GIT_CONFIG_VALUE_2=true
           bash scripts/check-package.sh
+          bash core/user-service/contracts/scripts/check-package.sh
           umask 077
           token_file=$(mktemp "$RUNNER_TEMP/user-service-read.XXXXXX")
           trap 'rm -f "$token_file"' EXIT
           printf '%s' "$DEPENDENCY_READ_TOKEN" > "$token_file"
           unset DEPENDENCY_READ_TOKEN
           DEPENDENCY_READ_TOKEN_FILE="$token_file" bash scripts/check-container.sh
+      - name: Bind both validated owner wheels
+        run: |
+          uv run --project core/user-service --frozen pytest -q tests_tools
+          archive=$(python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR")
+          exported=$(mktemp -d "$RUNNER_TEMP/user-owner-contract.XXXXXX")
+          python3 scripts/owner_artifact.py export "$archive" "$exported/contract"
+          if [[ -f releases/candidate/release.json ]]; then
+            python3 scripts/verify_release_candidate.py releases/candidate/release.json "$exported/contract/contract.json" "$exported/contract/evidence.json" user-service
+          fi
+      - name: Retain validated owner artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-dist
+          path: ${{ env.SERVICE_ARTIFACT_DIR }}/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
