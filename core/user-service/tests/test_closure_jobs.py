@@ -11,7 +11,7 @@ from spanopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
 from sqlalchemy import create_engine, select, text, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from testcontainers.postgres import PostgresContainer
+from testcontainers.community.postgres import PostgresContainer
 from user_service.closure_jobs import ClosureClaimLost, ClosureJobs
 from user_service.models import AccountLifecycle, AccountLifecycleScope
 

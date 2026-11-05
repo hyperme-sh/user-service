@@ -4180,7 +4180,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "respx", specifier = ">=0.22.0" },
     { name = "spanopticon-tests", git = "https://github.com/hyperme-sh/controlplane-tests.git?rev=4b95bbd5847f19a757164f092a8ed1e5e43a7aca" },
-    { name = "testcontainers", specifier = ">=4.9.0" },
+    { name = "testcontainers", specifier = ">=4.15.0" },
 ]
 
 [[package]]
