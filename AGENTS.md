@@ -6,3 +6,11 @@ The preparation-only PR lane may run native package consumers on disposable
 hosted Ubuntu/PostgreSQL with verified dependency-wheel fixtures and no private
 credentials. Preserve mandatory Docker tests and no-skips assertions. Retain
 Actions artifacts only; do not tag, publish releases or merge preparation PRs.
+
+## Private CI runner policy
+
+Private repository jobs use `[self-hosted, linux, x64, debrunner]`, including
+preparation, package validation and release jobs. This supersedes earlier hosted
+runner exceptions in this file. Keep dedicated infrastructure-convergence and
+trusted payment-smoke jobs on their existing specialized selectors. Reusable
+workflows must route private callers to debrunners. Do not add approval gates.
