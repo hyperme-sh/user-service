@@ -15,7 +15,10 @@ if fields.get('path') not in {f'hyperme-sh/{repo}.git' for repo in repos}:
     raise SystemExit(0)
 secret = os.environ.get('DEPENDENCY_READ_TOKEN')
 if secret is None:
-    secret = Path('/run/secrets/dependency_read_token').read_text().strip()
+    try:
+        secret = Path('/run/secrets/dependency_read_token').read_text().strip()
+    except FileNotFoundError:
+        raise SystemExit(0)
 if not secret or '\n' in secret or '\r' in secret:
     raise SystemExit('Private dependency read credential is invalid')
 print('username=x-access-token')

@@ -69,12 +69,13 @@ jobs:
           export GIT_CONFIG_KEY_2=credential.useHttpPath GIT_CONFIG_VALUE_2=true
           bash scripts/check-package.sh
           bash core/user-service/contracts/scripts/check-package.sh
-          umask 077
-          token_file=$(mktemp "$RUNNER_TEMP/user-service-read.XXXXXX")
-          trap 'rm -f "$token_file"' EXIT
-          printf '%s' "$DEPENDENCY_READ_TOKEN" > "$token_file"
-          unset DEPENDENCY_READ_TOKEN
-          DEPENDENCY_READ_TOKEN_FILE="$token_file" bash scripts/check-container.sh
+      - name: Qualify public container without dependency credentials
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
+        run: |
+          unset DEPENDENCY_READ_TOKEN DEPENDENCY_READ_TOKEN_FILE
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+          bash scripts/check-container.sh
       - name: Bind both validated owner wheels
         run: |
           uv run --project core/user-service --frozen pytest -q tests_tools

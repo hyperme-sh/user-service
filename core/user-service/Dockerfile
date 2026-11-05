@@ -8,7 +8,7 @@ COPY scripts/private-git-credential.py /usr/local/bin/private-git-credential
 RUN chmod 0555 /usr/local/bin/private-git-credential
 COPY core/user-service/src ./src
 # BuildKit secret is scoped to this command and never copied into a layer.
-RUN --mount=type=secret,id=dependency_read_token,required=true \
+RUN --mount=type=secret,id=dependency_read_token \
     GIT_CONFIG_COUNT=3 \
     GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0= \
     GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1=/usr/local/bin/private-git-credential \
