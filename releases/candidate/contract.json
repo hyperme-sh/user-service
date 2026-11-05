@@ -45,7 +45,7 @@
       "user_service/middleware.py": "192cc62a7274eb00f52310124a24cf3785bd899a72d5353c7632af9fabc5a4aa",
       "user_service/models.py": "a7bcba35e2a5ee1fd28944709daef4fc868c01c8c532104c195d033a23bd219d",
       "user_service/password_reset.py": "4f43a6aaebcb7c046f68f41b22112c055794c85c5bedafb77354d5f962ce9e76",
-      "user_service/password_reset_authority.py": "62be0ad97b230999404257cd9be98ea937e92166be5090f938fc206f4e5867a9",
+      "user_service/password_reset_authority.py": "24fdfaa7fb56d05d074461b7085dd796009ef773a91546c02a4c3f7d88041107",
       "user_service/verification_erasure.py": "7bfa5f21147055e97abc6ac5e5e4efa9b547b41f2b0fdaed0fab550e67a6c3a2"
     }
   },

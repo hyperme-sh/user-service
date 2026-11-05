@@ -10,11 +10,11 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from controlplane_db.models import Tenant
+from controlplane_tenancy.tenant_registry import tenant_active
 from user_service.infrastructure.persistence.repos import SqlUserRepository
 from user_service.interfaces.api.operator_routes import require_support, _tenant
 from user_service.password_reset import (
@@ -129,7 +129,7 @@ def create_app():
             await session.execute(text("SELECT set_config('app.current_tenant_id', :tenant, true)"),
                                   {"tenant": str(body.tenant_id)})
             user = await SqlUserRepository(session).get(body.tenant_id, body.user_id)
-            active = await session.scalar(select(Tenant.is_active).where(Tenant.id == body.tenant_id))
+            active = await tenant_active(session, body.tenant_id)
             if (user is None or not user.is_active or not user.keycloak_sub or active is not True
                     or user.email.strip().casefold() != body.email.strip().casefold()):
                 return JSONResponse(status_code=409, content={"detail": "Password reset identity mismatch"})
