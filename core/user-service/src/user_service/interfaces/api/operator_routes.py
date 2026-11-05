@@ -8,7 +8,6 @@ from __future__ import annotations
 from controlplane_api.config import settings
 
 import asyncio
-import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -31,9 +30,9 @@ from api.domain.operator.claims import (
 )
 from api.domain.operator.mail import (
     MailForwarder,
+    MailResult,
     mail_quota,
     prepare_ban_notice,
-    prepare_password_reset,
 )
 from api.domain.operator.peers import peer_book, ping_health
 from controlplane_api.operator.plugins import plugin_by_id, plugin_registry
@@ -318,34 +317,55 @@ def _maybe_notice(email: str | None, *, lifted: bool, user_id: str):
 
 @router.post("/mail/password-reset")
 async def password_reset(request: Request, body: MailBody) -> dict:
-    """Prepare a reset on the server and send it through Mailgun.
-
-    The response never includes the link. Unconfigured mail fails closed.
-    """
-
+    """Request the bound identity provider's expiring password action email."""
     claims = await asyncio.to_thread(require_support, request)
-    action_url = (
-        "https://spanopticon.internal/account/reset?token=" + secrets.token_urlsafe(32)
+    session = _db()
+    if session is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
+    from user_service.infrastructure.persistence.repos import SqlUserRepository
+    from user_service.password_reset import (
+        PasswordResetAuthorityClient, PasswordResetTargetMismatch, PasswordResetUnavailable, tls_context,
     )
-    forwarder = MailForwarder.from_env(quota=mail_quota())
-    message = prepare_password_reset(email=body.email, action_url=action_url)
-    result = forwarder.send(message, user_id=str(body.user_id))
-    del action_url
-    if not result.sent:
+    import httpx
+
+    user = await SqlUserRepository(session).get(_tenant(claims), body.user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if (not user.is_active or not user.keycloak_sub
+            or user.email.strip().casefold() != body.email.strip().casefold()):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Password reset identity mismatch")
+    quota = mail_quota()
+    month = quota.month_key()
+    used = quota.sent_by_month.get(month, 0)
+    if used >= quota.limit:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Password reset unavailable")
+    # Reserve before awaiting the provider so concurrent requests share the cap.
+    quota.sent_by_month[month] = used + 1
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=False, trust_env=False,
+                                     verify=tls_context("PASSWORD_RESET_AUTHORITY_CA")) as client:
+            await PasswordResetAuthorityClient(client).send(
+                tenant_id=_tenant(claims), user_id=user.id, email=user.email,
+                authorization=request.headers.get("Authorization", ""),
+            )
+    except (PasswordResetUnavailable, PasswordResetTargetMismatch) as exc:
+        quota.sent_by_month[month] = max(0, quota.sent_by_month.get(month, 0) - 1)
+        if isinstance(exc, PasswordResetTargetMismatch):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Password reset identity mismatch") from None
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            {"sent": False, "detail": "message was not sent", "kind": "password_reset"},
-        )
+            {"sent": False, "detail": "password reset was not confirmed", "kind": "password_reset"},
+        ) from None
     audit = _audit(
         claims,
         action="mail",
         target_kind="user",
         target_id=str(body.user_id),
         reason=body.reason,
-        detail={"kind": "password_reset"},
+        detail={"kind": "password_reset", "provider": "keycloak"},
     )
     await _persist_audit(audit)
-    return result.public()
+    return MailResult(sent=True, kind="password_reset", user_id=str(body.user_id)).public()
 
 
 @router.get("/audit")
