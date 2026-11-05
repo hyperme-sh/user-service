@@ -3,7 +3,7 @@
 User and operator-account service implementation under `core/user-service`.
 The separately installable read-only operator ban contract is under
 `core/user-service/contracts`. Its public module is `operator_ban_store`, version
-0.1.0. It returns boolean predicates while preserving caller transactions and RLS.
+0.24.0. It returns boolean predicates while preserving caller transactions and RLS.
 
 ## Contract development
 
@@ -101,3 +101,8 @@ and operator-ban wheels at the same version. `scripts/owner_artifact.py` verifie
 both wheel identities and complete runtime inventories without importing code.
 The archive digest binds both distributions; its exported runtime contract does
 not yet establish installer/dependency metadata compatibility.
+
+Both owning distributions now use 0.24.0. The contract consumes database 0.24
+for its PostgreSQL checks; the full service retains its existing qualified
+private dependency closure while downstream core/auth coordination proceeds.
+This staged package alignment is not complete fleet dependency qualification.
