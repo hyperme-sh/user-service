@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "user-service"
-version = "0.24.1"
+version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@ba971e08bcbf6ec45ec8e6f0ae26220378aa7cdb",
