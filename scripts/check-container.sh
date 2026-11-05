@@ -16,6 +16,8 @@ docker build --build-arg "GIT_SHA=$build_sha" --build-arg "BUILT_AT=$built_at" -
   -f core/user-service/Dockerfile -t "$image" .
 docker run --rm --network none "$image" /app/.venv/bin/python -I -c '
 import os, user_service.app, user_service.closure_authority, user_service.closure_daemon
+import user_service.password_reset_authority
+assert user_service.password_reset_authority.create_app().openapi_url is None
 from controlplane_identity.account_lifecycle import enforcement_enabled
 assert not enforcement_enabled()
 assert not any(name in os.environ for name in ("DEPENDENCY_READ_TOKEN", "ACCOUNT_CLOSURE_WORKER_ENABLED"))

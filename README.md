@@ -265,3 +265,71 @@ consumer/deployment selection must bind exact component commits and artifact
 digests, not matching repository-local counters. No stable promotion is automatic.
 Private jobs use debrunners and public jobs use hosted Ubuntu; no approval gates
 are introduced. Missing original evidence or publication collisions fail closed.
+
+## Redeemable operator password resets
+
+`POST /api/v1/operator/mail/password-reset` requests the bound identity
+provider's password-action email. It requires console and support authority,
+the current tenant's active user record, a bound subject, and the matching
+email confirmation. It no longer invents a reset token or reports success from
+the Mailgun preparation stub. Successful response fields remain `sent`, `kind`,
+`user_id` and `detail`; no token, password or action URL is returned or audited.
+
+The public process holds only a reset-request capability. A separate private
+`user_service.password_reset_authority:create_app` process holds the dedicated
+IdP credential. The private authority verifies both the purpose token and the
+original operator bearer/tenant, independently rechecks the active tenant/user
+through a read-only RLS-scoped database connection, and verifies the exact
+subject/current email with Keycloak. Only `UPDATE_PASSWORD` with a 600-second
+lifespan can be requested; callers cannot choose actions, recipients or
+redirects. Existing local password accounts are supported. Brokered/external
+identities, passwordless identities and reserved service-account identities are
+refused rather than acquiring a new login method.
+
+Keycloak creates and delivers the expiring action through its configured SMTP
+service and owns redemption and single-use state. The API acknowledges success
+only after the provider's send acknowledgment. Timeouts are reported as
+unconfirmed; mail may already have reached the provider, so delivery is not
+claimed to be exactly once. The existing process-local monthly mail cap reserves
+a slot before awaiting the authority, releases failed attempts, and audits only
+acknowledged sends.
+
+Configure the public process with:
+
+| Setting | Purpose |
+| --- | --- |
+| `PASSWORD_RESET_AUTHORITY_URL` | Private HTTPS authority origin |
+| `PASSWORD_RESET_OPERATIONS_TOKEN` | Dedicated random capability, 32–512 ASCII characters |
+| `PASSWORD_RESET_AUTHORITY_CA` | Optional private CA file; normal certificate verification otherwise |
+
+Configure the private process separately with that capability, the existing
+operator tenant-session verifier configuration, and:
+
+| Setting | Purpose |
+| --- | --- |
+| `PASSWORD_RESET_DATABASE_URL` | Dedicated `postgresql+asyncpg` login with SELECT on `public.users` and `public.tenants` |
+| `PASSWORD_RESET_DATABASE_CA` | Required trusted database CA outside loopback development/tests |
+| `PASSWORD_RESET_KEYCLOAK_URL` | Issuer's HTTPS server base |
+| `PASSWORD_RESET_KEYCLOAK_REALM` | Realm matching the configured `keycloak_issuer` |
+| `PASSWORD_RESET_KEYCLOAK_CLIENT_ID` | Exactly `operator-password-reset` |
+| `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET` | Dedicated realm client credential; never a closure or actor-signing credential |
+| `PASSWORD_RESET_KEYCLOAK_CA` | Optional issuer CA file; normal certificate verification otherwise |
+
+The private process refuses writable users/tenants privileges, column grants,
+superuser/BYPASSRLS and other privileged settable roles. Each request runs a
+read-only transaction with the operator's tenant GUC. It has no public routes,
+OpenAPI or unrelated authority endpoints. Run it on a private HTTPS listener
+with a valid certificate; do not mount its database or IdP credentials into the
+public service, whose startup rejects them. The purpose capability, actor
+signing key and IdP credential must be distinct. Environment proxy inheritance
+and redirects are disabled; plaintext is allowed only for loopback development
+or disposable tests. Missing configuration fails closed.
+
+Native tests use a disposable Keycloak instance with a verified TLS certificate
+and a local SMTP receiver. They exercise actual email delivery, password change,
+expiry, fresh-browser replay refusal, an unaffected second user, unsupported
+identity types, SMTP/TLS failures and a private authority with a restricted
+PostgreSQL role. Source/wheel/sdist consumers retain the mandatory native tests
+and no-skips assertion. Deployed configuration and delivery qualification remain
+tracked separately in issue #41; this implementation does not provision roles,
+credentials, SMTP, listeners or deployments in an existing environment.

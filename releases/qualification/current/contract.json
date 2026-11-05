@@ -7,7 +7,7 @@
     "user-service": {
       "user_service/__init__.py": "b45cfa1e4a8db4b4788c6a7d80299bbcd8e292731a602187420993f2e2f8cea8",
       "user_service/account_closure.py": "f79bfa09ecfc7058d1ea1add1eb155780ea74bb3e7697f33787f037648226bf9",
-      "user_service/app.py": "6311d9c030ae36814ddda336470ca5566affb769059659482c8afa7039e20b89",
+      "user_service/app.py": "1a026cbb8f0b0efc3827bf8774d875e9ee0c679a24c997ee6d24effe34bf18c6",
       "user_service/closure_actions.py": "edf52214e917349bea926827c2ca91264cc4357a4c60444a77951a92e71503ce",
       "user_service/closure_authority.py": "23ec7f17522f954dd72b55ca73439fcc81762fd8d0bd8133e2fc8365182b01b8",
       "user_service/closure_authorization.py": "0824d463889500a2adbf7ec2993ae5c1394a4991dd9f983e70099054d8a99081",
@@ -37,13 +37,15 @@
       "user_service/infrastructure/persistence/repos.py": "e56f461985743e1f48f07acda1fd0b7811da212d50d0c69bcd9cec5d058677e1",
       "user_service/interfaces/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "user_service/interfaces/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "user_service/interfaces/api/operator_routes.py": "81ef7f472b7a1c2a6de98e9f6cb20fa1fbb31f8e3733211cdf78e20750c1c048",
+      "user_service/interfaces/api/operator_routes.py": "fc3a7be53e19f3aeeb84ca9cbb9ee949159581e095c90cded493ae8d997c551f",
       "user_service/interfaces/api/routes.py": "7e016f5d44d4f4df0f66b9b646d9efb78816c75b14ea8b3d455397bf4e2b8b30",
       "user_service/lifecycle_policy.py": "87e7af3443b1b008fdf809d162e37b5ebd7c2d85660cc16271631bf227c63701",
       "user_service/lifecycle_read.py": "3395e4c24d58ff475a3664552448a3d88ea866ae5312261b6224ddef4fdeaaf6",
       "user_service/main.py": "5f8fb045bc487b3e6426c0d6ade9cd2ceecf2440f58849c554e4fdf85d988c0b",
       "user_service/middleware.py": "192cc62a7274eb00f52310124a24cf3785bd899a72d5353c7632af9fabc5a4aa",
       "user_service/models.py": "a7bcba35e2a5ee1fd28944709daef4fc868c01c8c532104c195d033a23bd219d",
+      "user_service/password_reset.py": "4f43a6aaebcb7c046f68f41b22112c055794c85c5bedafb77354d5f962ce9e76",
+      "user_service/password_reset_authority.py": "24fdfaa7fb56d05d074461b7085dd796009ef773a91546c02a4c3f7d88041107",
       "user_service/verification_erasure.py": "7bfa5f21147055e97abc6ac5e5e4efa9b547b41f2b0fdaed0fab550e67a6c3a2"
     }
   },

@@ -49,6 +49,10 @@ def create_app(
             "ACCOUNT_CLOSURE_WORKER_DATABASE_URL", "ACCOUNT_CLOSURE_KEYCLOAK_CLIENT_SECRET",
         )):
             raise RuntimeError("Private closure credentials cannot be mounted in the public service")
+        if any(os.environ.get(name) for name in (
+            "PASSWORD_RESET_DATABASE_URL", "PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET",
+        )):
+            raise RuntimeError("Private password reset credentials cannot be mounted in the public service")
         configure_logging()
         engine = create_async_engine(normalize_database_url(settings.database_url))
         try:

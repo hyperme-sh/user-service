@@ -152,3 +152,12 @@ async def test_authorized_audit_reads_preserve_public_fields_and_page_metadata(m
             assert response.json() == {"items": [row.public()], "limit": 1, "offset": 0}
     finally:
         operator_audit().clear()
+
+
+@pytest.mark.parametrize("permissions", [[], ["operator:console"], ["operator:support"]])
+async def test_password_reset_requires_console_and_support(permissions):
+    transport = httpx.ASGITransport(app=_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/api/v1/operator/mail/password-reset", headers=_headers(permissions),
+                                     json={"user_id": str(uuid.uuid4()), "email": "person@example.com", "reason": "request"})
+        assert response.status_code == 403
