@@ -177,3 +177,12 @@ not stable release evidence. The operator-ban test dependency uses the same
 DB revision. This addresses the missing-closure-API blocker in #32 without
 reverting to older foundations or changing the packaged runtime contract.
 Plane consumer and non-root image qualification remain separate checks.
+## Verification erasure owner
+
+When verification is enabled, configure `ACCOUNT_CLOSURE_VERIFICATION_ENABLED=true`, `ACCOUNT_CLOSURE_VERIFICATION_URL` and
+`ACCOUNT_CLOSURE_VERIFICATION_TOKEN` (the owner's dedicated admin credential).
+Personal erasure calls the private owner endpoint after the existing closure and
+retention checks; it records only a completed receipt and retries unavailable
+owners. Missing configuration means that owner has not been enabled and must
+block verification rollout acceptance. Verification also uses the existing
+read-only lifecycle check on each request and before delivery.
