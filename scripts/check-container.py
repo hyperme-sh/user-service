@@ -69,6 +69,11 @@ try:
     else:
         raise AssertionError('Anonymous lifecycle forwarding succeeded')
     print('Standalone non-root HTTP container: health, version, auth denial and private-route separation passed')
+    from importlib.util import spec_from_file_location, module_from_spec
+    spec = spec_from_file_location('private_container', Path(__file__).with_name('check-private-container.py'))
+    private = module_from_spec(spec)
+    spec.loader.exec_module(private)
+    private.qualify(image, admin, service_url, database)
 finally:
     if container:
         subprocess.run(['docker', 'rm', '-f', container], check=True, stdout=subprocess.DEVNULL)
