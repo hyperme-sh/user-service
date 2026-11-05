@@ -1,0 +1,24 @@
+{
+  "repository": "hyperme-sh/user-service",
+  "revision": "cb9f9b10a596339742c812235524309880bfece6",
+  "release_id": 434675950,
+  "immutable": true,
+  "tag": "test-cb9f9b10a596339742c812235524309880bfece6",
+  "run_id": 41950844714,
+  "artifact_id": 13380579098,
+  "assets": {
+    "operator_ban_store-0.1.0-py3-none-any.whl": "sha256:f02a682f0ddd6591cc58ef8e23d32ef9c80e83772d5d144ee0fcd6f06d0d2928",
+    "operator_ban_store-0.1.0.tar.gz": "sha256:69fde7ef0e1d09c5fe41d3bc9c16cf4990c731bf1c6e8f50014ea44b4fcdea90",
+    "user_service-0.1.0-py3-none-any.whl": "sha256:914f61f43279cc050ed68a5982efe03af65da3588a14ee5447cb955661cfff70",
+    "user_service-0.1.0.owner.zip": "sha256:a20b330498d437228074822b554c8177ce93aa07e6ea1e81a5a4f17e3eae5c16",
+    "user_service-0.1.0.tar.gz": "sha256:03874b80d19c313243c68d7cb276bdffb85664ddaff32319b27809faff4a6eb5"
+  },
+  "published_release_url": "https://github.com/hyperme-sh/user-service/releases/tag/test-cb9f9b10a596339742c812235524309880bfece6",
+  "checks": [
+    "successful same-repository main-push package run",
+    "live Actions artifact digest",
+    "release bytes equal tested bytes",
+    "immutable release and tag revision",
+    "asset digests equal manifest"
+  ]
+}
