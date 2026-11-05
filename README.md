@@ -50,8 +50,16 @@ bash scripts/check-container.sh
 
 The build uses a BuildKit secret, installs the frozen production graph, and
 runs as uid 65532. Container checks create and remove a unique migrated database,
-then exercise real health/version/authentication HTTP behavior. They do not
-apply migrations at application startup or deploy a service. Publication requires successful full-service and contract qualification.
+then exercise real health/version/authentication HTTP behavior. The same image
+also starts the private authority with a generated short-lived TLS certificate
+and a unique database role produced by the owner's least-privilege role plan.
+Authenticated readiness, reader/writer separation, committed retirement reads,
+incomplete-inventory denial and untrusted-certificate rejection are exercised
+over HTTPS. Only explicit fixture configuration enters that container. This
+does not qualify a deployed issuer, owner mutation, scheduler or registry manifest;
+the image reference uses the local image digest for this owned fixture only.
+The checks do not apply migrations at application startup or deploy a service.
+Publication requires successful full-service and contract qualification.
 
 The standalone workflow uses the existing main-only shared-runner lane and
 requires read access to all pinned private runtime/test repositories. It does
