@@ -38,7 +38,7 @@ allow-direct-references = true
 packages = ["src/user_service"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/pyproject.toml", "/uv.lock"]
+include = ["/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/examples", "/pyproject.toml", "/uv.lock"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
