@@ -37,7 +37,7 @@
       "user_service/infrastructure/persistence/repos.py": "e56f461985743e1f48f07acda1fd0b7811da212d50d0c69bcd9cec5d058677e1",
       "user_service/interfaces/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "user_service/interfaces/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "user_service/interfaces/api/operator_routes.py": "eb5a06ed955441f8a82a3eb2fe07499d3c9f9315d6fd789f19a482e177d0e482",
+      "user_service/interfaces/api/operator_routes.py": "81ef7f472b7a1c2a6de98e9f6cb20fa1fbb31f8e3733211cdf78e20750c1c048",
       "user_service/interfaces/api/routes.py": "7e016f5d44d4f4df0f66b9b646d9efb78816c75b14ea8b3d455397bf4e2b8b30",
       "user_service/lifecycle_policy.py": "87e7af3443b1b008fdf809d162e37b5ebd7c2d85660cc16271631bf227c63701",
       "user_service/lifecycle_read.py": "3395e4c24d58ff475a3664552448a3d88ea866ae5312261b6224ddef4fdeaaf6",

@@ -232,3 +232,19 @@ in-memory audit history and empty directory responses. Database errors do not
 switch a session-backed read to local state. Native tests exercise committed
 ban/lift/role history across independent sessions, rollback visibility,
 timestamp ties, tenant isolation and HTTP authorization/pagination boundaries.
+
+## Durable-ban transfer and licensing
+
+The two remaining durable-ban regressions from Panopticon
+`2cd00fd9a7ebb950999571a81be7cb0a24d9264e` now run in the owning service's
+source, wheel and rebuilt-sdist suites. They verify one committed winner for
+concurrent lifts and persistent directory/soft-delete ban status after clearing
+local process state. Soft-delete reads the stored ban when a database session is
+available. No ban is created or lifted by soft-delete.
+
+The three service test inventories must match with no skipped cases. Local
+qualification can retain JUnit files through `TEST_EVIDENCE_DIR`.
+
+First-party service and operator-ban contract code are [Apache-2.0](LICENSE).
+Both distributions include checked SPDX metadata and exact license text.
+Bundled dependencies retain their own licenses; versions remain unchanged.
