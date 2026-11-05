@@ -39,6 +39,7 @@ jobs:
           set -euo pipefail
           test -n "$DEPENDENCY_READ_TOKEN" || { echo 'Private dependency read access is required'; exit 1; }
           chmod 0555 scripts/private-git-credential.py
+          export GIT_CONFIG_GLOBAL=/dev/null
           export GIT_CONFIG_COUNT=3
           export GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
           export GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1="$PWD/scripts/private-git-credential.py"

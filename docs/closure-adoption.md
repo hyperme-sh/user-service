@@ -98,12 +98,12 @@ than workspace placeholders; the operator-contract project is unchanged.
 
 | Dependency | Exact revision | Adoption PR |
 | --- | --- | --- |
-| controlplane-db | `d241123db7b706d4400d68b7b8b4ff38b2a75dd4` | [#11](https://github.com/hyperme-sh/controlplane-db/pull/11) |
+| controlplane-db | `a14a4a35b5dbb45b7b9050ad35fcc65b4ef8fc79` | [#11](https://github.com/hyperme-sh/controlplane-db/pull/11) |
 | controlplane-identity | `fbdeb1c11f17fa192b7505355c64d1f0af1234dc` | [#9](https://github.com/hyperme-sh/controlplane-identity/pull/9) |
-| controlplane-tenancy | `13c0029d8d7766d03013e59433d20b7d314342a4` | [#11](https://github.com/hyperme-sh/controlplane-tenancy/pull/11) |
+| controlplane-tenancy | `9528e2e58463c44fd0affa58089d6fb1215da605` | [#11](https://github.com/hyperme-sh/controlplane-tenancy/pull/11) |
 | controlplane-api | `6bef00ce7fc630df5523dcd254f85d40d13d135e` | [#12](https://github.com/hyperme-sh/controlplane-api/pull/12) |
-| controlplane-core | `92ba54dd1f0fde38b3c439ea151f51a0ac3aa78b` | [#12](https://github.com/hyperme-sh/controlplane-core/pull/12) |
-| auth-service | `2df6e19e6b11d1fdcd118bafcfa2bc626863f638` | [#16](https://github.com/hyperme-sh/auth-service/pull/16) |
+| controlplane-core | `3aa01d738c3a20d0da37506a2b44d186a8496500` | [#12](https://github.com/hyperme-sh/controlplane-core/pull/12) |
+| auth-service | `4766edb227942d8a481a9b5b4d3c1af9f079fb58` | [#16](https://github.com/hyperme-sh/auth-service/pull/16) |
 
 The database owner preserves both existing platform histories and joins them at
 `platform_0079_closure_merge`. Neither the source checkpoint/closure branch nor
@@ -152,3 +152,12 @@ redirect admission to a decoy manifest. The service instead retains its
 original metadata path and corrects the standalone wheel configuration there.
 The proposed exception in Spanopticon #8 is withdrawn; no release-policy
 relaxation is needed.
+
+Merged database main subsequently adopted lab/enforcement resources. The
+follow-up rebases onto that owner revision and preserves all 64 current-main
+resources plus the 50 imported source resources byte-for-byte. A second no-DDL
+merge, hypermesh_0087_closure_lab_merge, joins the lab and closure branches.
+Database checks cover fresh installs, both earlier platform heads and both
+earlier Hypermesh heads, including retained lab receipts, RLS and private worker
+preflight. The refreshed owner graph is used consistently by tenancy/core/auth
+and this service.
