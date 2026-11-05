@@ -3,7 +3,7 @@ FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822
 WORKDIR /build
 RUN pip install --no-cache-dir uv==0.11.26
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY core/user-service/pyproject.toml core/user-service/uv.lock ./
+COPY core/user-service/pyproject.toml core/user-service/uv.lock core/user-service/LICENSE ./
 COPY scripts/private-git-credential.py /usr/local/bin/private-git-credential
 RUN chmod 0555 /usr/local/bin/private-git-credential
 COPY core/user-service/src ./src
