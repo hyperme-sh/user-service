@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "operator-ban-store"
-version = "0.24.0"
+version = "0.24.1"
 requires-python = ">=3.13"
 description = "User-service-owned read-only operator ban contract"
 dependencies = ["sqlalchemy>=2.0.43"]

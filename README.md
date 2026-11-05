@@ -112,6 +112,26 @@ for its PostgreSQL checks; the full service retains its existing qualified
 private dependency closure while downstream core/auth coordination proceeds.
 This staged package alignment is not complete fleet dependency qualification.
 
+### Prepared owner artifacts
+
+The preparation branch retains the current private dependency pins and prepares
+both owning packages as 0.24.1. Exact clean Git checkouts supply the dependency
+fixtures; their manifest records source revisions and wheel digests. These are
+locally built fixtures qualified by PR consumers, not published 0.24 baselines.
+The older synchronized foundation artifacts lack account-closure interfaces used
+by this service, so adopting them would regress its current functionality.
+Dependency alignment must first preserve those interfaces in the foundation owners
+(see [dependency qualification](https://github.com/hyperme-sh/user-service/issues/32)).
+
+`bash scripts/check-package.sh --fixtures` runs source, installed-wheel and
+rebuilt-sdist native consumers without private Git credentials. The complete
+active graph is verified against root metadata, lock entries and transitive wheel
+metadata. Optional private extras are not selected by this service; the verifier
+rejects explicit extras rather than silently dropping them. The PR lane retains
+qualified owner artifacts only. Non-root image qualification and deployed/provider
+acceptance remain separate. Keep preparation PRs ready and unmerged where merging
+would trigger publication.
+
 ## Test qualification and stable acceptance
 
 GitHub `test-<commit>` prereleases are development snapshots. Their embedded
@@ -136,3 +156,14 @@ publisher independently verifies a real immutable stable baseline and refuses
 qualification snapshots, even if a caller job reports success. Existing valid
 stable records are retained; no release, version change, deployment or human
 approval prerequisite is introduced by this correction.
+
+
+### Initial stable declaration
+
+When there is no accepted stable release, the pinned admission workflow checks
+this repository's complete live release inventory and the exact owning package
+versions against `releases/candidate`. A stable release or incomplete inventory
+rejects this path. Candidate metadata identifies built artifacts; it does not
+establish an accepted baseline or publish anything. The exact-pinned publisher
+independently validates tested bytes and serializes any later explicit first
+stable publication. Test snapshots remain qualification evidence only.
