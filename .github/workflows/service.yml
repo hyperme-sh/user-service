@@ -67,7 +67,7 @@ jobs:
           export GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
           export GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1="$PWD/scripts/private-git-credential.py"
           export GIT_CONFIG_KEY_2=credential.useHttpPath GIT_CONFIG_VALUE_2=true
-          bash scripts/check-package.sh
+          TEST_EVIDENCE_DIR="$RUNNER_TEMP/user-native-test-results" bash scripts/check-package.sh
           bash core/user-service/contracts/scripts/check-package.sh
       - name: Qualify public container without dependency credentials
         env:
@@ -96,3 +96,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
+      - name: Retain native test identities
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-test-results
+          path: ${{ runner.temp }}/user-native-test-results/*.xml
+          if-no-files-found: error
+          retention-days: 30

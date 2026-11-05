@@ -10,11 +10,11 @@ license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@732256a5207ee502d7bf70cb171cf2eea1803b87",
-    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@e79c5b41d5dbbb8e190ccb59dd0d57bb45ec69ec",
-    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@c3b7b4b65e04de1830f4c24bf00669dca3a97375",
-    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@95ef61433374274f4a4fc287e15982be6357e1cc",
+    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@80638eb20cf8fd8b5d540552e02bbe9a42d500bd",
+    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@6699bd933ec07a50e8979b17d246b385e180dde1",
+    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@99afa5861608289df733ac598237abe08ec4be6b",
     "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@5aeff3d2c00568f39ca6e8b75c7e63883d3a510b",
-    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@f252909af772b2c820555af36de456d46f17cfcb",
+    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@f0a0e189f33866ea6276e512022230d5c1d9a8c7",
     "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87",
     "spanopticon-models @ git+https://github.com/hyperme-sh/controlplane-models.git@9a9bbb20c2e0cd41febf3233ce7a48fe17a84b04",
     "fastapi>=0.135.0",

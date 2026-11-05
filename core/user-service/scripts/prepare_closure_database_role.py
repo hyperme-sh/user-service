@@ -7,6 +7,7 @@ import re
 
 _FUNCTIONS = (
     "account_check_closure_worker_installation()",
+    "account_test_data_enabled()",
     "account_require_financial_inventory(text,timestamptz)",
     "account_lock_financial_inventory(text,timestamptz,uuid)",
     "account_prime_billing_financial_sources(text,timestamptz,uuid,integer)",
@@ -23,7 +24,9 @@ _FUNCTIONS = (
 )
 
 
-def render_sql(role, database):
+def render_sql(role, database, *, test_retention=False):
+    if type(test_retention) is not bool:
+        raise ValueError("Explicit boolean TEST retention selection required")
     if not isinstance(role, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", role):
         raise ValueError("A new lowercase PostgreSQL role name is required")
     if not isinstance(database, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", database):
@@ -46,6 +49,28 @@ def render_sql(role, database):
         *(f"GRANT EXECUTE ON FUNCTION public.{signature} TO {target};" for signature in _FUNCTIONS),
         "COMMIT;",
     ]
+    if test_retention:
+        # This mode is administrative, private and unavailable on a production
+        # database. The role cannot change or read the protected policy marker.
+        import json
+        from importlib.resources import files
+        manifest = json.loads(files("controlplane_db").joinpath("migration_chains/manifest.json").read_text())
+        names = set(manifest["chains"]["payment_service"]["tables"]) | {
+            "billing_records", "hypermesh_leases", "hypermesh_orders", "hypermesh_payouts",
+            "hypermesh_fills", "connect_reversal_exposure_observations", "hypermesh_jobs",
+            "hypermesh_tunnels", "hypermesh_tickets", "host_organization_bindings",
+            "ai_agent_entitlements", "marketplace_purchases",
+        }
+        if any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in names):
+            raise ValueError("Invalid native financial table inventory")
+        tables = ", ".join("'" + name + "'" for name in sorted(names))
+        statements[-1:-1] = [
+            "DO $$ BEGIN IF NOT public.account_test_data_enabled() THEN RAISE EXCEPTION 'A database-bound TEST policy is required'; END IF; END $$;",
+            f"GRANT EXECUTE ON FUNCTION public.account_lock_test_data_policy(), public.account_test_row_delete_allowed(oid,jsonb), public.hypermesh_financial_parties(text,jsonb) TO {target};",
+            f"GRANT SELECT, INSERT, DELETE ON public.account_test_delete_capabilities TO {target};",
+            f"GRANT SELECT, DELETE ON public.account_financial_source_bindings TO {target};",
+            f"DO $$ DECLARE name text; BEGIN FOREACH name IN ARRAY ARRAY[{tables}] LOOP IF to_regclass('public.'||quote_ident(name)) IS NOT NULL THEN EXECUTE format('GRANT SELECT, DELETE ON public.%I TO %I',name,'{role}'); END IF; END LOOP; END $$;",
+        ]
     return "\n".join(statements) + "\n"
 
 
@@ -53,9 +78,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--role", required=True)
     parser.add_argument("--database", required=True)
+    parser.add_argument("--test-retention", action="store_true", help="Private TEST financial erasure grants; requires an already configured TEST database")
     args = parser.parse_args()
     try:
-        plan = render_sql(args.role, args.database)
+        plan = render_sql(args.role, args.database, test_retention=args.test_retention)
     except ValueError as error:
         parser.error(str(error))
     print(plan, end="")

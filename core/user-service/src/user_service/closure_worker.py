@@ -64,6 +64,40 @@ async def check_database(engine):
                 is not True
             ):
                 raise WorkerUnavailable()
+        from user_service.test_retention import database_test_data
+
+        try:
+            test_data = await database_test_data(connection)
+            if test_data:
+                for signature in (
+                    "public.account_lock_test_data_policy()",
+                    "public.account_test_row_delete_allowed(oid,jsonb)",
+                ):
+                    if (
+                        await connection.scalar(
+                            text(
+                                "SELECT has_function_privilege(current_user,CAST(:signature AS regprocedure),'EXECUTE')"
+                            ),
+                            {"signature": signature},
+                        )
+                        is not True
+                    ):
+                        raise ValueError("Private TEST delete authority unavailable")
+                for privilege in ("SELECT", "INSERT", "DELETE"):
+                    if (
+                        await connection.scalar(
+                            text(
+                                "SELECT has_table_privilege(current_user,'public.account_test_delete_capabilities',:privilege)"
+                            ),
+                            {"privilege": privilege},
+                        )
+                        is not True
+                    ):
+                        raise ValueError(
+                            "Private TEST capability authority unavailable"
+                        )
+        except ValueError:
+            raise WorkerUnavailable() from None
         # Installed producer coverage is mandatory even when there are no roots.
         await connection.execute(
             text("SELECT public.account_check_closure_worker_installation()")
@@ -83,6 +117,23 @@ class ClosureWorker:
         if work.state == "closing":
             await self.processor.close(work)
         elif work.state in {"closed", "deleting"}:
+            test_data = await self.jobs.test_data_enabled()
+            if test_data:
+                # Capture and erase original financial roots before profile
+                # anonymization removes direct payer aliases. Financial-only
+                # holds/settlement waits never extend TEST erasure.
+                from user_service.closure_inventory import FinancialInventory
+
+                if not await FinancialInventory(self.jobs).prepare(work):
+                    await self.jobs.release(work, error="owner_unavailable")
+                    return
+                receipt = await self.jobs.erase_test_finances(work)
+                if not receipt["roots_complete"] or (
+                    work.effects.get("personal_owners_erased") is True
+                    and not receipt["complete"]
+                ):
+                    await self.jobs.release(work, error="owner_unavailable")
+                    return
             if work.effects.get("personal_owners_erased") is True:
                 await self.jobs.erase_payer_risk(work)
                 receipt = await self.jobs.finish_source_free(work)

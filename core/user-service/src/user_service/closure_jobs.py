@@ -517,6 +517,41 @@ class ClosureJobs:
                 raise ValueError("Native financial completion proof unavailable")
             return copy.deepcopy(receipt)
 
+    async def test_data_enabled(self):
+        from user_service.test_retention import database_test_data
+
+        async with self.transaction() as session:
+            return await database_test_data(session)
+
+    async def erase_test_finances(self, work, *, limit=100):
+        from controlplane_db.test_retention import purge_test_finances
+        from user_service.test_retention import database_test_data
+
+        async with self.transaction() as session:
+            if not await database_test_data(session):
+                raise ValueError("Private TEST financial erasure is not enabled")
+            row = await self.owned(session, work)
+            receipt = await session.run_sync(
+                lambda sync: purge_test_finances(
+                    sync.connection(), work.subject, work.closed_at, limit=limit
+                )
+            )
+            old = row.effects.get("test_financial_erasure", {})
+            tables = dict(old.get("tables", {}))
+            for name, count in receipt["tables"].items():
+                tables[name] = tables.get(name, 0) + count
+            row.effects = {
+                **row.effects,
+                "test_financial_erasure": {
+                    "complete": receipt["complete"],
+                    "roots_complete": receipt["roots_complete"],
+                    "remaining": receipt["remaining"],
+                    "deleted": old.get("deleted", 0) + receipt["deleted"],
+                    "tables": tables,
+                },
+            }
+            return receipt
+
     async def erase_payer_risk(self, work, *, limit=100):
         """Fresh native risk-owner scan, never a whole-financial completion proof."""
         if work.closed_at is None or type(limit) is not int or not 1 <= limit <= 1000:

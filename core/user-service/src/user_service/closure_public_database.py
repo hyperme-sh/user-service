@@ -15,6 +15,10 @@ _PRIVATE_TABLES = (
     "public.account_financial_fence_versions",
     "public.account_financial_transitions",
     "public.financial_accounting_totals",
+    "public.account_test_data_policy",
+    "public.account_test_delete_capabilities",
+    "public.account_test_delete_guard_originals",
+    "public.account_test_policy_originals",
 )
 _PRIVATE_FUNCTIONS = (
     "public.account_check_closure_worker_installation()",
