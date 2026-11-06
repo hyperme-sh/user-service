@@ -146,9 +146,13 @@ def create_app(
     app.openapi = custom_openapi
 
     app.add_middleware(UserServiceDbMiddleware)
+    from controlplane_events.http_consumer import consumer_router
+    app.include_router(consumer_router(), prefix='/api/v1')
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
     app.include_router(user_api_router, prefix="/api/v1")
+    from user_service.identity_api import router as identity_router
+    app.include_router(identity_router,prefix="/api/v1")
     app.include_router(operator_router, prefix="/api/v1")
     app.include_router(closure_router, prefix="/api/v1")
     app.include_router(closure_actions_router, prefix="/api/v1")
