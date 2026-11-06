@@ -34,7 +34,7 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
         run: |
-          bash scripts/check-package.sh --fixtures
+          TEST_EVIDENCE_DIR="$RUNNER_TEMP/user-native-test-results" bash scripts/check-package.sh --fixtures
           bash core/user-service/contracts/scripts/check-package.sh --fixtures
       - name: Bind both validated owner wheels
         run: |
@@ -55,3 +55,10 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+      - name: Retain native test identities
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-test-results
+          path: ${{ runner.temp }}/user-native-test-results/*.xml
+          if-no-files-found: error
+          retention-days: 30

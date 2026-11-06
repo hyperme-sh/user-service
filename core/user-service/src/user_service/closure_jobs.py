@@ -501,6 +501,18 @@ class ClosureJobs:
                 text("SELECT public.account_lock_financial_inventory(:s,:at,NULL)"), values
             )
             row = await self.owned(session, work)
+            test_erasure = None
+            if "test_financial_erasure" in row.effects:
+                from user_service.test_retention import (
+                    completed_test_receipt,
+                    database_test_data,
+                )
+
+                if not await database_test_data(session):
+                    raise ValueError("Private TEST completion authority unavailable")
+                test_erasure = completed_test_receipt(
+                    row.effects["test_financial_erasure"]
+                )
             # Flush renewal before native completion clears the claim. An ORM
             # commit must not restore its pre-completion claim_until snapshot.
             await session.flush()
@@ -515,7 +527,53 @@ class ClosureJobs:
                     or type(receipt["remaining"]) is not int or receipt["remaining"] < 0
                     or receipt["complete"] != (receipt["remaining"] == 0)):
                 raise ValueError("Native financial completion proof unavailable")
+            if receipt["complete"] and test_erasure is not None:
+                # The native owner compacts identity-bearing effects. Restore
+                # only validated aggregate counts after refreshing its cleared
+                # claim, atomically with completion in this same transaction.
+                row.effects = {**row.effects, "test_financial_erasure": test_erasure}
             return copy.deepcopy(receipt)
+
+    async def test_data_enabled(self):
+        from user_service.test_retention import database_test_data
+
+        async with self.transaction() as session:
+            return await database_test_data(session)
+
+    async def erase_test_finances(self, work, *, limit=100):
+        from controlplane_db.test_retention import purge_test_finances
+        from user_service.test_retention import database_test_data
+
+        async with self.transaction() as session:
+            if not await database_test_data(session):
+                raise ValueError("Private TEST financial erasure is not enabled")
+            # Preserve the native registry -> identity/lifecycle lock order,
+            # including while a schema/producer update is waiting for coverage.
+            await session.execute(
+                text("SELECT public.account_lock_financial_inventory(:s,:at,NULL)"),
+                {"s": work.subject, "at": work.closed_at},
+            )
+            row = await self.owned(session, work)
+            receipt = await session.run_sync(
+                lambda sync: purge_test_finances(
+                    sync.connection(), work.subject, work.closed_at, limit=limit
+                )
+            )
+            old = row.effects.get("test_financial_erasure", {})
+            tables = dict(old.get("tables", {}))
+            for name, count in receipt["tables"].items():
+                tables[name] = tables.get(name, 0) + count
+            row.effects = {
+                **row.effects,
+                "test_financial_erasure": {
+                    "complete": receipt["complete"],
+                    "roots_complete": receipt["roots_complete"],
+                    "remaining": receipt["remaining"],
+                    "deleted": old.get("deleted", 0) + receipt["deleted"],
+                    "tables": tables,
+                },
+            }
+            return receipt
 
     async def erase_payer_risk(self, work, *, limit=100):
         """Fresh native risk-owner scan, never a whole-financial completion proof."""

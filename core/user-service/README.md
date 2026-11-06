@@ -205,3 +205,30 @@ Private account checks honor the canonical retirement marker even when a legacy
 account has no lifecycle root. Absence of that root cannot reopen authentication.
 Resubmission still requires explicit reconciliation and never mints a new empty
 inventory for an already-retired identity.
+
+### Private TEST retention
+
+A disposable TEST database may erase recent financial records during account
+closure without waiting for the production seven-year clock, financial holds or
+settlement. This makes no provider calls and preserves physical storage cleanup,
+original account ownership and fresh owner completion proofs. Production retains
+its existing financial guards.
+
+Install the new platform and payment migrations first. An administrator must
+explicitly configure the private, database/cluster-bound `account_test_data_policy`
+marker (see controlplane-db's TEST policy instructions). Configure the private
+worker with both `FASTAPI_ENV=test` and `ACCOUNT_CLOSURE_RETENTION=none`; startup
+rejects any disagreement with the protected database policy. Public requests,
+environment variables alone and PostgreSQL session settings cannot enable it.
+
+The ordinary role plan includes only read-only policy execution. A separately
+prepared TEST worker plan uses `--test-retention`; applying it requires the
+already enabled database marker and grants only the explicit native financial
+inventory and transaction-capability privileges. It does not grant policy-table
+access or mutation. Keep this role and its credentials out of public services.
+The worker deletes financial roots before anonymizing their original payer
+aliases, records committed counts with its claim and retries bounded batches.
+Live-provider/mainnet records, conflicting identities, unknown dependency owners
+and incomplete owner/storage acknowledgments remain pending. Native package
+qualification does not establish deployed TEST acceptance for #13. Runtime
+routing and mutation-authority acceptance under #41 remain separate.

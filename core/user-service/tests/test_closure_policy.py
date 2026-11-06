@@ -84,3 +84,33 @@ def test_financial_wait_holds_and_obligations_are_independent_of_personal_mode(
             preservation_hold=True,
             obligations_settled=False,
         )
+
+
+@pytest.mark.parametrize(
+    "hold,settled", [(True, False), (True, True), (False, False), (False, True)]
+)
+def test_verified_test_policy_has_no_financial_wait_hold_or_settlement_fence(
+    hold, settled
+):
+    assert (
+        financial_purge_due(
+            now=datetime(2026, 1, 1, tzinfo=UTC),
+            retain_until=datetime(2033, 1, 1, tzinfo=UTC),
+            preservation_hold=hold,
+            obligations_settled=settled,
+            test_data=True,
+        )
+        is True
+    )
+
+
+@pytest.mark.parametrize("invalid", [1, "true", None])
+def test_financial_policy_requires_a_boolean_trusted_mode(invalid):
+    with pytest.raises(ValueError, match="Explicit TEST"):
+        financial_purge_due(
+            now=datetime(2026, 1, 1, tzinfo=UTC),
+            retain_until=datetime(2033, 1, 1, tzinfo=UTC),
+            preservation_hold=True,
+            obligations_settled=False,
+            test_data=invalid,
+        )

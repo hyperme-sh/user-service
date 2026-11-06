@@ -1,0 +1,313 @@
+"""Actual worker/native database erasure in TEST; production retains its fences."""
+
+import hashlib
+import uuid
+from unittest.mock import AsyncMock
+
+import pytest
+from controlplane_db.models import User
+from sqlalchemy import text
+from test_closure_jobs import jobs as jobs  # noqa: PLC0414
+from test_closure_jobs import jobs_url as jobs_url  # noqa: PLC0414
+from test_closure_inventory import closed_person
+from user_service.closure_worker import ClosureWorker, WorkerUnavailable, check_database
+from user_service.models import AccountLifecycle
+
+
+@pytest.mark.parametrize(
+    "test_data,live_recipient", [(False, False), (True, False), (True, True)]
+)
+async def test_worker_deletes_recent_unsettled_test_finances_but_preserves_production(
+    jobs, monkeypatch, test_data, live_recipient
+):
+    store, _ = jobs
+    subject = str(uuid.uuid4())
+    payment = uuid.uuid4()
+    grant, host, attempt = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    account = "acct_Worker" + grant.hex
+    erasable = test_data and not live_recipient
+    key = hashlib.sha256(subject.encode()).hexdigest()
+    monkeypatch.setenv("FASTAPI_ENV", "test" if test_data else "production")
+    if test_data:
+        async with store.transaction() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO account_test_data_policy(singleton,database_oid,database_name,enabled) VALUES(true,(SELECT oid FROM pg_database WHERE datname=current_database()),current_database(),true)"
+                )
+            )
+    try:
+
+        async def seed(store, subject, tenant, user):
+            async with store.transaction(tenant) as session:
+                await session.execute(
+                    text("""INSERT INTO billing_records(id,tenant_id,scope,actor,user_id,payment_type,currency,amount,status,metadata)
+                  VALUES(:p,:t,'lease','user',:u,'card','usd',1234,'pending',jsonb_build_object('actor_sub',CAST(:s AS text),'unsettled_test_obligation',true))"""),
+                    {"p": payment, "t": tenant, "u": user, "s": subject},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO payer_mismatch_accounts(account_key,day) VALUES(:k,CURRENT_DATE)"
+                    ),
+                    {"k": hashlib.sha256(subject.encode()).hexdigest()},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO connect_recipient_accounts(tenant_id,host_org_id,livemode,live_approval_reference,attempt_id,attempted_at,legal_type,country,state,stripe_account_id,creation_status,initiated_by_sub) VALUES(:t,:h,:live,:approval,:a,now(),'individual','US','WA',:account,'bound',:initiator)"
+                    ),
+                    {
+                        "t": tenant,
+                        "h": host,
+                        "live": live_recipient,
+                        "approval": "fixture-live-approval" if live_recipient else None,
+                        "a": attempt,
+                        "account": account,
+                        "initiator": str(uuid.uuid4()),
+                    },
+                )
+                await session.execute(
+                    text(
+                        "UPDATE connect_access_states SET policy='embedded-api/v1',epoch=epoch+1 WHERE tenant_id=:t AND host_org_id=:h"
+                    ),
+                    {"t": tenant, "h": host},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO connect_access_grants(id,tenant_id,host_org_id,enrollment_attempt_id,platform_id,account_id,owner_sub,member_id,issuer_session,purpose,policy,policy_hash,epoch,parameters,idempotency_key,created_at) VALUES(:g,:t,:h,:a,'acct_TestPlatform',:account,:s,:member,:session,'view','embedded-api/v1',repeat('a',64),2,'{}'::jsonb,:key,now())"
+                    ),
+                    {
+                        "g": grant,
+                        "t": tenant,
+                        "h": host,
+                        "a": attempt,
+                        "account": account,
+                        "s": subject,
+                        "member": str(user),
+                        "session": str(grant),
+                        "key": str(grant),
+                    },
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO connect_access_results(grant_id,tenant_id,expires_at,observed_at,request_id,permissions) VALUES(:g,:t,now()+interval '1 hour',now(),'req_fixture','{}'::jsonb)"
+                    ),
+                    {"g": grant, "t": tenant},
+                )
+
+        monkeypatch.setenv("ACCOUNT_CLOSURE_RETENTION", "none")
+        work, tenant, user, _ = await closed_person(
+            store, records=0, before_request=seed
+        )
+        # closed_person chooses a fresh canonical account; derive test identities
+        # from that actual request rather than a caller-provided owner hint.
+        subject = work.subject
+        key = hashlib.sha256(subject.encode()).hexdigest()
+        async with store.transaction() as session:
+            row = await session.get(AccountLifecycle, subject)
+            row.financial_hold = True
+            row.hold_reference = "still-accepted-hold"
+            assert (
+                await session.scalar(
+                    text(
+                        "SELECT financial_retain_until>transaction_timestamp() FROM billing_records WHERE id=:p"
+                    ),
+                    {"p": payment},
+                )
+                is True
+            )
+            assert (
+                await session.scalar(
+                    text(
+                        "SELECT financial_retain_until>transaction_timestamp() FROM payer_mismatch_accounts WHERE account_key=:k"
+                    ),
+                    {"k": key},
+                )
+                is True
+            )
+        identity, owners = AsyncMock(), AsyncMock()
+        owners.purge_keys.return_value = {"deleted": 0, "remaining": 0}
+        owners.purge_models.return_value = {
+            "complete": True,
+            "more": False,
+            "next_after": None,
+            "revisions": 0,
+            "validations": 0,
+            "lease_targets": 0,
+            "completed_at": None,
+        }
+
+        async def identity_delete(target, **kwargs):
+            assert store.maker.kw["bind"].pool.checkedout() == 0
+            async with store.transaction() as session:
+                present = await session.scalar(
+                    text("SELECT count(*) FROM billing_records WHERE id=:p"),
+                    {"p": payment},
+                )
+                assert present == (0 if erasable else 1)
+
+        identity.delete.side_effect = identity_delete
+        claim = store.claim
+        monkeypatch.setattr(store, "claim", AsyncMock(return_value=work))
+        worker = ClosureWorker(store, identity, owners)
+        assert await worker.run_one()
+        # Advance only retry scheduling, never a retention/financial clock.
+        async with store.transaction() as session:
+            await session.execute(
+                text(
+                    "UPDATE account_lifecycles SET retry_at=transaction_timestamp() WHERE subject=:s"
+                ),
+                {"s": subject},
+            )
+        work = await claim(subject)
+        monkeypatch.setattr(store, "claim", AsyncMock(return_value=work))
+        assert await worker.run_one()
+        async with store.transaction() as session:
+            row = await session.get(AccountLifecycle, subject)
+            remaining = await session.scalar(
+                text("SELECT count(*) FROM billing_records WHERE id=:p"), {"p": payment}
+            )
+            risk = await session.scalar(
+                text(
+                    "SELECT count(*) FROM payer_mismatch_accounts WHERE account_key=:k"
+                ),
+                {"k": key},
+            )
+            assert remaining == risk == (0 if erasable else 1)
+            for table, column in (
+                ("connect_access_grants", "id"),
+                ("connect_access_results", "grant_id"),
+            ):
+                assert await session.scalar(
+                    text(f"SELECT count(*) FROM {table} WHERE {column}=:g"),
+                    {"g": grant},
+                ) == (0 if erasable else 1)
+            assert (
+                await session.scalar(
+                    text(
+                        "SELECT count(*) FROM connect_recipient_accounts WHERE host_org_id=:h"
+                    ),
+                    {"h": host},
+                )
+                == 1
+            )
+            if live_recipient:
+                identity.delete.assert_not_awaited()
+                assert (await session.get(User, user)).keycloak_sub == subject
+            assert (row.state == "deleted") is erasable
+            assert (row.financial_deleted_at is not None) is erasable
+            if erasable:
+                assert row.effects["test_financial_erasure"] == {
+                    "complete": True,
+                    "roots_complete": True,
+                    "remaining": 0,
+                    "deleted": 4,
+                    "tables": {
+                        "billing_records": 1,
+                        "payer_mismatch_accounts": 1,
+                        "connect_access_grants": 1,
+                        "connect_access_results": 1,
+                    },
+                }
+            else:
+                assert "test_financial_erasure" not in row.effects
+            assert (
+                row.financial_hold is True
+            )  # TEST ignores the fence; it does not forge its release.
+            assert (
+                await session.scalar(
+                    text("SELECT count(*) FROM account_test_delete_capabilities")
+                )
+                == 0
+            )
+    finally:
+        if test_data:
+            async with store.transaction() as session:
+                await session.execute(text("DELETE FROM account_test_data_policy"))
+
+
+@pytest.mark.parametrize("mode,registered", [("production", True), ("test", False)])
+async def test_worker_startup_refuses_environment_database_mode_mismatch(
+    jobs, monkeypatch, mode, registered
+):
+    store, _ = jobs
+    monkeypatch.setenv("FASTAPI_ENV", mode)
+    monkeypatch.setenv("ACCOUNT_CLOSURE_RETENTION", "none")
+    if registered:
+        async with store.transaction() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO account_test_data_policy(singleton,database_oid,database_name,enabled) VALUES(true,(SELECT oid FROM pg_database WHERE datname=current_database()),current_database(),true)"
+                )
+            )
+    try:
+        with pytest.raises(WorkerUnavailable):
+            await check_database(store.maker.kw["bind"])
+    finally:
+        if registered:
+            async with store.transaction() as session:
+                await session.execute(text("DELETE FROM account_test_data_policy"))
+
+
+async def test_test_erasure_waits_for_registry_before_locking_the_lifecycle(
+    jobs, monkeypatch
+):
+    import asyncio
+    import contextlib
+    from user_service.closure_inventory import FinancialInventory
+
+    store, _ = jobs
+    monkeypatch.setenv("FASTAPI_ENV", "test")
+    monkeypatch.setenv("ACCOUNT_CLOSURE_RETENTION", "none")
+    async with store.transaction() as session:
+        await session.execute(
+            text(
+                "INSERT INTO account_test_data_policy(singleton,database_oid,database_name,enabled) VALUES(true,(SELECT oid FROM pg_database WHERE datname=current_database()),current_database(),true)"
+            )
+        )
+    task = None
+    try:
+
+        async def seed_personal_payment(store, subject, tenant, user):
+            async with store.transaction(tenant) as session:
+                await session.execute(
+                    text(
+                        "INSERT INTO billing_records(id,tenant_id,scope,actor,user_id,payment_type,currency,amount,status,metadata) VALUES(:p,:t,'lease','user',:u,'card','usd',100,'pending',jsonb_build_object('actor_sub',CAST(:s AS text)))"
+                    ),
+                    {"p": uuid.uuid4(), "t": tenant, "u": user, "s": subject},
+                )
+
+        work, *_ = await closed_person(
+            store, records=0, before_request=seed_personal_payment
+        )
+        assert await FinancialInventory(store).prepare(work)
+        async with store.transaction() as producer_update:
+            await producer_update.execute(
+                text("LOCK TABLE account_financial_fence_versions IN EXCLUSIVE MODE")
+            )
+            task = asyncio.create_task(store.erase_test_finances(work, limit=1))
+            blocked = False
+            for _ in range(100):
+                blocked = await producer_update.scalar(
+                    text(
+                        "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='relation' AND relation='public.account_financial_fence_versions'::regclass AND database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND NOT granted)"
+                    )
+                )
+                if blocked:
+                    break
+                await asyncio.sleep(0.01)
+            assert blocked, "The actual erasure must be waiting for registry coverage"
+            # A producer/schema updater follows registry -> lifecycle order.
+            # It must not encounter a row lock held by the blocked erasure.
+            await producer_update.execute(
+                text(
+                    "SELECT 1 FROM account_lifecycles WHERE subject=:s FOR UPDATE NOWAIT"
+                ),
+                {"s": work.subject},
+            )
+        assert (await asyncio.wait_for(task, 5))["deleted"] == 1
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        async with store.transaction() as session:
+            await session.execute(text("DELETE FROM account_test_data_policy"))
