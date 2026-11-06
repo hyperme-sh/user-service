@@ -94,7 +94,7 @@ uv run --project core/user-service --frozen \
   python -m uvicorn user_service.password_reset_authority:create_app --factory --host 127.0.0.1 --port 8444
 ```
 
-That process needs `PASSWORD_RESET_OPERATIONS_TOKEN`, `PASSWORD_RESET_DATABASE_URL` (`postgresql+asyncpg`, `SELECT` on `public.users` and `public.tenants` only), `PASSWORD_RESET_KEYCLOAK_URL`, `PASSWORD_RESET_KEYCLOAK_REALM`, `PASSWORD_RESET_KEYCLOAK_CLIENT_ID=operator-password-reset`, and `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET`. Keycloak sends an `UPDATE_PASSWORD` action with a 600-second lifespan. The public app rejects startup if `PASSWORD_RESET_DATABASE_URL` or `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET` is set in its environment.
+That process needs `PASSWORD_RESET_OPERATIONS_TOKEN`, `PASSWORD_RESET_DATABASE_URL` (`postgresql+asyncpg`, `SELECT` on `public.users` and `public.tenants` only), `PASSWORD_RESET_KEYCLOAK_URL`, `PASSWORD_RESET_KEYCLOAK_REALM`, `PASSWORD_RESET_KEYCLOAK_CLIENT_ID=operator-password-reset`, and `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET`. `PASSWORD_RESET_DATABASE_CA` must name a readable CA certificate file for verified database TLS. The CA requirement is waived only when the database host is loopback and `FASTAPI_ENV` is explicitly `development` or `test`; a container-to-host address is not loopback. Keycloak sends an `UPDATE_PASSWORD` action with a 600-second lifespan. The public app rejects startup if `PASSWORD_RESET_DATABASE_URL` or `PASSWORD_RESET_KEYCLOAK_CLIENT_SECRET` is set in its environment.
 
 The closure worker is off unless both `ACCOUNT_CLOSURE_WORKER_ENABLED=true` and `ACCOUNT_CLOSURE_ENFORCEMENT_ENABLED=true`. It uses `ACCOUNT_CLOSURE_WORKER_DATABASE_URL`, not the public `DATABASE_URL`.
 
