@@ -1,11 +1,10 @@
-"""payment.succeeded.v1 → paid subscription + tenant.subscription_id."""
+"""payment.succeeded.v3 → paid subscription + tenant.subscription_id."""
 
 from __future__ import annotations
 
 from sqlalchemy import text
 
-from controlplane_api.event_types import PAYMENT_SUCCEEDED_V1
-from controlplane_api.config import settings
+from controlplane_api.event_types import PAYMENT_SUCCEEDED_V3
 from user_service.infrastructure.payment_owner import invoice_entitlement
 from api.core.container import container
 from api.domain.dtos.tenant_dto import UpdateTenantDto
@@ -16,13 +15,13 @@ from api.infrastructure.persistence.db_session import (
 )
 from api.usecases.subscription_plan_service import SubscriptionPlanService
 from api.usecases.tenant_service import TenantService
-from api.infrastructure.messaging.tenant_event_publisher import build_routing_consumer
+from controlplane_events.http_consumer import HttpRoutingConsumer
 from controlplane_events.payloads.payment_events import PaymentSucceededPayload
 
 USER_PAYMENT_GROUP = "user-service-controlplane-events"
 DEFAULT_PAID_PLAN_ID = "payment_succeeded"
 # USDC payments settle Hypermesh leases and marketplace listings. They share
-# payment.succeeded.v1 with subscription invoices but never buy the plan.
+# payment.succeeded.v3 with subscription invoices but never buy the plan.
 # USD stablecoin leases are excluded by the authoritative billing scope below.
 NON_PLAN_CURRENCIES = frozenset({"usdc"})
 
@@ -33,7 +32,7 @@ def grants_paid_plan(payload: PaymentSucceededPayload) -> bool:
 
 
 def build_payment_succeeded_consumer(database_url: str):
-    async def on_payment_succeeded(_envelope, payload: PaymentSucceededPayload) -> None:
+    async def on_payment_succeeded(_envelope, payload: PaymentSucceededPayload, event_id=None) -> None:
         if not grants_paid_plan(payload):
             return
         tid = payload.tenant_id
@@ -69,10 +68,7 @@ def build_payment_succeeded_consumer(database_url: str):
             finally:
                 reset_db_session(tok)
 
-    return build_routing_consumer(
-        database_url=database_url,
-        group_id=USER_PAYMENT_GROUP,
-        routes={PAYMENT_SUCCEEDED_V1: (PaymentSucceededPayload, on_payment_succeeded)},
-        client_id="user-service-payment-events",
-        service_bus_connection_string=settings.azure_service_bus_connection_string,
+    return HttpRoutingConsumer(
+        database_url,
+        {PAYMENT_SUCCEEDED_V3: (PaymentSucceededPayload, on_payment_succeeded)},
     )

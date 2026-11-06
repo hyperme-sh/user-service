@@ -146,7 +146,7 @@ def create_app(
     app.openapi = custom_openapi
 
     app.add_middleware(UserServiceDbMiddleware)
-    from user_service.infrastructure.event_http import consumer_router
+    from controlplane_events.http_consumer import consumer_router
     app.include_router(consumer_router(), prefix='/api/v1')
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)

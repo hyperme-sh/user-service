@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from controlplane_events.routing_consumer import dispatch_controlplane_envelope
+
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -79,7 +81,7 @@ async def test_payment_succeeded_runs_subscription_and_tenant_update(monkeypatch
 
     consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
     env = ControlPlaneEventEnvelope(
-        event_type="payment.succeeded.v1",
+        event_type="payment.succeeded.v3",
         service="payment-service",
         tenant_id=tid,
         payload=PaymentSucceededPayload(
@@ -88,11 +90,7 @@ async def test_payment_succeeded_runs_subscription_and_tenant_update(monkeypatch
             user_id=uid,
         ).to_envelope_payload(),
     )
-    await consumer.handle_message(
-        key=None,
-        value=env.model_dump_json().encode("utf-8"),
-        headers={},
-    )
+    await dispatch_controlplane_envelope(env.model_dump_json().encode('utf-8'), consumer.routes)
 
     sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once()
     tenant_svc.update_tenant.assert_awaited_once()
@@ -120,7 +118,7 @@ async def test_usdc_lease_payment_does_not_grant_a_subscription(monkeypatch, cur
     )
     consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
     env = ControlPlaneEventEnvelope(
-        event_type="payment.succeeded.v1",
+        event_type="payment.succeeded.v3",
         service="payment-service",
         tenant_id=tid,
         payload=PaymentSucceededPayload(
@@ -129,11 +127,7 @@ async def test_usdc_lease_payment_does_not_grant_a_subscription(monkeypatch, cur
             currency=currency,
         ).to_envelope_payload(),
     )
-    await consumer.handle_message(
-        key=None,
-        value=env.model_dump_json().encode("utf-8"),
-        headers={},
-    )
+    await dispatch_controlplane_envelope(env.model_dump_json().encode('utf-8'), consumer.routes)
     sub_svc.ensure_paid_plan_for_tenant.assert_not_awaited()
     tenant_svc.update_tenant.assert_not_awaited()
 
@@ -188,7 +182,7 @@ async def test_usd_events_require_an_owned_paid_invoice(monkeypatch, kind):
     )
     consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
     env = ControlPlaneEventEnvelope(
-        event_type="payment.succeeded.v1",
+        event_type="payment.succeeded.v3",
         service="payment-service",
         tenant_id=tenant_id,
         payload=PaymentSucceededPayload(
@@ -197,12 +191,10 @@ async def test_usd_events_require_an_owned_paid_invoice(monkeypatch, kind):
             user_id=uuid.uuid4(),
             currency="usd",
             amount_cents=2500,
-            stripe_payment_intent_id="pi_real",
+            processor_reference="opaque-reference",
         ).to_envelope_payload(),
     )
-    await consumer.handle_message(
-        key=None, value=env.model_dump_json().encode(), headers={}
-    )
+    await dispatch_controlplane_envelope(env.model_dump_json().encode(), consumer.routes)
     assert seen == {"tenant": tenant_id, "billing": billing_id}
     if kind == "invoice":
         sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once_with(
