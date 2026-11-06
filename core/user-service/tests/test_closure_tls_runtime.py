@@ -46,8 +46,11 @@ def certificates(tmp_path, monkeypatch):
     return cert_path, key_path
 
 
-async def test_real_tls_proxy_private_intake_and_denial_with_trust_failure(private, certificates, monkeypatch):
+@pytest.mark.parametrize("repository", ["ghcr.io/hyperme-sh/user-service",
+    "acrfybercg47.azurecr.io/user-service"])
+async def test_real_tls_proxy_private_intake_and_denial_with_trust_failure(private, certificates, monkeypatch, repository):
     _, private_app, subject, lookups, validated = private
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + "@sha256:" + "a" * 64)
     # The private fixture stubs native JWT validation and provider responses.
     # This replaces only its global HTTP factory so forwarding uses real TLS;
     # its already-open provider client remains an owned synthetic provider.
@@ -152,8 +155,21 @@ async def test_private_startup_failure_is_sanitized(monkeypatch):
             pytest.fail("unavailable authority started")
 
 
+@pytest.mark.parametrize("repository", ["ghcr.io/hyperme-sh/user-service",
+    "acrfybercg47.azurecr.io/user-service"])
+def test_private_runtime_accepts_deployment_owner_digest(monkeypatch, repository):
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + "@sha256:" + "a" * 64)
+    closure_runtime.check_image()
+
+
 @pytest.mark.parametrize("image", ["ghcr.io/fyberlabs/user-service@sha256:" + "a" * 64,
-    "ghcr.io/hyperme-sh/user-service:test", "ghcr.io/hyperme-sh/other@sha256:" + "a" * 64])
+    "ghcr.io/hyperme-sh/user-service:test", "ghcr.io/hyperme-sh/other@sha256:" + "a" * 64,
+    "acrfybercg47.azurecr.io/user-service:test",
+    "acrfybercg47.azurecr.io/other@sha256:" + "a" * 64,
+    "other.azurecr.io/user-service@sha256:" + "a" * 64,
+    "acrfybercg47.azurecr.io.evil.invalid/user-service@sha256:" + "a" * 64,
+    "acrfybercg47.azurecr.io/user-service@sha256:" + "A" * 64,
+    "acrfybercg47.azurecr.io/user-service@sha256:" + "a" * 63])
 def test_private_runtime_refuses_unqualified_owner_images(monkeypatch, image):
     monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", image)
     with pytest.raises(WorkerUnavailable):
