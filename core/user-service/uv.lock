@@ -212,7 +212,7 @@ wheels = [
 [[package]]
 name = "auth-service"
 version = "0.2.0"
-source = { git = "https://github.com/hyperme-sh/auth-service.git?rev=65e4662d69df07edfc21c323caaa60bfd7d31db2#65e4662d69df07edfc21c323caaa60bfd7d31db2" }
+source = { git = "https://github.com/hyperme-sh/auth-service.git?rev=b0b12fe228ff51c62d5e89ab2775c4313056136f#b0b12fe228ff51c62d5e89ab2775c4313056136f" }
 dependencies = [
     { name = "bcrypt" },
     { name = "controlplane-api" },
@@ -858,7 +858,7 @@ dependencies = [
 [[package]]
 name = "controlplane-core"
 version = "0.1.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-core.git?rev=ebcbd5b9a223f49777a25bd82647e5f1f85ca9de#ebcbd5b9a223f49777a25bd82647e5f1f85ca9de" }
+source = { git = "https://github.com/hyperme-sh/controlplane-core.git?rev=722940a54fc874f737a582bbe4d1be7bd5591ef4#722940a54fc874f737a582bbe4d1be7bd5591ef4" }
 dependencies = [
     { name = "azure-storage-blob" },
     { name = "boto3" },
@@ -900,7 +900,7 @@ dependencies = [
 [[package]]
 name = "controlplane-db"
 version = "0.1.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-db.git?rev=2675cb69ccfe3f1faf2b6a1ec1693e2c06d02a63#2675cb69ccfe3f1faf2b6a1ec1693e2c06d02a63" }
+source = { git = "https://github.com/hyperme-sh/controlplane-db.git?rev=16caf89d0b76d7c7e998cf41e3c03d053aa32d43#16caf89d0b76d7c7e998cf41e3c03d053aa32d43" }
 dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
@@ -938,7 +938,7 @@ dependencies = [
 [[package]]
 name = "controlplane-tenancy"
 version = "0.14.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-tenancy.git?rev=b680b13a969b82c5120d1b7457889aa694882e8c#b680b13a969b82c5120d1b7457889aa694882e8c" }
+source = { git = "https://github.com/hyperme-sh/controlplane-tenancy.git?rev=4479586727125ea29a7fefbe646c780e9e953d45#4479586727125ea29a7fefbe646c780e9e953d45" }
 dependencies = [
     { name = "controlplane-db" },
     { name = "sqlalchemy" },
@@ -4155,13 +4155,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "auth-service", git = "https://github.com/hyperme-sh/auth-service.git?rev=65e4662d69df07edfc21c323caaa60bfd7d31db2" },
+    { name = "auth-service", git = "https://github.com/hyperme-sh/auth-service.git?rev=b0b12fe228ff51c62d5e89ab2775c4313056136f" },
     { name = "controlplane-api", git = "https://github.com/hyperme-sh/controlplane-api.git?rev=732256a5207ee502d7bf70cb171cf2eea1803b87" },
-    { name = "controlplane-core", git = "https://github.com/hyperme-sh/controlplane-core.git?rev=ebcbd5b9a223f49777a25bd82647e5f1f85ca9de" },
-    { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=2675cb69ccfe3f1faf2b6a1ec1693e2c06d02a63" },
+    { name = "controlplane-core", git = "https://github.com/hyperme-sh/controlplane-core.git?rev=722940a54fc874f737a582bbe4d1be7bd5591ef4" },
+    { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=16caf89d0b76d7c7e998cf41e3c03d053aa32d43" },
     { name = "controlplane-events", git = "https://github.com/hyperme-sh/controlplane-events.git?rev=2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87" },
     { name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=5aeff3d2c00568f39ca6e8b75c7e63883d3a510b" },
-    { name = "controlplane-tenancy", git = "https://github.com/hyperme-sh/controlplane-tenancy.git?rev=b680b13a969b82c5120d1b7457889aa694882e8c" },
+    { name = "controlplane-tenancy", git = "https://github.com/hyperme-sh/controlplane-tenancy.git?rev=4479586727125ea29a7fefbe646c780e9e953d45" },
     { name = "fastapi", specifier = ">=0.135.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.12.0" },
