@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import historical_db_fixture  # noqa: F401; verified private historical migrations
+
 import os
 import uuid
 from collections import namedtuple

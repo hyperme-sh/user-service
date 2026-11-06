@@ -541,7 +541,7 @@ class ClosureJobs:
             return await database_test_data(session)
 
     async def erase_test_finances(self, work, *, limit=100):
-        from controlplane_db.test_retention import purge_test_finances
+        from user_service.financial_test_cleanup import purge_test_finances
         from user_service.test_retention import database_test_data
 
         async with self.transaction() as session:

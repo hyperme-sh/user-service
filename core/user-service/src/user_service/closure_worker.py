@@ -101,7 +101,7 @@ async def check_database(engine):
                         "SELECT has_table_privilege(current_user,'public.account_test_delete_capabilities','SELECT,INSERT,UPDATE,DELETE,TRUNCATE') OR has_any_column_privilege(current_user,'public.account_test_delete_capabilities','SELECT,INSERT,UPDATE,REFERENCES')"
                     )) is not False:
                         raise ValueError("Direct TEST capability access is forbidden")
-                    from controlplane_db.test_retention import financial_tables
+                    from user_service.financial_test_cleanup import financial_tables
 
                     if (
                         await connection.scalar(

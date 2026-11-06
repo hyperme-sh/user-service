@@ -9,14 +9,14 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
-    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@732256a5207ee502d7bf70cb171cf2eea1803b87",
-    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@caecac419b4860b5f51499123e9d4c2425023fbe",
-    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@1e93fbede80a11fed365ed827a05e900b3916880",
-    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@a0583880f526efceb18d7d04dce6c6527a6b6550",
+    "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@0813448d067d59a0cc8fa2d144d85ddfde465af4",
+    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@455077b61ba595af48253d95075fa88ecbd8c914",
+    "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@d5e658e1a139b58718a1dc1a5a532efd63d4f01c",
+    "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@907b9390b3d68aa67903ffec849e9f1d64c17f1f",
     "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@5aeff3d2c00568f39ca6e8b75c7e63883d3a510b",
-    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@df20c32d575c49a6e9016b91479dfd75083db7a6",
-    "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87",
-    "spanopticon-models @ git+https://github.com/hyperme-sh/controlplane-models.git@9a9bbb20c2e0cd41febf3233ce7a48fe17a84b04",
+    "controlplane-tenancy @ git+https://github.com/hyperme-sh/controlplane-tenancy.git@c1f37025a93c8b4e38699a42665ce380a66a54fd",
+    "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@8f16587d105f7352891a1d9d77ec8305bbf5cd29",
+    "spanopticon-models @ git+https://github.com/hyperme-sh/controlplane-models.git@dd806a74b6ec423be8209e67803106ee47adc23b",
     "fastapi>=0.135.0",
     "httpx>=0.28.1",
     "pydantic>=2.12.0",
@@ -38,6 +38,8 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/user_service"]
+# Schema provisioning is an explicit image-local owner bundle.
+exclude = ["src/user_service/migrations/**", "src/user_service/migrate.py"]
 
 [tool.hatch.build.targets.sdist]
 include = ["/LICENSE", "/tests_artifacts", "/tests_tools", "/src", "/tests", "/scripts", "/examples", "/pyproject.toml", "/uv.lock"]
