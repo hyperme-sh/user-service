@@ -93,31 +93,16 @@ async def check_database(engine):
                     )
                 )
                 if superuser is not True:
-                    for privilege in (
-                        "SELECT",
-                        "INSERT",
-                        "UPDATE",
-                        "DELETE",
-                        "TRUNCATE",
-                    ):
-                        if (
-                            await connection.scalar(
-                                text(
-                                    "SELECT has_table_privilege(current_user,'public.account_test_delete_capabilities',:privilege)"
-                                ),
-                                {"privilege": privilege},
-                            )
-                            is not False
-                        ):
-                            raise ValueError(
-                                "Direct TEST capability access is forbidden"
-                            )
+                    if await connection.scalar(text(
+                        "SELECT has_table_privilege(current_user,'public.account_test_delete_capabilities','SELECT,INSERT,UPDATE,DELETE,TRUNCATE') OR has_any_column_privilege(current_user,'public.account_test_delete_capabilities','SELECT,INSERT,UPDATE,REFERENCES')"
+                    )) is not False:
+                        raise ValueError("Direct TEST capability access is forbidden")
                     from controlplane_db.test_retention import financial_tables
 
                     if (
                         await connection.scalar(
                             text(
-                                "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY(CAST(:names AS text[])) AND has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE'))"
+                                "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY(CAST(:names AS text[])) AND (has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE') OR has_any_column_privilege(current_user,c.oid,'INSERT,UPDATE')))"
                             ),
                             {
                                 "names": [

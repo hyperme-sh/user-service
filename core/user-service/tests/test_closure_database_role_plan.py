@@ -183,6 +183,12 @@ async def test_private_role_plan_closes_real_profile_without_source_dml(
                 ("SELECT", "account_test_delete_capabilities"),
                 ("DELETE", "billing_records"),
                 ("DELETE", "account_financial_source_bindings"),
+                ("SELECT(row_digest)", "account_test_delete_capabilities"),
+                ("INSERT(row_digest)", "account_test_delete_capabilities"),
+                ("UPDATE(row_digest)", "account_test_delete_capabilities"),
+                ("UPDATE(livemode)", "connect_recipient_accounts"),
+                ("INSERT(amount)", "billing_records"),
+                ("UPDATE(resource)", "account_financial_source_bindings"),
             ):
                 async with store.transaction() as session:
                     await session.execute(text(f"GRANT {privilege} ON public.{table} TO {role}"))
