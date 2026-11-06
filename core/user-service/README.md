@@ -146,8 +146,11 @@ this change. Public application CRUD grants remain owned by its deployment.
 `compose.account-closure.yaml` is an explicit opt-in overlay with an
 `account-closure` profile. It is not included by the default VM wrapper. It
 prepares separate authority and polling containers using the same reviewed
-`ghcr.io/hyperme-sh/user-service@sha256:...` image. The runtime entrypoint rejects
-a tag or a missing digest. Both containers run as UID/GID 65532 with a read-only
+`ghcr.io/hyperme-sh/user-service@sha256:...` or the existing deployment registry's
+`acrfybercg47.azurecr.io/user-service@sha256:...` image. The runtime entrypoint
+requires an exact owner repository and a lowercase SHA256 digest; tags and other
+registries/repositories are rejected. Deployments must verify the selected image's
+reviewed source and artifact provenance. Both containers run as UID/GID 65532 with a read-only
 filesystem, no capabilities, no privilege escalation and bounded memory/PIDs.
 They publish no host port. The authority waits for healthy PostgreSQL and
 successful migrations; the worker waits for authenticated TLS readiness, which
