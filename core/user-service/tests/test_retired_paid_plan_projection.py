@@ -20,6 +20,7 @@ from test_closure_jobs import jobs as jobs  # noqa: PLC0414
 from test_closure_jobs import jobs_url as jobs_url  # noqa: PLC0414
 from user_service.closure_inventory import FinancialInventory
 from user_service.infrastructure import payment_succeeded_consumer as target
+from user_service.infrastructure.payment_owner import InvoiceEntitlement
 
 
 @pytest.mark.parametrize('existing', [False, True])
@@ -52,7 +53,14 @@ async def test_paid_projection_after_real_profile_purge_preserves_company_and_fi
     repository.add_audit_log = AsyncMock()
     subscription = SubscriptionPlanService(repository)
     tenant_service = TenantService(TenantRepository())
+    async def entitlement(tenant_id, billing_id):
+        assert tenant_id == tenant and billing_id == records[0]
+        # The erased creator stays on the preserved invoice. Payment authority
+        # does not hand that historical reference back as a live customer.
+        return InvoiceEntitlement(eligible=True, user_id=None)
+
     monkeypatch.setattr(target, 'get_session_maker', lambda: store.maker)
+    monkeypatch.setattr(target, 'invoice_entitlement', entitlement)
     monkeypatch.setattr(target, 'container', MagicMock(resolve=lambda cls: subscription if cls is SubscriptionPlanService else tenant_service))
     consumer = target.build_payment_succeeded_consumer('postgresql://localhost/unused')
     envelope = ControlPlaneEventEnvelope(event_type='payment.succeeded.v1', service='payment-service', tenant_id=tenant,
