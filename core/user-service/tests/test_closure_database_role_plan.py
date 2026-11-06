@@ -199,6 +199,18 @@ async def test_private_role_plan_closes_real_profile_without_source_dml(
                     async with store.transaction() as session:
                         await session.execute(text(f"REVOKE {privilege} ON public.{table} FROM {role}"))
                 await check_database(engine)
+            async with store.transaction() as session:
+                definition=await session.scalar(text("SELECT pg_get_functiondef('public.account_test_stripe_metadata(jsonb)'::regprocedure)"))
+                await session.execute(text('DROP FUNCTION public.account_test_stripe_metadata(jsonb)'))
+            try:
+                with pytest.raises(WorkerUnavailable):
+                    await check_database(engine)
+            finally:
+                async with store.transaction() as session:
+                    connection=await session.connection()
+                    await connection.exec_driver_sql(definition,execution_options={"no_parameters":True})
+                    await session.execute(text('REVOKE ALL ON FUNCTION public.account_test_stripe_metadata(jsonb) FROM PUBLIC'))
+            await check_database(engine)
     finally:
         await engine.dispose()
         async with store.transaction() as session:

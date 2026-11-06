@@ -69,6 +69,10 @@ async def check_database(engine):
         try:
             test_data = await database_test_data(connection)
             if test_data:
+                if await connection.scalar(text(
+                    "SELECT to_regprocedure('public.account_test_stripe_metadata(jsonb)') IS NOT NULL"
+                )) is not True:
+                    raise ValueError("Current private TEST provenance authority unavailable")
                 for signature in (
                     "public.account_lock_test_data_policy()",
                     "public.account_lock_test_financial_sources(text,timestamptz)",
