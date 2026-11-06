@@ -14,13 +14,18 @@ from user_service.closure_worker import ClosureWorker, WorkerUnavailable, check_
 from user_service.models import AccountLifecycle
 
 
-@pytest.mark.parametrize("test_data", [False, True])
+@pytest.mark.parametrize(
+    "test_data,live_recipient", [(False, False), (True, False), (True, True)]
+)
 async def test_worker_deletes_recent_unsettled_test_finances_but_preserves_production(
-    jobs, monkeypatch, test_data
+    jobs, monkeypatch, test_data, live_recipient
 ):
     store, _ = jobs
     subject = str(uuid.uuid4())
     payment = uuid.uuid4()
+    grant, host, attempt = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    account = "acct_Worker" + grant.hex
+    erasable = test_data and not live_recipient
     key = hashlib.sha256(subject.encode()).hexdigest()
     monkeypatch.setenv("FASTAPI_ENV", "test" if test_data else "production")
     if test_data:
@@ -44,6 +49,48 @@ async def test_worker_deletes_recent_unsettled_test_finances_but_preserves_produ
                         "INSERT INTO payer_mismatch_accounts(account_key,day) VALUES(:k,CURRENT_DATE)"
                     ),
                     {"k": hashlib.sha256(subject.encode()).hexdigest()},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO connect_recipient_accounts(tenant_id,host_org_id,livemode,live_approval_reference,attempt_id,attempted_at,legal_type,country,state,stripe_account_id,creation_status,initiated_by_sub) VALUES(:t,:h,:live,:approval,:a,now(),'individual','US','WA',:account,'bound',:initiator)"
+                    ),
+                    {
+                        "t": tenant,
+                        "h": host,
+                        "live": live_recipient,
+                        "approval": "fixture-live-approval" if live_recipient else None,
+                        "a": attempt,
+                        "account": account,
+                        "initiator": str(uuid.uuid4()),
+                    },
+                )
+                await session.execute(
+                    text(
+                        "UPDATE connect_access_states SET policy='embedded-api/v1',epoch=epoch+1 WHERE tenant_id=:t AND host_org_id=:h"
+                    ),
+                    {"t": tenant, "h": host},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO connect_access_grants(id,tenant_id,host_org_id,enrollment_attempt_id,platform_id,account_id,owner_sub,member_id,issuer_session,purpose,policy,policy_hash,epoch,parameters,idempotency_key,created_at) VALUES(:g,:t,:h,:a,'acct_TestPlatform',:account,:s,:member,:session,'view','embedded-api/v1',repeat('a',64),2,'{}'::jsonb,:key,now())"
+                    ),
+                    {
+                        "g": grant,
+                        "t": tenant,
+                        "h": host,
+                        "a": attempt,
+                        "account": account,
+                        "s": subject,
+                        "member": str(user),
+                        "session": str(grant),
+                        "key": str(grant),
+                    },
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO connect_access_results(grant_id,tenant_id,expires_at,observed_at,request_id,permissions) VALUES(:g,:t,now()+interval '1 hour',now(),'req_fixture','{}'::jsonb)"
+                    ),
+                    {"g": grant, "t": tenant},
                 )
 
         monkeypatch.setenv("ACCOUNT_CLOSURE_RETENTION", "none")
@@ -95,7 +142,7 @@ async def test_worker_deletes_recent_unsettled_test_finances_but_preserves_produ
                     text("SELECT count(*) FROM billing_records WHERE id=:p"),
                     {"p": payment},
                 )
-                assert present == (0 if test_data else 1)
+                assert present == (0 if erasable else 1)
 
         identity.delete.side_effect = identity_delete
         claim = store.claim
@@ -124,16 +171,41 @@ async def test_worker_deletes_recent_unsettled_test_finances_but_preserves_produ
                 ),
                 {"k": key},
             )
-            assert remaining == risk == (0 if test_data else 1)
-            assert (row.state == "deleted") is test_data
-            assert (row.financial_deleted_at is not None) is test_data
-            if test_data:
+            assert remaining == risk == (0 if erasable else 1)
+            for table, column in (
+                ("connect_access_grants", "id"),
+                ("connect_access_results", "grant_id"),
+            ):
+                assert await session.scalar(
+                    text(f"SELECT count(*) FROM {table} WHERE {column}=:g"),
+                    {"g": grant},
+                ) == (0 if erasable else 1)
+            assert (
+                await session.scalar(
+                    text(
+                        "SELECT count(*) FROM connect_recipient_accounts WHERE host_org_id=:h"
+                    ),
+                    {"h": host},
+                )
+                == 1
+            )
+            if live_recipient:
+                identity.delete.assert_not_awaited()
+                assert (await session.get(User, user)).keycloak_sub == subject
+            assert (row.state == "deleted") is erasable
+            assert (row.financial_deleted_at is not None) is erasable
+            if erasable:
                 assert row.effects["test_financial_erasure"] == {
                     "complete": True,
                     "roots_complete": True,
                     "remaining": 0,
-                    "deleted": 2,
-                    "tables": {"billing_records": 1, "payer_mismatch_accounts": 1},
+                    "deleted": 4,
+                    "tables": {
+                        "billing_records": 1,
+                        "payer_mismatch_accounts": 1,
+                        "connect_access_grants": 1,
+                        "connect_access_results": 1,
+                    },
                 }
             else:
                 assert "test_financial_erasure" not in row.effects
