@@ -223,9 +223,13 @@ environment variables alone and PostgreSQL session settings cannot enable it.
 
 The ordinary role plan includes only read-only policy execution. A separately
 prepared TEST worker plan uses `--test-retention`; applying it requires the
-already enabled database marker and grants only the explicit native financial
-inventory and transaction-capability privileges. It does not grant policy-table
-access or mutation. Keep this role and its credentials out of public services.
+already enabled database marker. It grants read-only financial discovery and
+execution of private database-owned deletion routines. The coordinator cannot
+write financial sources or source bindings, read or mint deletion capabilities,
+or access the policy table. The owner routines repeat original payer scope,
+sandbox ancestry and dependency checks using actual locked rows. Startup rejects
+stale direct financial or capability privileges. Keep this role and its
+credentials out of public services.
 The worker deletes financial roots before anonymizing their original payer
 aliases, records committed counts with its claim and retries bounded batches.
 Live-provider/mainnet records, conflicting identities, unknown dependency owners

@@ -71,7 +71,11 @@ async def check_database(engine):
             if test_data:
                 for signature in (
                     "public.account_lock_test_data_policy()",
-                    "public.account_test_row_delete_allowed(oid,jsonb)",
+                    "public.account_lock_test_financial_sources(text,timestamptz)",
+                    "public.account_stage_test_delete(text,timestamptz,oid,text,oid,text)",
+                    "public.account_delete_test_financial_row(text,timestamptz,oid,text)",
+                    "public.account_clear_test_delete_capabilities()",
+                    "public.account_reconcile_test_financial_bindings(text,timestamptz)",
                 ):
                     if (
                         await connection.scalar(
@@ -82,20 +86,49 @@ async def check_database(engine):
                         )
                         is not True
                     ):
-                        raise ValueError("Private TEST delete authority unavailable")
-                for privilege in ("SELECT", "INSERT", "DELETE"):
+                        raise ValueError("Private TEST owner authority unavailable")
+                superuser = await connection.scalar(
+                    text(
+                        "SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=current_user"
+                    )
+                )
+                if superuser is not True:
+                    for privilege in (
+                        "SELECT",
+                        "INSERT",
+                        "UPDATE",
+                        "DELETE",
+                        "TRUNCATE",
+                    ):
+                        if (
+                            await connection.scalar(
+                                text(
+                                    "SELECT has_table_privilege(current_user,'public.account_test_delete_capabilities',:privilege)"
+                                ),
+                                {"privilege": privilege},
+                            )
+                            is not False
+                        ):
+                            raise ValueError(
+                                "Direct TEST capability access is forbidden"
+                            )
+                    from controlplane_db.test_retention import financial_tables
+
                     if (
                         await connection.scalar(
                             text(
-                                "SELECT has_table_privilege(current_user,'public.account_test_delete_capabilities',:privilege)"
+                                "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY(CAST(:names AS text[])) AND has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE'))"
                             ),
-                            {"privilege": privilege},
+                            {
+                                "names": [
+                                    *financial_tables(),
+                                    "account_financial_source_bindings",
+                                ]
+                            },
                         )
-                        is not True
+                        is not False
                     ):
-                        raise ValueError(
-                            "Private TEST capability authority unavailable"
-                        )
+                        raise ValueError("Direct TEST financial writes are forbidden")
         except ValueError:
             raise WorkerUnavailable() from None
         # Installed producer coverage is mandatory even when there are no roots.
@@ -175,7 +208,9 @@ class ClosureWorker:
             with contextlib.suppress(ClosureClaimLost, DBAPIError):
                 await self.jobs.release(work, error="owner_unavailable")
             raise
-        except Exception:  # noqa: BLE001 - sanitize private job failures without exposing payloads
+        except (
+            Exception
+        ):  # noqa: BLE001 - sanitize private job failures without exposing payloads
             operation.cancel()
             await asyncio.gather(operation, return_exceptions=True)
             with contextlib.suppress(ClosureClaimLost):
@@ -259,7 +294,9 @@ def main():
         asyncio.run(run_command(max_jobs=args.max_jobs))
     except (KeyboardInterrupt, asyncio.CancelledError):
         return 130
-    except Exception:  # noqa: BLE001 - sanitize private job failures without exposing payloads
+    except (
+        Exception
+    ):  # noqa: BLE001 - sanitize private job failures without exposing payloads
         # No DSNs, provider bodies, subjects or exception traces on stdout/stderr.
         print("Account closure worker unavailable", file=sys.stderr)
         return 1
