@@ -26,10 +26,9 @@ operator permission gates and asynchronous route offloading are preserved.
 The read-only [operator-ban contract](contracts/README.md), wire payloads and
 database ownership are unchanged.
 
-This adopts the reviewed service repair from
-[hyperme-sh/user-service PR #1](https://github.com/hyperme-sh/user-service/pull/1)
-at `7954b2f9d3c7737526a059f0e27bebef982e4df6`, tracked in
-[(s)panopticon #656](https://github.com/FyberLabs/panopticon/issues/656).
+This adopts the service repair from
+[hyperme-sh/user-service#1](https://github.com/hyperme-sh/user-service/pull/1)
+at `7954b2f9d3c7737526a059f0e27bebef982e4df6`.
 Disposable PostgreSQL regressions cover empty process state, independent
 sessions, tenant denial, rollback, repeated lifts, duplicate bans and re-bans.
 These checks do not establish deployed acceptance or lift any real host/user ban.
