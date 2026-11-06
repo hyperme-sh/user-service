@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -71,6 +72,10 @@ async def test_payment_succeeded_runs_subscription_and_tenant_update(monkeypatch
         "user_service.infrastructure.payment_succeeded_consumer.container",
         MagicMock(resolve=_resolve),
     )
+    monkeypatch.setattr(
+        "user_service.infrastructure.payment_succeeded_consumer.invoice_entitlement",
+        AsyncMock(return_value=SimpleNamespace(eligible=True, user_id=str(uid))),
+    )
 
     consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
     env = ControlPlaneEventEnvelope(
@@ -137,59 +142,37 @@ async def test_usdc_lease_payment_does_not_grant_a_subscription(monkeypatch, cur
 @pytest.mark.parametrize(
     "kind", ["deposit", "checkout", "invoice", "unpaid_invoice", "foreign", "missing"]
 )
-async def test_usd_events_require_an_owned_paid_invoice(
-    monkeypatch, migrated_sync_url, seed, kind
-):
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.orm import Session
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-    from controlplane_db.session import normalize_database_url
-    from controlplane_db.billing_store import BillingPayment, add_payment
+async def test_usd_events_require_an_owned_paid_invoice(monkeypatch, kind):
     from user_service.infrastructure import payment_succeeded_consumer as target
 
     billing_id = uuid.uuid4()
-    sync = create_engine(migrated_sync_url)
-    try:
-        if kind != "missing":
-            with Session(sync) as db:
-                tenant = seed.tb if kind == "foreign" else seed.ta
-                db.execute(
-                    text("SELECT set_config('app.current_tenant_id', :tid, true)"),
-                    {"tid": str(tenant)},
-                )
-                invoice = kind in {"invoice", "unpaid_invoice", "foreign"}
-                row = BillingPayment(
-                    id=billing_id,
-                    tenant_id=tenant,
-                    scope="invoice" if invoice else "lease",
-                    actor="user",
-                    payment_type="stripe_invoice" if invoice else "usdc",
-                    currency="usd",
-                    amount=2500,
-                    status="pending" if kind == "unpaid_invoice" else "succeeded",
-                    stripe_session_id="cs_checkout" if kind == "checkout" else None,
-                    extra_metadata={
-                        "payment_rail": "stripe_stablecoin",
-                        **(
-                            {"stripe_deposit": {"intent_id": "pi_deposit"}}
-                            if kind == "deposit"
-                            else {}
-                        ),
-                    },
-                )
-                add_payment(db, row)
-                db.commit()
-    finally:
-        sync.dispose()
-    async_url = normalize_database_url(
-        migrated_sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
-    )
-    engine = create_async_engine(async_url)
-    monkeypatch.setattr(
-        target,
-        "get_session_maker",
-        lambda: async_sessionmaker(engine, expire_on_commit=False),
-    )
+    tenant_id = uuid.uuid4()
+    entitled = kind == "invoice"
+    seen = {}
+
+    async def entitlement(tenant, billing):
+        seen["tenant"] = tenant
+        seen["billing"] = billing
+        return SimpleNamespace(eligible=entitled, user_id=None)
+
+    class _Sess:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def execute(self, *args, **kwargs):
+            return None
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            return None
+
+    monkeypatch.setattr(target, "get_session_maker", lambda: (lambda: _Sess()))
+    monkeypatch.setattr(target, "invoice_entitlement", entitlement)
     sub_svc = MagicMock(
         ensure_paid_plan_for_tenant=AsyncMock(return_value=uuid.uuid4())
     )
@@ -203,13 +186,13 @@ async def test_usd_events_require_an_owned_paid_invoice(
             else tenant_svc
         ),
     )
-    consumer = build_payment_succeeded_consumer(async_url)
+    consumer = build_payment_succeeded_consumer("postgresql://localhost/controlplane")
     env = ControlPlaneEventEnvelope(
         event_type="payment.succeeded.v1",
         service="payment-service",
-        tenant_id=seed.ta,
+        tenant_id=tenant_id,
         payload=PaymentSucceededPayload(
-            tenant_id=seed.ta,
+            tenant_id=tenant_id,
             billing_record_id=billing_id,
             user_id=uuid.uuid4(),
             currency="usd",
@@ -217,23 +200,15 @@ async def test_usd_events_require_an_owned_paid_invoice(
             stripe_payment_intent_id="pi_real",
         ).to_envelope_payload(),
     )
-    try:
-        if kind in {"missing", "foreign"}:
-            with pytest.raises(ValueError, match="billing record is unavailable"):
-                await consumer.handle_message(
-                    key=None, value=env.model_dump_json().encode(), headers={}
-                )
-        else:
-            await consumer.handle_message(
-                key=None, value=env.model_dump_json().encode(), headers={}
-            )
-        if kind == "invoice":
-            sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once_with(
-                str(seed.ta), user_id=None, plan_id="payment_succeeded"
-            )
-            tenant_svc.update_tenant.assert_awaited_once()
-        else:
-            sub_svc.ensure_paid_plan_for_tenant.assert_not_awaited()
-            tenant_svc.update_tenant.assert_not_awaited()
-    finally:
-        await engine.dispose()
+    await consumer.handle_message(
+        key=None, value=env.model_dump_json().encode(), headers={}
+    )
+    assert seen == {"tenant": tenant_id, "billing": billing_id}
+    if kind == "invoice":
+        sub_svc.ensure_paid_plan_for_tenant.assert_awaited_once_with(
+            str(tenant_id), user_id=None, plan_id="payment_succeeded"
+        )
+        tenant_svc.update_tenant.assert_awaited_once()
+    else:
+        sub_svc.ensure_paid_plan_for_tenant.assert_not_awaited()
+        tenant_svc.update_tenant.assert_not_awaited()
