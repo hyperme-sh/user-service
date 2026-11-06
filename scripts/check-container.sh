@@ -28,3 +28,12 @@ assert not any(name in os.environ for name in ("DEPENDENCY_READ_TOKEN", "ACCOUNT
 assert os.geteuid() == 65532
 '
 uv run --project core/user-service --frozen --no-sync python scripts/check-container.py "$image" "$build_sha"
+
+# Preserve the exact runtime only after all container qualification succeeds.
+# Infra imports these bytes into ACR; it must never rebuild a release candidate.
+if [[ -n "${TESTED_IMAGE_DIR:-}" ]]; then
+  mkdir -p "$TESTED_IMAGE_DIR"
+  docker save "$image" -o "$TESTED_IMAGE_DIR/image.tar"
+  printf '%s\n' "$image" > "$TESTED_IMAGE_DIR/image.ref"
+  sha256sum "$TESTED_IMAGE_DIR/image.tar" | cut -d ' ' -f 1 > "$TESTED_IMAGE_DIR/image.sha256"
+fi

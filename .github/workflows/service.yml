@@ -75,7 +75,9 @@ jobs:
         run: |
           unset DEPENDENCY_READ_TOKEN DEPENDENCY_READ_TOKEN_FILE
           export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-          bash scripts/check-container.sh
+          image_dir=$(mktemp -d "$RUNNER_TEMP/tested-image.XXXXXX")
+          echo "TESTED_IMAGE_DIR=$image_dir" >> "$GITHUB_ENV"
+          TESTED_IMAGE_DIR="$image_dir" bash scripts/check-container.sh
       - name: Bind both validated owner wheels
         run: |
           uv run --project core/user-service --frozen pytest -q tests_tools
@@ -87,6 +89,19 @@ jobs:
             python3 scripts/verify_release_candidate.py "$qualified_manifest" "$exported/contract/contract.json" "$exported/contract/evidence.json" user-service
           fi
           done
+      - name: Retain qualified runtime for ACR test delivery
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-runtime-image
+          path: ${{ env.TESTED_IMAGE_DIR }}/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Remove job-owned runtime archive
+        if: always()
+        run: |
+          if [[ -n "${TESTED_IMAGE_DIR:-}" ]]; then rm -rf -- "$TESTED_IMAGE_DIR"; fi
       - name: Retain validated owner artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
