@@ -173,3 +173,69 @@ async def test_worker_startup_refuses_environment_database_mode_mismatch(
         if registered:
             async with store.transaction() as session:
                 await session.execute(text("DELETE FROM account_test_data_policy"))
+
+
+async def test_test_erasure_waits_for_registry_before_locking_the_lifecycle(
+    jobs, monkeypatch
+):
+    import asyncio
+    import contextlib
+    from user_service.closure_inventory import FinancialInventory
+
+    store, _ = jobs
+    monkeypatch.setenv("FASTAPI_ENV", "test")
+    monkeypatch.setenv("ACCOUNT_CLOSURE_RETENTION", "none")
+    async with store.transaction() as session:
+        await session.execute(
+            text(
+                "INSERT INTO account_test_data_policy(singleton,database_oid,database_name,enabled) VALUES(true,(SELECT oid FROM pg_database WHERE datname=current_database()),current_database(),true)"
+            )
+        )
+    task = None
+    try:
+
+        async def seed_personal_payment(store, subject, tenant, user):
+            async with store.transaction(tenant) as session:
+                await session.execute(
+                    text(
+                        "INSERT INTO billing_records(id,tenant_id,scope,actor,user_id,payment_type,currency,amount,status,metadata) VALUES(:p,:t,'lease','user',:u,'card','usd',100,'pending',jsonb_build_object('actor_sub',CAST(:s AS text)))"
+                    ),
+                    {"p": uuid.uuid4(), "t": tenant, "u": user, "s": subject},
+                )
+
+        work, *_ = await closed_person(
+            store, records=0, before_request=seed_personal_payment
+        )
+        assert await FinancialInventory(store).prepare(work)
+        async with store.transaction() as producer_update:
+            await producer_update.execute(
+                text("LOCK TABLE account_financial_fence_versions IN EXCLUSIVE MODE")
+            )
+            task = asyncio.create_task(store.erase_test_finances(work, limit=1))
+            blocked = False
+            for _ in range(100):
+                blocked = await producer_update.scalar(
+                    text(
+                        "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='relation' AND relation='public.account_financial_fence_versions'::regclass AND database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND NOT granted)"
+                    )
+                )
+                if blocked:
+                    break
+                await asyncio.sleep(0.01)
+            assert blocked, "The actual erasure must be waiting for registry coverage"
+            # A producer/schema updater follows registry -> lifecycle order.
+            # It must not encounter a row lock held by the blocked erasure.
+            await producer_update.execute(
+                text(
+                    "SELECT 1 FROM account_lifecycles WHERE subject=:s FOR UPDATE NOWAIT"
+                ),
+                {"s": work.subject},
+            )
+        assert (await asyncio.wait_for(task, 5))["deleted"] == 1
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        async with store.transaction() as session:
+            await session.execute(text("DELETE FROM account_test_data_policy"))

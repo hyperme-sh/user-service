@@ -547,6 +547,12 @@ class ClosureJobs:
         async with self.transaction() as session:
             if not await database_test_data(session):
                 raise ValueError("Private TEST financial erasure is not enabled")
+            # Preserve the native registry -> identity/lifecycle lock order,
+            # including while a schema/producer update is waiting for coverage.
+            await session.execute(
+                text("SELECT public.account_lock_financial_inventory(:s,:at,NULL)"),
+                {"s": work.subject, "at": work.closed_at},
+            )
             row = await self.owned(session, work)
             receipt = await session.run_sync(
                 lambda sync: purge_test_finances(

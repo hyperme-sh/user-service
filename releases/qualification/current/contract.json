@@ -18,7 +18,7 @@
       "user_service/closure_health.py": "ac557553406c61157603533ee76ec567344c1694029c52fcc731425e16339cd9",
       "user_service/closure_idp.py": "f4a621178a54777182c3c48d0358ed254b969dab1eed8e083c939936838eee95",
       "user_service/closure_inventory.py": "1e9cf47318680b7817685e8367be0f1236821b1dbc68090dad84e2a10d0bc79a",
-      "user_service/closure_jobs.py": "2c65f9fade81cfa70efe9d2435cf00260d8840c3742b32041dafdca39fe1ada5",
+      "user_service/closure_jobs.py": "35244067b8be610ec18019eba0811f7e32d92b7481d1fe2ea73e17914b7b7859",
       "user_service/closure_processor.py": "d0749e714e182daa594bba818728d5df62070c96b916ff94e0af42da94a5363b",
       "user_service/closure_proxy.py": "7b10273084dd24ffcef7ceb6c69125950727c440fa326d6419cf18bd8d44015c",
       "user_service/closure_public_database.py": "572bceed8fa33ed03da9301155308200f537dda96a8edfb284ed651a5d530a75",
