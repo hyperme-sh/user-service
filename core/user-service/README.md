@@ -26,10 +26,9 @@ operator permission gates and asynchronous route offloading are preserved.
 The read-only [operator-ban contract](contracts/README.md), wire payloads and
 database ownership are unchanged.
 
-This adopts the reviewed service repair from
-[hyperme-sh/user-service PR #1](https://github.com/hyperme-sh/user-service/pull/1)
-at `7954b2f9d3c7737526a059f0e27bebef982e4df6`, tracked in
-[(s)panopticon #656](https://github.com/FyberLabs/panopticon/issues/656).
+This adopts the service repair from
+[hyperme-sh/user-service#1](https://github.com/hyperme-sh/user-service/pull/1)
+at `7954b2f9d3c7737526a059f0e27bebef982e4df6`.
 Disposable PostgreSQL regressions cover empty process state, independent
 sessions, tenant denial, rollback, repeated lifts, duplicate bans and re-bans.
 These checks do not establish deployed acceptance or lift any real host/user ban.
@@ -223,9 +222,13 @@ environment variables alone and PostgreSQL session settings cannot enable it.
 
 The ordinary role plan includes only read-only policy execution. A separately
 prepared TEST worker plan uses `--test-retention`; applying it requires the
-already enabled database marker and grants only the explicit native financial
-inventory and transaction-capability privileges. It does not grant policy-table
-access or mutation. Keep this role and its credentials out of public services.
+already enabled database marker. It grants read-only financial discovery and
+execution of private database-owned deletion routines. The coordinator cannot
+write financial sources or source bindings, read or mint deletion capabilities,
+or access the policy table. The owner routines repeat original payer scope,
+sandbox ancestry and dependency checks using actual locked rows. Startup rejects
+stale financial or capability privileges, including effective column grants. Keep this role and its
+credentials out of public services.
 The worker deletes financial roots before anonymizing their original payer
 aliases, records committed counts with its claim and retries bounded batches.
 Live-provider/mainnet records, conflicting identities, unknown dependency owners

@@ -48,8 +48,8 @@ separate.
 
 ## Provenance
 
-- Reviewed source: `FyberLabs/panopticon` commit
-  `7356887667b0f142bac7504223ebf9446e0f5411` (PR #720, still open at adoption).
+- Reviewed source commit
+  `7356887667b0f142bac7504223ebf9446e0f5411` from the pre-split monorepo (PR #720, still open at adoption).
   Its retirement-only guard consults the canonical retirement marker without
   minting an empty lifecycle root. The source's nine targeted tests, 337 user
   tests, all six CI groups and current-head reviews passed.
