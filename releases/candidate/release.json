@@ -6,11 +6,11 @@
     "user-service": {
       "version": "0.1.0",
       "contract": "contract.json",
-      "contract_sha256": "4eed30ae4cb194e4ad9dbd02cf9b4361ef8db3ee5e83bde02a9942e1d1d687f9",
+      "contract_sha256": "0776aea2cb2a21d0e7bd7db190e7c52d406c464171c9f2cefe18ecbb4e5d3e51",
       "artifact": {
         "kind": "package",
-        "uri": "urn:sha256:b84da9364104fda0d28d1c5bb10e273b15a81921b131be0cff2d79bb409915be",
-        "sha256": "b84da9364104fda0d28d1c5bb10e273b15a81921b131be0cff2d79bb409915be"
+        "uri": "urn:sha256:649edb2bc02ef9f54103bcf9a37370f45810a616723f3b4f49b7c0419ebd9c5b",
+        "sha256": "649edb2bc02ef9f54103bcf9a37370f45810a616723f3b4f49b7c0419ebd9c5b"
       }
     }
   }
