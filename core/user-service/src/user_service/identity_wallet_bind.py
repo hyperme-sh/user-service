@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import secrets
 import uuid
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -39,7 +38,6 @@ class WalletBinding:
 
 
 
-@asynccontextmanager
 
 
 

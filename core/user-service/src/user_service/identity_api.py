@@ -30,13 +30,21 @@ def authenticate(request: Request):
 
 
 @router.post('/{operation}',dependencies=[Depends(authenticate)])
-async def execute(operation: Literal['enroll','tenant-switch','bind-wallet','get-wallet','seed-operator','seed-host'], command: Command, request: Request):
+async def execute(operation: Literal['enroll','tenant-switch','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
     from user_service.identity_enrollment import grant_held_roles
     from user_service.identity_tenant_switch import authorize_tenant_switch
     from user_service.identity_wallet_bind import upsert_wallet_binding, get_wallet_binding
     try:
         async with request.app.state.session_maker() as session:
             async with session.begin():
+                if operation == 'provision-operator':
+                    from auth_service.operator_binding import eligible, ROLE
+                    from user_service.identity_test_seed import provision_operator
+                    if command.claims is None or command.tenant_id is None or not eligible(command.claims, command.tenant_id):
+                        raise HTTPException(403, 'Production operator binding required')
+                    return await provision_operator(command.claims, command.tenant_id,
+                        email=command.claims['email'].strip().lower(), role_name=ROLE,
+                        permissions=(), session=session)
                 if operation in ('seed-operator','seed-host'):
                     if command.claims is None or command.tenant_id is None:
                         raise HTTPException(422,'Verified claims and tenant required')
