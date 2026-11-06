@@ -34,8 +34,7 @@ def financial_tables():
     """Known financial source names; grants confer reads, never caller DML."""
     registry = json.loads(
         Path(__file__)
-        .with_name("migration_chains")
-        .joinpath("manifest.json")
+        .with_name("financial_source_registry.json")
         .read_text()
     )
     return tuple(
@@ -156,8 +155,7 @@ def purge_test_finances(connection, subject, closed_at, *, limit=100):
     # rows. Internal FK triggers remain enabled and may refuse unsafe deletion.
     registry = json.loads(
         Path(__file__)
-        .with_name("migration_chains")
-        .joinpath("manifest.json")
+        .with_name("financial_source_registry.json")
         .read_text()
     )
     root_names = set(registry["chains"]["payment_service"]["tables"]) | {

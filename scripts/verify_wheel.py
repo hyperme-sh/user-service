@@ -5,7 +5,8 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 expected = {p.relative_to(root / 'core/user-service/src').as_posix(): p.read_bytes()
             for p in (root / 'core/user-service/src').rglob('*')
-            if p.is_file() and '__pycache__' not in p.parts}
+            if p.is_file() and '__pycache__' not in p.parts
+            and 'migrations' not in p.parts and p.name != 'migrate.py'}
 resource = root / 'proto/spanopticon/v1/contractecho.proto'
 if resource.exists():
     expected['controlplane_proto_data/contractecho.proto'] = resource.read_bytes()

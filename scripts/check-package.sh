@@ -53,7 +53,11 @@ python3 scripts/verify_wheel.py "$scratch/dist"
 uv export --project core/user-service --frozen "${export_options[@]}" --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
-uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps "${fixture_wheels[@]}" "$scratch"/dist/*.whl
+if (( ${#fixture_wheels[@]} )); then
+  uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps "${fixture_wheels[@]}" "$scratch"/dist/*.whl
+else
+  uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" "$scratch"/dist/*.whl
+fi
 mkdir -p "$scratch/owner"
 cp -R core/user-service/tests core/user-service/scripts "$scratch/owner/"
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/wheel.xml" owner/tests)
@@ -65,7 +69,11 @@ with tarfile.open(next((root / 'dist').glob('*.tar.gz'))) as archive:
 PY
 uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 python3 scripts/verify_wheel.py "$scratch/rebuilt"
-uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
+if (( ${#fixture_wheels[@]} )); then
+  uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
+else
+  uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" --reinstall-package user-service "$scratch"/rebuilt/*.whl
+fi
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/sdist.xml" owner/tests)
 python3 scripts/verify-test-results.py "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml"
 if [[ -n "${TEST_EVIDENCE_DIR:-}" ]]; then
