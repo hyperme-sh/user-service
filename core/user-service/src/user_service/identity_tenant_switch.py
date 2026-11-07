@@ -121,7 +121,7 @@ async def authorize_tenant_switch(
     ``HOST_MANAGE_TENANTS``. Tenant registry is not RLS-scoped.
     """
     db = session or get_db_session()
-    exists = await db.execute(select(Tenant.id).where(Tenant.id == tenant_id))
+    exists = await db.execute(select(Tenant.id).where(Tenant.id == tenant_id, Tenant.is_active.is_(True)))
     if exists.scalar_one_or_none() is None:
         return None
 
