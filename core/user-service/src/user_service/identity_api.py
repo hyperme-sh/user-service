@@ -30,13 +30,22 @@ def authenticate(request: Request):
 
 
 @router.post('/{operation}',dependencies=[Depends(authenticate)])
-async def execute(operation: Literal['enroll','tenant-switch','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
+async def execute(operation: Literal['enroll','tenant-switch','host-setup','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
     from user_service.identity_enrollment import grant_held_roles
     from user_service.identity_tenant_switch import authorize_tenant_switch
     from user_service.identity_wallet_bind import upsert_wallet_binding, get_wallet_binding
     try:
         async with request.app.state.session_maker() as session:
             async with session.begin():
+                if operation == 'host-setup':
+                    if set(command.model_dump(exclude_none=True)) - {'subject', 'tenant_id'}:
+                        raise HTTPException(422, 'Host setup accepts only subject and tenant')
+                    if (command.tenant_id is None or not command.subject
+                            or not command.subject.strip() or len(command.subject) > 512):
+                        raise HTTPException(422, 'Verified subject and target tenant required')
+                    from user_service.identity_host_setup import authorize_host_setup
+                    result = await authorize_host_setup(command.subject, command.tenant_id, session)
+                    return None if result is None else asdict(result)
                 if operation == 'provision-operator':
                     from auth_service.operator_binding import eligible, ROLE
                     from user_service.identity_test_seed import provision_operator

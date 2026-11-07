@@ -161,3 +161,15 @@ Operator-ban behavior, the closure worker, and the private role plan are describ
 ## License
 
 First-party service and operator-ban contract code are [Apache-2.0](LICENSE). Both distributions carry SPDX metadata and the license text. Bundled dependencies keep their own licenses.
+
+
+## Private host-setup authority
+
+The authenticated identity command `POST /api/v1/internal/identity/host-setup`
+accepts only a verified opaque subject and target tenant UUID from auth-service.
+It reads current active host membership under the tenant GUC and durable user
+bans in the user owner's transaction. It returns null when denied or only the
+member UUID when allowed; it never returns portal roles or permissions. Direct
+host roles and legacy host groups are supported, without email or platform-admin
+fallback. Reader-role PostgreSQL/HTTP regressions cover the authorization and ban
+boundaries. This endpoint does not activate account closure or deploy a consumer.
