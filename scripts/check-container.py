@@ -14,7 +14,8 @@ import uuid
 # The qualification database uses the same digest-verified historical migrations
 # as the owner PostgreSQL tests. Runtime wheels no longer ship that history.
 fixture = Path(__file__).resolve().parents[1] / 'core/user-service/tests/historical_db_fixture.py'
-runpy.run_path(str(fixture))
+# The fixture owns the TemporaryDirectory containing the migration modules.
+fixture_globals = runpy.run_path(str(fixture))
 from controlplane_db.migrations import upgrade
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
