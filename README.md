@@ -173,3 +173,12 @@ member UUID when allowed; it never returns portal roles or permissions. Direct
 host roles and legacy host groups are supported, without email or platform-admin
 fallback. Reader-role PostgreSQL/HTTP regressions cover the authorization and ban
 boundaries. This endpoint does not activate account closure or deploy a consumer.
+
+
+The separate `session-member` identity command checks current active tenant and
+user membership plus durable user bans for already verified browser-session
+facts. Unlike host setup it requires no host role, returns only the member UUID
+or null, and never grants portal/host authority. Browser credentials, session
+binding and MFA evidence stay in auth and are not sent to the user owner. Both
+commands accept only the opaque subject and target tenant from the authenticated
+auth-service caller.

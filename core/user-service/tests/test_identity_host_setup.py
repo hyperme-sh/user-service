@@ -1,4 +1,4 @@
-"""Actual authenticated owner HTTP and RLS reads for host-setup authority."""
+"""Actual authenticated owner HTTP/RLS for distinct host and session membership."""
 from datetime import UTC, datetime
 from types import SimpleNamespace
 import uuid
@@ -14,11 +14,12 @@ from api.domain.operator.bans import ban_book
 from user_service.identity_api import router
 
 
-@pytest.fixture
-async def host_owner(migrated_sync_url, monkeypatch):
+@pytest.fixture(params=['host-setup', 'session-member'])
+async def host_owner(migrated_sync_url, monkeypatch, request):
     root = create_async_engine(make_url(migrated_sync_url).set(drivername='postgresql+asyncpg'))
     s = SimpleNamespace(tenant=uuid.uuid4(), other=uuid.uuid4(), user=uuid.uuid4(),
         role=uuid.uuid4(), group=uuid.uuid4(), subject='opaque:host:' + uuid.uuid4().hex)
+    s.operation = request.param
     role_name = 'host_reader_' + uuid.uuid4().hex
     password = uuid.uuid4().hex
     async with root.begin() as db:
@@ -55,7 +56,7 @@ async def host_owner(migrated_sync_url, monkeypatch):
 
 async def command(s, **changes):
     body = {'subject': s.subject, 'tenant_id': str(s.tenant), **changes}
-    return await s.client.post('/api/v1/internal/identity/host-setup',headers=s.headers,json=body)
+    return await s.client.post('/api/v1/internal/identity/'+s.operation,headers=s.headers,json=body)
 
 
 @pytest.mark.parametrize('boundary', ['direct','group','inactive','closed','unbound','other-subject','other-tenant','inactive-tenant','renter','platform','banned','lifted','foreign-ban','other-kind-ban'])
@@ -83,18 +84,21 @@ async def test_native_host_authority_and_current_durable_bans(host_owner, bounda
     ban_book().clear()
     reply = await command(s, **args)
     assert reply.status_code == 200, reply.text
-    assert reply.json() == ({'user_id':str(s.user)} if boundary in ('direct','group','lifted','foreign-ban','other-kind-ban') else None)
+    allowed = boundary in ('direct','group','lifted','foreign-ban','other-kind-ban')
+    if s.operation == 'session-member' and boundary in ('renter','platform'):
+        allowed = True  # Identity membership grants no role or host authority.
+    assert reply.json() == ({'user_id':str(s.user)} if allowed else None)
 
 
 @pytest.mark.parametrize('token', [None,'Bearer wrong','Bearer human-token'])
 async def test_host_command_requires_private_auth_service_credential(host_owner, token):
     s=host_owner
-    reply=await s.client.post('/api/v1/internal/identity/host-setup',headers={} if token is None else {'Authorization':token},json={'subject':s.subject,'tenant_id':str(s.tenant)})
+    reply=await s.client.post('/api/v1/internal/identity/'+s.operation,headers={} if token is None else {'Authorization':token},json={'subject':s.subject,'tenant_id':str(s.tenant)})
     assert reply.status_code==401
 
 
 @pytest.mark.parametrize('body', [{}, {'subject':' '}, {'subject':'x'*513}, {'subject':'valid','tenant_id':None}, {'subject':'valid','tenant_id':'not-a-uuid'}, {'subject':'valid','claims':{'roles':['admin']}}])
 async def test_host_command_rejects_missing_or_invalid_binding(host_owner, body):
     s=host_owner
-    reply=await s.client.post('/api/v1/internal/identity/host-setup',headers=s.headers,json={'tenant_id':str(s.tenant),**body})
+    reply=await s.client.post('/api/v1/internal/identity/'+s.operation,headers=s.headers,json={'tenant_id':str(s.tenant),**body})
     assert reply.status_code==422
