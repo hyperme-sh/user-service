@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from user_service.closure_contracts import Permit, Principal, require_reader
+
 import asyncio
 import json
 import uuid
@@ -24,27 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from user_service.models import AccountLifecycle, AccountLifecycleScope
 
 
-def require_reader(request: Request, response: Response) -> None:
-    response.headers["Cache-Control"] = "no-store"
-    if not authorized_call(request.headers):
-        raise HTTPException(403, "Account lifecycle authority required")
-
-
 router = APIRouter(
     prefix="/internal/account-lifecycle",
     tags=["Internal account lifecycle"],
     dependencies=[Depends(require_reader)],
 )
-
-
-class Principal(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    subject: str = Field(min_length=1, max_length=512)
-    tenant_id: uuid.UUID | None = None
-
-
-class Permit(Principal):
-    closed_at: datetime
 
 
 KEY_STATUS_DEADLINE_SECONDS = 3
