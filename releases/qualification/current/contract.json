@@ -7,7 +7,7 @@
     "user-service": {
       "user_service/__init__.py": "b45cfa1e4a8db4b4788c6a7d80299bbcd8e292731a602187420993f2e2f8cea8",
       "user_service/account_closure.py": "561144b7bc2504672fbe9a94695b1e3b60bb262d7f9ec2c490eb6f02ed490242",
-      "user_service/app.py": "8cdd09dafd03ff0b4e895305dfe2d6c223474810da7623d981fef140c977b8c8",
+      "user_service/app.py": "e6059875c741432cfbba2a371daa36ac7654a07c612fc0861569c60199e9d1b3",
       "user_service/closure_actions.py": "9066d4be3ef8050dbe60c21fd0ee2c00576c00ef5fa613a479a4a04f697b14c0",
       "user_service/closure_authority.py": "23ec7f17522f954dd72b55ca73439fcc81762fd8d0bd8133e2fc8365182b01b8",
       "user_service/closure_authorization.py": "0824d463889500a2adbf7ec2993ae5c1394a4991dd9f983e70099054d8a99081",
@@ -32,6 +32,7 @@
       "user_service/domain/ports.py": "efd2ca428770b52c232edb6c193dbe7790f647e79c90a0c7729a8d1ae3f3c35c",
       "user_service/financial_source_registry.json": "1145dd2392d2fa7d41d8ac260762418d74a3af4bc9b9c3f92989959ab15b259c",
       "user_service/financial_test_cleanup.py": "88f718cb86a651e4b3ed536d507b9f60ab33007dffebb82d54473c6c218bab03",
+      "user_service/host_authority.py": "49e9952bebfc4d4d0993f879ee519d93db76bd4c778fd723d76415ea27d0ea3f",
       "user_service/identity_api.py": "834528e1930cef52f07cdc6a4b22b48f47d209ff44e00b3a9ec20530b1c69aa9",
       "user_service/identity_enrollment.py": "1164247a59599c912bc1240b6f532b52e789498ae5baf03edcd93bae49ea7d10",
       "user_service/identity_host_setup.py": "ca6223a326dd1a9b4ad12fcbe2e3cdcea94fd9bd86cdff10e53d58cc5e8179ca",
