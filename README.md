@@ -182,3 +182,5 @@ or null, and never grants portal/host authority. Browser credentials, session
 binding and MFA evidence stay in auth and are not sent to the user owner. Both
 commands accept only the opaque subject and target tenant from the authenticated
 auth-service caller.
+
+Tenant switching applies durable user bans in the destination tenant within the owner transaction, including platform overrides and legacy email-bound memberships. Auth must consume that decision without a process-local ban cache.

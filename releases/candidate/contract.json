@@ -36,7 +36,7 @@
       "user_service/identity_enrollment.py": "1164247a59599c912bc1240b6f532b52e789498ae5baf03edcd93bae49ea7d10",
       "user_service/identity_host_setup.py": "ca6223a326dd1a9b4ad12fcbe2e3cdcea94fd9bd86cdff10e53d58cc5e8179ca",
       "user_service/identity_session_member.py": "2a29c05cc13a271f41b12ecc0becf4cc8a031e14f1dd5dbf9e1ac10bc1a1f0b4",
-      "user_service/identity_tenant_switch.py": "ce44ccc4dab83a61287e6150d82de752cd60e087fb66090d3be8d99638ae9756",
+      "user_service/identity_tenant_switch.py": "41e2d642c7f3ebdbb60f98b9ab2387271026be3c168f8c639f410c9f30392b80",
       "user_service/identity_test_seed.py": "94e2639bb2e597f9b755217f5add2a27f8a8d8f49304714fa172982654d44ee5",
       "user_service/identity_wallet_bind.py": "959dfe2fae5b527bea74fbd9abc2b0d6b6a051a5bbe2a009bbcb7508f20d9312",
       "user_service/idp_links.py": "a5d3e0fc69c298fab751c1c4a553dd3064875ad33c3077614044d7d8fac7f9fc",
