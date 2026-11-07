@@ -47,7 +47,12 @@ jobs:
               python3 scripts/verify_release_candidate.py "$qualified_manifest" "$exported/contract/contract.json" "$exported/contract/evidence.json" user-service
             fi
           done
+      - name: Verify local qualification outputs before optional PR retention
+        run: |
+          test -n "$(find "$SERVICE_ARTIFACT_DIR" -name '*.whl' -type f -size +0c -print -quit)"
+          test -n "$(find "$RUNNER_TEMP/user-native-test-results" -name '*.xml' -type f -size +0c -print -quit)"
       - name: Retain validated owner artifacts
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: prepared-dist
@@ -56,6 +61,7 @@ jobs:
           retention-days: 30
           compression-level: 0
       - name: Retain native test identities
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: native-test-results

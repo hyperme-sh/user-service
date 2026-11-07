@@ -7,6 +7,9 @@ permissions:
   contents: read
 jobs:
   service:
+    permissions:
+      contents: read
+      packages: write
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 35
@@ -75,9 +78,7 @@ jobs:
         run: |
           unset DEPENDENCY_READ_TOKEN DEPENDENCY_READ_TOKEN_FILE
           export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-          image_dir=$(mktemp -d "$RUNNER_TEMP/tested-image.XXXXXX")
-          echo "TESTED_IMAGE_DIR=$image_dir" >> "$GITHUB_ENV"
-          TESTED_IMAGE_DIR="$image_dir" bash scripts/check-container.sh
+          QUALIFIED_IMAGE_REF="user-service:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" bash scripts/check-container.sh
       - name: Bind both validated owner wheels
         run: |
           uv run --project core/user-service --frozen pytest -q tests_tools
@@ -89,19 +90,46 @@ jobs:
             python3 scripts/verify_release_candidate.py "$qualified_manifest" "$exported/contract/contract.json" "$exported/contract/evidence.json" user-service
           fi
           done
-      - name: Retain qualified runtime for ACR test delivery
+      - name: Publish the qualified main runtime and record its digest
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: tested-runtime-image
-          path: ${{ env.TESTED_IMAGE_DIR }}/*
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-      - name: Remove job-owned runtime archive
-        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          if [[ -n "${TESTED_IMAGE_DIR:-}" ]]; then rm -rf -- "$TESTED_IMAGE_DIR"; fi
+          set -euo pipefail
+          export DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/runtime-login.XXXXXX")
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          local_image="user-service:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          config=$(docker image inspect "$local_image" --format '{{.Id}}')
+          revision=$(docker image inspect "$local_image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
+          test "$revision" = "$GITHUB_SHA"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}/runtime:test-${GITHUB_SHA}"
+          if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then image="$image-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"; fi
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          # Existing candidates cannot silently change on a rerun.
+          if docker manifest inspect "$image" > /dev/null 2>manifest.err; then
+            echo 'Test image already exists; refusing to replace its content' >&2
+            exit 1
+          elif [[ "$(cat manifest.err)" != "no such manifest: $image" && "$(cat manifest.err)" != "manifest unknown" ]]; then
+            cat manifest.err >&2
+            echo 'Registry lookup did not establish an absent manifest; refusing publication' >&2
+            exit 1
+          fi
+          docker tag "$local_image" "$image"
+          trap 'docker image rm "$image" >/dev/null 2>&1 || true; rm -rf -- "$DOCKER_CONFIG"' EXIT
+          docker push "$image"
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}/runtime"
+          ref=$(docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' | awk -v repo="$repo@" 'index($0,repo)==1')
+          [[ "$ref" =~ @sha256:[a-f0-9]{64}$ ]]
+          directory="$SERVICE_ARTIFACT_DIR"
+          mkdir -p "$directory"
+          python3 - "$ref" "$config" "$directory/runtime-image.json" <<'PYTHON'
+          import json, os, sys
+          from pathlib import Path
+          Path(sys.argv[3]).write_text(json.dumps(dict(image=sys.argv[1], image_id=sys.argv[2],
+              repository=os.environ['GITHUB_REPOSITORY'], revision=os.environ['GITHUB_SHA'],
+              run_id=int(os.environ['GITHUB_RUN_ID'])), sort_keys=True)+'\n')
+          PYTHON
       - name: Retain validated owner artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -118,3 +146,6 @@ jobs:
           path: ${{ runner.temp }}/user-native-test-results/*.xml
           if-no-files-found: error
           retention-days: 30
+      - name: Clean up qualification alias
+        if: always()
+        run: docker image rm "user-service:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >/dev/null 2>&1 || true

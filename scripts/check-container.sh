@@ -37,3 +37,7 @@ if [[ -n "${TESTED_IMAGE_DIR:-}" ]]; then
   printf '%s\n' "$image" > "$TESTED_IMAGE_DIR/image.ref"
   sha256sum "$TESTED_IMAGE_DIR/image.tar" | cut -d ' ' -f 1 > "$TESTED_IMAGE_DIR/image.sha256"
 fi
+
+if [[ -n "${QUALIFIED_IMAGE_REF:-}" ]]; then
+  docker tag "$image" "$QUALIFIED_IMAGE_REF"
+fi

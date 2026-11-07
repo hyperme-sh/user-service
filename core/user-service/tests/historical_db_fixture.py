@@ -1,4 +1,5 @@
 """Load verified private historical migrations only in test processes."""
+import atexit
 import gzip
 import hashlib
 import io
@@ -19,3 +20,5 @@ with tarfile.open(fileobj=io.BytesIO(_raw)) as _snapshot:
     _snapshot.extractall(_historical_temp.name, filter='data')
 _historical_module = Path(_historical_temp.name) / 'src/controlplane_db'
 controlplane_db.__path__.append(str(_historical_module))
+# Callers may discard runpy globals while migrations are still in use.
+atexit.register(_historical_temp.cleanup)
