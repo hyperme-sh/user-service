@@ -34,7 +34,7 @@
       "user_service/financial_test_cleanup.py": "88f718cb86a651e4b3ed536d507b9f60ab33007dffebb82d54473c6c218bab03",
       "user_service/identity_api.py": "40811056c0e7dac5aa09c25b7361f1913cc4c2b2ce36c47c9aa2ae432434949f",
       "user_service/identity_enrollment.py": "1164247a59599c912bc1240b6f532b52e789498ae5baf03edcd93bae49ea7d10",
-      "user_service/identity_tenant_switch.py": "5b3a90fb8df2ff3771349ce2993a7dedb822d0e289e4cc8bb35c531c925b08c4",
+      "user_service/identity_tenant_switch.py": "ce44ccc4dab83a61287e6150d82de752cd60e087fb66090d3be8d99638ae9756",
       "user_service/identity_test_seed.py": "94e2639bb2e597f9b755217f5add2a27f8a8d8f49304714fa172982654d44ee5",
       "user_service/identity_wallet_bind.py": "959dfe2fae5b527bea74fbd9abc2b0d6b6a051a5bbe2a009bbcb7508f20d9312",
       "user_service/idp_links.py": "a5d3e0fc69c298fab751c1c4a553dd3064875ad33c3077614044d7d8fac7f9fc",
