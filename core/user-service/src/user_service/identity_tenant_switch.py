@@ -14,6 +14,7 @@ from api.infrastructure.persistence.tenant_guc import set_current_tenant_id_guc
 from controlplane_db.models import Group, Role, Tenant, User, UserGroupMembership
 
 from auth_service.schemas import AuthMeResponse
+from user_service.infrastructure.operator_store import active_ban
 
 _HOST_PERMS = frozenset(
     {
@@ -110,6 +111,12 @@ async def _role_for(session: AsyncSession, user: User) -> Role | None:
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def _banned(session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID | None) -> bool:
+    # Platform lookup clears the GUC. Bans are always scoped to the destination.
+    await set_current_tenant_id_guc(session, tenant_id)
+    return user_id is not None and await active_ban(session, tenant_id, 'user', user_id) is not None
+
+
 async def authorize_tenant_switch(
     user: AuthMeResponse,
     tenant_id: uuid.UUID,
@@ -140,6 +147,8 @@ async def authorize_tenant_switch(
             return None
         if role and role.name in {"test-network-operator", "entra-network-operator"} and member.keycloak_sub != sub:
             return None
+        if await _banned(db, tenant_id, getattr(member, "id", None)):
+            return None
         return TenantSwitchGrant(
             role_name=role.name,
             permissions=_role_permissions(role),
@@ -155,6 +164,8 @@ async def authorize_tenant_switch(
         return None
     role = await _role_for(db, platform_user)
     if _role_has_host_manage(role):
+        if await _banned(db, tenant_id, getattr(platform_user, "id", None)):
+            return None
         return TenantSwitchGrant(
             role_name=role.name,
             permissions=_role_permissions(role),

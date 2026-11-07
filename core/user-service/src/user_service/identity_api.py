@@ -30,7 +30,7 @@ def authenticate(request: Request):
 
 
 @router.post('/{operation}',dependencies=[Depends(authenticate)])
-async def execute(operation: Literal['enroll','tenant-switch','host-setup','session-member','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
+async def execute(operation: Literal['enroll','tenant-switch','tenant-switch-current','host-setup','session-member','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
     from user_service.identity_enrollment import grant_held_roles
     from user_service.identity_tenant_switch import authorize_tenant_switch
     from user_service.identity_wallet_bind import upsert_wallet_binding, get_wallet_binding
@@ -63,7 +63,7 @@ async def execute(operation: Literal['enroll','tenant-switch','host-setup','sess
                     from user_service.identity_test_seed import provision_test_operator,ensure_seeded_host_role
                     handler=provision_test_operator if operation=='seed-operator' else ensure_seeded_host_role
                     return await handler(command.claims,command.tenant_id,session)
-                if operation in ('enroll','tenant-switch'):
+                if operation in ('enroll','tenant-switch','tenant-switch-current'):
                     if command.user is None:
                         raise HTTPException(422,'Verified identity required')
                     if operation == 'enroll':

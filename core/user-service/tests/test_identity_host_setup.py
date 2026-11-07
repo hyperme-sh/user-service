@@ -102,3 +102,19 @@ async def test_host_command_rejects_missing_or_invalid_binding(host_owner, body)
     s=host_owner
     reply=await s.client.post('/api/v1/internal/identity/'+s.operation,headers=s.headers,json={'tenant_id':str(s.tenant),**body})
     assert reply.status_code==422
+
+
+@pytest.mark.parametrize('banned', [False, True])
+async def test_current_switch_command_enforces_durable_owner_decision(host_owner, banned):
+    s = host_owner
+    if banned:
+        async with s.root.begin() as db:
+            await db.execute(text("INSERT INTO operator_bans(id,tenant_id,subject_kind,subject_id,reason,created_by,created_at) VALUES(:id,:tenant,'user',:user,'fixture','fixture',now())"), {'id':uuid.uuid4(),'tenant':s.tenant,'user':s.user})
+    reply = await s.client.post('/api/v1/internal/identity/tenant-switch-current', headers=s.headers,
+        json={'user':{'sub':s.subject}, 'tenant_id':str(s.tenant)})
+    assert reply.status_code == 200, reply.text
+    if banned:
+        assert reply.json() is None
+    else:
+        assert reply.json()['user_id'] == str(s.user)
+        assert reply.json()['role_name'] == 'host'
