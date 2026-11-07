@@ -1,6 +1,8 @@
 """Default-off native account actions; pending intake never executes implicitly."""
 from __future__ import annotations
 
+from user_service.closure_contracts import HoldChange, enabled
+
 import json
 import os
 from datetime import datetime
@@ -29,12 +31,6 @@ from user_service.closure_jobs import ClosureJobs
 from user_service.models import AccountLifecycle
 
 
-def enabled(response: Response) -> None:
-    response.headers["Cache-Control"] = "no-store"
-    if os.environ.get("ACCOUNT_CLOSURE_ACTIONS_ENABLED", "").lower() != "true" or not enforcement_enabled():
-        raise HTTPException(503, "Account closure actions are not enabled", headers={"Cache-Control": "no-store"})
-
-
 router = APIRouter(tags=["Account closure"], dependencies=[Depends(enabled)])
 
 
@@ -47,13 +43,6 @@ class LifecycleStatus(BaseModel):
     profile_deleted_at: datetime | None
     financial_deleted_at: datetime | None
     financial_hold: bool
-
-
-class HoldChange(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    subject: str = Field(min_length=1, max_length=512)
-    hold: bool = Field(strict=True)
-    reference: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
 
 
 def status(row: AccountLifecycle) -> LifecycleStatus:

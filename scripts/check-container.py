@@ -16,6 +16,8 @@ import uuid
 fixture = Path(__file__).resolve().parents[1] / 'core/user-service/tests/historical_db_fixture.py'
 runpy.run_path(str(fixture))
 from controlplane_db.migrations import upgrade
+from controlplane_events.inbox import INBOX_DDL
+from controlplane_events.outbox import OUTBOX_DDL
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
@@ -30,6 +32,16 @@ try:
         connection.execute(text(f'CREATE DATABASE "{database}"'))
     service_url = admin_url.set(database=database)
     upgrade(service_url.render_as_string(hide_password=False))
+    # This disposable historical compatibility database predates owner-local
+    # messaging tables. Provision their exact native event-owner contracts here,
+    # outside runtime startup; do not bypass the inbox installation check.
+    fixture_engine = create_engine(service_url)
+    try:
+        with fixture_engine.begin() as connection:
+            connection.exec_driver_sql(OUTBOX_DDL)
+            connection.exec_driver_sql(INBOX_DDL)
+    finally:
+        fixture_engine.dispose()
     with socket.socket() as reservation:
         reservation.bind(('127.0.0.1', 0))
         port = reservation.getsockname()[1]
