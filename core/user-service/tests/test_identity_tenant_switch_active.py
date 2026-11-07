@@ -14,7 +14,8 @@ from user_service.identity_tenant_switch import authorize_tenant_switch
 
 @pytest.fixture(scope='module')
 def owner_switch_schema(postgres_sync_url):
-    from importlib.resources import files
+    from pathlib import Path
+    import hashlib
     from sqlalchemy import create_engine
     from controlplane_events.owner_schema import migrate
     name = 'switch_owner_' + uuid.uuid4().hex
@@ -26,7 +27,9 @@ def owner_switch_schema(postgres_sync_url):
         db.execute(text(f'ALTER ROLE "{name}" SET search_path TO "{name}"'))
     owner = create_engine(make_url(postgres_sync_url).set(username=name,password=password))
     try:
-        migrate(owner, revision='0001_owner_schema', ddl=files('user_service').joinpath('migrations/0001.sql').read_text())
+        ddl = Path(__file__).with_name('fixtures').joinpath('owner-schema.sql').read_bytes()
+        assert hashlib.sha256(ddl).hexdigest() == 'b1e0e5c3ddc1688a442c6c82b20af66951a1edff8eeaa8b330bfb5e916143fe4'
+        migrate(owner, revision='0001_owner_schema', ddl=ddl.decode())
         yield postgres_sync_url, name
     finally:
         owner.dispose()
