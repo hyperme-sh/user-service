@@ -1,6 +1,8 @@
 """Pending closure requests; no identity or retention side effects at intake."""
 from __future__ import annotations
 
+from user_service.closure_contracts import ClosureConfirmation, OperatorClosureConfirmation
+
 import asyncio
 import os
 import uuid
@@ -25,15 +27,6 @@ def no_store(response: Response) -> None:
 
 
 router = APIRouter(tags=["Account closure requests"], dependencies=[Depends(no_store)])
-
-
-class ClosureConfirmation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    confirmation: Literal["CLOSE MY ACCOUNT"]
-
-
-class OperatorClosureConfirmation(ClosureConfirmation):
-    subject: str = Field(min_length=1, max_length=512)
 
 
 class ClosureRequestStatus(BaseModel):

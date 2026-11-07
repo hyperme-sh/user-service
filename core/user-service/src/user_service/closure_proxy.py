@@ -7,14 +7,14 @@ from controlplane_identity.account_lifecycle import service_url
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from user_service.account_closure import (
+from user_service.closure_contracts import (
     ClosureConfirmation,
     OperatorClosureConfirmation,
 )
-from user_service.closure_actions import HoldChange, enabled
+from user_service.closure_contracts import HoldChange, enabled
 from user_service.closure_directory import DirectoryUnavailable, native_response
 from user_service.closure_transport import authority_verify
-from user_service.lifecycle_read import (
+from user_service.closure_contracts import (
     Permit,
     Principal,
     require_reader,
