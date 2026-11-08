@@ -355,6 +355,13 @@ async def test_enrollment_reads_existing_capabilities_without_granting_roles(
     monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
     from auth_service.schemas import AuthMeResponse
     from user_service.identity_enrollment import grant_held_roles
+    from user_service import identity_enrollment
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    organization = uuid.UUID(next(o["id"] for o in MANIFEST["organizations"] if o["key"] == "primary"))
+    resolve = AsyncMock(return_value=organization)
+    monkeypatch.setattr(identity_enrollment, "host_binding_client", lambda: SimpleNamespace(resolve=resolve))
 
     accounts = {a["key"]: a for a in MANIFEST["accounts"]}
     tenant = uuid.UUID(
@@ -380,6 +387,62 @@ async def test_enrollment_reads_existing_capabilities_without_granting_roles(
                 )
                 assert result.granted == expected and "org_admin" in result.refused
                 assert result.org_admin is None
+            assert await db.scalar(text("SELECT count(*) FROM api_keys")) == 0
+            resolve.assert_awaited_once_with(tenant, accounts["host-owner"]["id"])
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("outcome", ["success", "wrong-organization", "unavailable", "renter-only", "not-host"])
+async def test_configured_host_grant_requires_exact_owner_reservation(empty_authority_owner, monkeypatch, outcome):
+    """Real configured membership and HTTP client; no live owner or shared writes."""
+    import httpx
+    from auth_service.host_binding_client import HttpHostBindingClient
+    from auth_service.schemas import AuthMeResponse
+    from fastapi import HTTPException
+    from user_service import identity_enrollment as enrollment
+
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    accounts = {a["key"]: a for a in MANIFEST["accounts"]}
+    tenant = uuid.UUID(next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active"))
+    org = uuid.UUID(next(o["id"] for o in MANIFEST["organizations"] if o["key"] == "primary"))
+    actor = "primary-payer" if outcome == "not-host" else "host-owner"
+    subject = accounts[actor]["id"]
+    calls = []
+    def respond(request):
+        calls.append(request)
+        assert request.url.path == "/api/v1/hypermesh/internal/host-organization"
+        assert request.headers["x-tenant-id"] == str(tenant)
+        assert request.headers["x-internal-token"] == "isolated-owner-" + "x" * 32
+        assert json.loads(request.content) == {"tenant_id": str(tenant), "subject": subject}
+        if outcome == "unavailable":
+            return httpx.Response(503)
+        return httpx.Response(200, json={"tenant_id": str(tenant), "subject": subject,
+            "organization_id": str(uuid.uuid4() if outcome == "wrong-organization" else org)})
+    client = HttpHostBindingClient("https://owner.invalid", "isolated-owner-" + "x" * 32, httpx.MockTransport(respond))
+    monkeypatch.setattr(enrollment, "host_binding_client", lambda: client)
+    engine = create_async_engine(empty_authority_owner.url.set(drivername="postgresql+asyncpg"))
+    try:
+        async with async_sessionmaker(engine)() as db, db.begin():
+            async def grant():
+                return await enrollment.grant_held_roles(db, AuthMeResponse(sub=subject, roles=["host"]),
+                    tenant_id=tenant, requested=["renter"] if outcome == "renter-only" else ["host"])
+            if outcome == "wrong-organization":
+                with pytest.raises(enrollment.EnrollmentError, match="differs from configured authority"):
+                    await grant()
+            elif outcome == "unavailable":
+                with pytest.raises(HTTPException) as error:
+                    await grant()
+                assert error.value.status_code == 503
+            else:
+                for _ in range(2):
+                    result = await grant()
+                    if outcome == "success":
+                        assert result.host.organization_id == org and result.device_enrolled is False
+                    else:
+                        assert result.host is None and "host" not in result.granted
+            assert len(calls) == (2 if outcome == "success" else 0 if outcome in ("renter-only", "not-host") else 1)
             assert await db.scalar(text("SELECT count(*) FROM api_keys")) == 0
     finally:
         await engine.dispose()

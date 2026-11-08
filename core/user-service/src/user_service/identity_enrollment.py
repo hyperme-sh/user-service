@@ -564,6 +564,13 @@ async def configured_enrollment(session,user,tenant_id,requested):
     if host:available.add(HELD_HOST)
     asked={str(x).strip().lower() for x in requested} if requested else available
     granted=tuple(sorted(asked & available));refused=tuple(sorted(asked-available))
+    if HELD_HOST in granted:
+        # Reserve only the current declared organization in the Plane owner.
+        # This does not grant membership or create an organization. Retrying a
+        # lost response resolves the same immutable tenant/subject binding.
+        bound = await host_binding_client().resolve(tenant_id, user.sub)
+        if bound != host.organization_id:
+            raise EnrollmentError("Host organization owner differs from configured authority")
     return EnrollmentGrantResult(granted=granted,refused=refused,
         wallet_address=await _bound_wallet(session,user.sub),
         renter=RenterGrant(True,GROUP_RENTER,None,True,True,True) if HELD_RENTER in granted else None,
