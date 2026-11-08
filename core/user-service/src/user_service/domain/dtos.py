@@ -44,6 +44,7 @@ class UserRoleUpdateBody(BaseModel):
 
 class UserListPage(Page[UserResponse]):
     """Paginated active users for the current tenant."""
+    limit: int = Field(ge=0, le=500, description="Zero returns only the tenant count")
 
 
 class GroupCreateBody(BaseModel):

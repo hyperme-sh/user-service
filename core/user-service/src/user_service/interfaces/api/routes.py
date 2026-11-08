@@ -234,7 +234,7 @@ async def list_users(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
-    limit: int = Query(50, ge=1, le=500, description="Page size"),
+    limit: int = Query(50, ge=0, le=500, description="Page size; zero returns only the total"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     q: str | None = Query(
         None,
