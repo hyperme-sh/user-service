@@ -31,6 +31,8 @@ RLS = (
 
 async def check(engine):
     if os.environ.get("USER_SCOPED_AUTHORITY_REQUIRED") != "1":
+        if os.environ.get("USER_TEST_FIXTURE_GENERATION"):
+            raise RuntimeError("Canonical TEST generation requires scoped authority")
         return
     expected = hashlib.sha256(
         files("user_service").joinpath("authority_schema.sql").read_bytes()
@@ -107,6 +109,12 @@ async def check(engine):
             if flags[2] in {role["rolname"] for role in roles}:
                 raise RuntimeError("Runtime owns an authority RLS table")
         generation = os.environ.get("USER_TEST_FIXTURE_GENERATION")
+        if not generation and await db.scalar(
+            text("SELECT count(*) FROM authority_fixture_generation")
+        ):
+            raise RuntimeError(
+                "Seeded TEST generation requires explicit readiness bindings"
+            )
         if generation:
             manifest = os.environ.get("USER_TEST_FIXTURE_SHA256", "")
             source = os.environ.get("GIT_SHA", "")

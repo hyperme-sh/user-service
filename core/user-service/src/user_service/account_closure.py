@@ -19,7 +19,7 @@ from api.infrastructure.persistence.db_session import get_db_session
 from auth_service.schemas import AuthMeResponse
 from user_service.deps import get_current_user, require_matched_tenant
 from user_service.infrastructure.persistence.repos import SqlUserRepository
-from user_service.interfaces.api.operator_routes import require_support, _tenant, _actor
+from user_service.interfaces.api.operator_routes import current_operator, require_support, _tenant, _actor
 from user_service.models import AccountClosureRequest
 
 def no_store(response: Response) -> None:
@@ -109,7 +109,7 @@ async def request_operator_closure(
     request: Request, body: OperatorClosureConfirmation,
     session: AsyncSession = Depends(get_db_session),
 ):
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     require_intake_enabled()
     return await record_request(session, _tenant(claims), body.subject, _actor(claims), "operator")
 
@@ -119,7 +119,7 @@ async def operator_closure_status(
     request: Request, subject: str = Query(min_length=1, max_length=512),
     session: AsyncSession = Depends(get_db_session),
 ):
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     row = await find_request(session, _tenant(claims), valid_subject(subject))
     if row is None:
         raise HTTPException(404, "Account closure request not found")

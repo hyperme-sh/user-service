@@ -280,6 +280,14 @@ async def test_runtime_cannot_modify_bootstrap_authority(
     monkeypatch.setenv("GIT_SHA", "a" * 40)
     try:
         await check(engine)
+        monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "0")
+        with pytest.raises(RuntimeError, match="requires scoped authority"):
+            await check(engine)
+        monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+        monkeypatch.delenv("USER_TEST_FIXTURE_GENERATION")
+        with pytest.raises(RuntimeError, match="requires explicit readiness bindings"):
+            await check(engine)
+        monkeypatch.setenv("USER_TEST_FIXTURE_GENERATION", MANIFEST["generation"])
         monkeypatch.setenv("USER_TEST_FIXTURE_SHA256", "b" * 64)
         with pytest.raises(RuntimeError, match="not seeded"):
             await check(engine)
@@ -873,6 +881,33 @@ async def test_billing_context_and_operator_use_current_owner_graph(
             with pytest.raises(__import__("fastapi").HTTPException):
                 await operator_routes.current_operator(
                     request("network-admin"), operator_routes.require_support
+                )
+            from user_service import account_closure
+            from user_service.closure_contracts import OperatorClosureConfirmation
+
+            monkeypatch.setenv("ACCOUNT_CLOSURE_REQUESTS_ENABLED", "true")
+            confirmation = OperatorClosureConfirmation(
+                confirmation="CLOSE MY ACCOUNT", subject=accounts["primary-payer"]["id"]
+            )
+            for operation in [
+                account_closure.request_operator_closure(
+                    request("network-admin"), confirmation, session=db
+                ),
+                account_closure.operator_closure_status(
+                    request("network-admin"),
+                    subject=accounts["primary-payer"]["id"],
+                    session=db,
+                ),
+            ]:
+                with pytest.raises(__import__("fastapi").HTTPException) as refusal:
+                    await operation
+                assert refusal.value.status_code == 403
+            async with scope(db, tenant):
+                assert (
+                    await db.scalar(
+                        text("SELECT count(*) FROM account_closure_requests")
+                    )
+                    == 0
                 )
     finally:
         await engine.dispose()
