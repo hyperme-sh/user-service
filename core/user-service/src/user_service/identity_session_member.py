@@ -16,6 +16,12 @@ class SessionMemberGrant:
 
 
 async def authorize_session_member(subject: str, tenant_id: uuid.UUID, session: AsyncSession) -> SessionMemberGrant | None:
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.identity_tenant_switch import authorize_tenant_switch
+        from auth_service.schemas import AuthMeResponse
+        grant = await authorize_tenant_switch(AuthMeResponse(sub=subject), tenant_id, session)
+        return SessionMemberGrant(user_id=grant.user_id) if grant and grant.user_id else None
     await set_current_tenant_id_guc(session, tenant_id)
     tenant = await session.scalar(select(Tenant.id).where(Tenant.id == tenant_id, Tenant.is_active.is_(True)))
     if tenant is None:

@@ -106,6 +106,12 @@ async def actor_portal_controls(
     tenant_id: uuid.UUID,
     me: AuthMeResponse,
 ) -> PortalControls:
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import tenant_admin
+        if await tenant_admin(session,tenant_id,me.sub):
+            return evaluate_portal_controls(['admin'],[])
+        return evaluate_portal_controls(['user'],[])
     roles = list(me.roles)
     groups = list(me.groups)
     user = await _lookup_actor_user(session, tenant_id, me)
@@ -126,6 +132,11 @@ async def actor_portal_controls(
 
 
 async def require_live_role_admin(session, tenant_id, me):
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import require
+        await require(session,subject=me.sub,action='tenant.admin',tenant=tenant_id)
+        return
     from controlplane_tenancy.tenant_membership import get_active_tenant_role_member
 
     # Signed role claims can outlive deactivation or membership removal.
@@ -137,6 +148,11 @@ async def require_live_role_admin(session, tenant_id, me):
 
 
 async def require_profile_editor(session, tenant_id, me, user_id, body):
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import active_tenant,identity_active
+        if not await identity_active(session,me.sub) or not await active_tenant(session,tenant_id):
+            raise HTTPException(403,'Identity or tenant is inactive or unavailable')
     # Only a durable IdP subject binding establishes self. Token email and a
     # coincidentally matching local user ID must not confer write authority.
     from controlplane_db.models import Tenant
@@ -175,6 +191,10 @@ async def create_user(
     session: AsyncSession = Depends(get_db_session),
 ):
     # Invite only. Enrollment does not self-join through this HTTP door.
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import fixture_target
+        await fixture_target(session,tenant_id,str(body.email))
     await require_live_role_admin(session, tenant_id, me)
     controls = await actor_portal_controls(session, tenant_id, me)
     _require_flag(
@@ -215,6 +235,8 @@ async def list_users(
         description="Case-insensitive search on email, first name, or last name",
     ),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():await require_live_role_admin(session,tenant_id,me)
     repo = SqlUserRepository(session)
     users, total = await repo.list_active_paged(
         tenant_id, offset=offset, limit=limit, q=q
@@ -306,6 +328,8 @@ async def list_groups(
         description="Case-insensitive search on name or description",
     ),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():await require_live_role_admin(session,tenant_id,me)
     repo = SqlGroupRepository(session)
     groups, total = await repo.list_paged(
         tenant_id, offset=offset, limit=limit, q=q
@@ -329,6 +353,8 @@ async def get_group(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():await require_live_role_admin(session,tenant_id,me)
     repo = SqlGroupRepository(session)
     g = await repo.get(tenant_id, group_id)
     if g is None:
@@ -383,7 +409,11 @@ async def list_organization_idp_links(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     session: AsyncSession = Depends(get_db_session),
 ) -> OrganizationIdpLinkList:
-    _require_org_admin(me)
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import require
+        await require(session,subject=me.sub,action='organization.admin',tenant=tenant_id,organization=organization_id)
+    else:_require_org_admin(me)
     org = await SqlOrganizationRepository(session).get(tenant_id, organization_id)
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
@@ -405,7 +435,11 @@ async def link_organization_idp(
     session: AsyncSession = Depends(get_db_session),
 ) -> OrganizationIdpLinkResponse:
     """Save an IdP org on this enterprise after the owner proves they administer it."""
-    _require_org_admin(me)
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import require
+        await require(session,subject=me.sub,action='organization.admin',tenant=tenant_id,organization=organization_id)
+    else:_require_org_admin(me)
     provider = body.provider.strip().lower()
     if provider not in PROVIDERS:
         raise HTTPException(
@@ -461,7 +495,11 @@ async def unlink_organization_idp(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     session: AsyncSession = Depends(get_db_session),
 ) -> None:
-    _require_org_admin(me)
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import require
+        await require(session,subject=me.sub,action='organization.admin',tenant=tenant_id,organization=organization_id)
+    else:_require_org_admin(me)
     deleted = await SqlOrganizationIdpLinkRepository(session).delete(
         tenant_id, organization_id, link_id
     )
@@ -481,6 +519,11 @@ async def create_organization(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():
+        import os
+        if os.environ.get('USER_TEST_FIXTURE_GENERATION'):raise HTTPException(403,'TEST org provisioning is configuration owned')
+        await require_live_role_admin(session,tenant_id,me)
     repo = SqlOrganizationRepository(session)
     o = await repo.create(tenant_id, body.legal_name)
     return OrganizationResponse.model_validate(o)
@@ -503,6 +546,21 @@ async def list_organizations(
         description="Case-insensitive search on legal name",
     ),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import active_tenant,tenant_admin,scope
+        from sqlalchemy import text
+        if not await active_tenant(session,tenant_id):raise HTTPException(403,'Tenant is inactive or unavailable')
+        if not await tenant_admin(session,tenant_id,me.sub):
+            filters={"tenant":tenant_id,"subject":me.sub,"q":"%"+(q or "")+"%","limit":limit,"offset":offset}
+            selection="""FROM organizations o JOIN organization_memberships m ON m.organization_id=o.id AND m.tenant_id=o.tenant_id
+                JOIN users u ON u.id=m.user_id AND u.tenant_id=m.tenant_id
+                WHERE o.tenant_id=:tenant AND m.enabled AND u.is_active AND u.deleted_at IS NULL
+                  AND u.keycloak_sub=:subject AND lower(o.legal_name) LIKE lower(:q)"""
+            async with scope(session,tenant_id):
+                total=await session.scalar(text('SELECT count(*) '+selection),filters)
+                rows=(await session.execute(text('SELECT o.id,o.tenant_id,o.legal_name '+selection+' ORDER BY o.legal_name,o.id LIMIT :limit OFFSET :offset'),filters)).mappings().all()
+            return OrganizationListPage(items=[OrganizationResponse.model_validate(dict(row)) for row in rows],total=total,limit=limit,offset=offset)
     repo = SqlOrganizationRepository(session)
     orgs, total = await repo.list_paged(
         tenant_id, offset=offset, limit=limit, q=q
@@ -526,6 +584,10 @@ async def get_organization(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import require
+        await require(session,subject=me.sub,action='organization.read',tenant=tenant_id,organization=organization_id)
     repo = SqlOrganizationRepository(session)
     o = await repo.get(tenant_id, organization_id)
     if o is None:
@@ -686,6 +748,8 @@ async def list_group_members(
     limit: int = Query(50, ge=1, le=500, description="Page size"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():await require_live_role_admin(session,tenant_id,me)
     grep = SqlGroupRepository(session)
     group = await grep.get(tenant_id, group_id)
     if group is None:
@@ -721,6 +785,13 @@ async def list_user_groups(
     me: AuthMeResponse = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import active_tenant,tenant_admin
+        actor=await SqlUserRepository(session).get_by_keycloak_sub(tenant_id,me.sub)
+        own=actor is not None and actor.is_active and actor.id==user_id
+        if not await active_tenant(session,tenant_id) or not (own or await tenant_admin(session,tenant_id,me.sub)):
+            raise HTTPException(403,'Directory access is outside current scope')
     urepo = SqlUserRepository(session)
     user = await urepo.get(tenant_id, user_id)
     if user is None:

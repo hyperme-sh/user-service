@@ -14,6 +14,13 @@ class HostSetupGrant:
 
 
 async def authorize_host_setup(subject: str, tenant_id: uuid.UUID, session: AsyncSession) -> HostSetupGrant | None:
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import host_scope
+        grant = await host_scope(session,tenant_id,subject)
+        if grant is None or await active_ban(session,tenant_id,'user',grant['user_id']) is not None:
+            return None
+        return HostSetupGrant(user_id=grant['user_id'])
     # This is the already verified dedicated issuer subject; never email, caller
     # roles or general tenant-switch/platform authority. Preserve it exactly.
     await set_current_tenant_id_guc(session, tenant_id)
@@ -21,3 +28,20 @@ async def authorize_host_setup(subject: str, tenant_id: uuid.UUID, session: Asyn
     if member is None or await active_ban(session, tenant_id, 'user', member.id) is not None:
         return None
     return HostSetupGrant(user_id=member.id)
+
+
+@dataclass(frozen=True, slots=True)
+class HostOrganizationGrant:
+    user_id: uuid.UUID
+    organization_id: uuid.UUID
+
+
+async def authorize_host_organization(subject, tenant_id, session):
+    from user_service.authority_routes import enabled
+    if not enabled():
+        return None
+    from user_service.scoped_authority import host_scope
+    grant = await host_scope(session,tenant_id,subject)
+    if grant is None or await active_ban(session,tenant_id,'user',grant['user_id']) is not None:
+        return None
+    return HostOrganizationGrant(**grant)

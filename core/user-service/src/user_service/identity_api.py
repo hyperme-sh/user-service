@@ -30,20 +30,27 @@ def authenticate(request: Request):
 
 
 @router.post('/{operation}',dependencies=[Depends(authenticate)])
-async def execute(operation: Literal['enroll','tenant-switch','tenant-switch-current','host-setup','session-member','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
+async def execute(operation: Literal['enroll','tenant-switch','tenant-switch-current','host-setup','host-scope','session-member','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
     from user_service.identity_enrollment import grant_held_roles
     from user_service.identity_tenant_switch import authorize_tenant_switch
     from user_service.identity_wallet_bind import upsert_wallet_binding, get_wallet_binding
     try:
         async with request.app.state.session_maker() as session:
             async with session.begin():
-                if operation in ('host-setup', 'session-member'):
+                from user_service.authority_routes import enabled
+                if enabled() and operation in ('seed-operator','seed-host','provision-operator'):
+                    # New authority comes only from the configured bootstrap.
+                    # A login must never recreate legacy roles or memberships.
+                    return None
+                if operation in ('host-setup', 'host-scope', 'session-member'):
                     if set(command.model_dump(exclude_none=True)) - {'subject', 'tenant_id'}:
                         raise HTTPException(422, 'Membership accepts only subject and tenant')
                     if (command.tenant_id is None or not command.subject
                             or not command.subject.strip() or len(command.subject) > 512):
                         raise HTTPException(422, 'Verified subject and target tenant required')
-                    if operation == 'host-setup':
+                    if operation == 'host-scope':
+                        from user_service.identity_host_setup import authorize_host_organization as authorize
+                    elif operation == 'host-setup':
                         from user_service.identity_host_setup import authorize_host_setup as authorize
                     else:
                         from user_service.identity_session_member import authorize_session_member as authorize

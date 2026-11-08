@@ -81,12 +81,24 @@ async def lookup(body: Query, request: Request, response: Response):
             await session.execute(text('SET TRANSACTION READ ONLY'))
             await set_current_tenant_id_guc(session,body.tenant_id)
             if body.operation=='tenant-active':
-                result.active=await session.scalar(select(Tenant.is_active).where(Tenant.id==body.tenant_id))
+                from user_service.authority_routes import enabled
+                if enabled():
+                    from user_service.scoped_authority import active_tenant
+                    result.active=await active_tenant(session,body.tenant_id)
+                else:
+                    result.active=await session.scalar(select(Tenant.is_active).where(Tenant.id==body.tenant_id))
             elif body.operation=='member':
                 row=await get_tenant_membership_row(session,body.tenant_id,keycloak_sub=body.subject)
                 if row is not None and row.keycloak_sub==body.subject:
                     ids=await get_tenant_role_group_ids(session,body.tenant_id,user_id=row.id,role='host')
                     host=await get_active_tenant_role_member(session,body.tenant_id,keycloak_sub=body.subject,role='host')
+                    from user_service.authority_routes import enabled
+                    if enabled():
+                        from user_service.scoped_authority import identity_active,active_tenant
+                        from user_service.identity_host_setup import authorize_host_setup
+                        if not await identity_active(session,body.subject) or not await active_tenant(session,body.tenant_id):
+                            return result
+                        host=await authorize_host_setup(body.subject,body.tenant_id,session)
                     result.member=Member(id=row.id,email=row.email or '',is_active=bool(row.is_active),
                         keycloak_sub=row.keycloak_sub,group_ids=list(ids),host_group=host is not None)
             else:

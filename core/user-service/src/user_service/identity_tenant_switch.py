@@ -128,6 +128,31 @@ async def authorize_tenant_switch(
     ``HOST_MANAGE_TENANTS``. Tenant registry is not RLS-scoped.
     """
     db = session or get_db_session()
+    from user_service.authority_routes import enabled
+    if enabled():
+        from user_service.scoped_authority import active_tenant, identity_active, network_admin, tenant_network, scope
+        subject = user.sub
+        if not await identity_active(db, subject) or not await active_tenant(db, tenant_id):
+            return None
+        network = await tenant_network(db, tenant_id)
+        if await network_admin(db, network, subject):
+            async with scope(db):
+                identity = await db.scalar(select(User.id).where(User.tenant_id.is_(None), User.keycloak_sub == subject))
+            if await _banned(db, tenant_id, identity):
+                return None
+            from api.domain.operator.population import SEEDED_TEST_ADMIN_OPERATOR_CLAIMS
+            return TenantSwitchGrant(role_name='network-admin', user_id=identity,
+                permissions=tuple(SEEDED_TEST_ADMIN_OPERATOR_CLAIMS))
+        await set_current_tenant_id_guc(db, tenant_id)
+        member = await _user_by_email_or_sub(db, email=None, sub=subject, platform=False, tenant_id=tenant_id)
+        if member is None or not member.is_active or member.deleted_at is not None:
+            return None
+        role = await _role_for(db, member)
+        if role is None or await _banned(db, tenant_id, member.id):
+            return None
+        # Organization administration never becomes a tenant administrator role.
+        return TenantSwitchGrant(role_name=role.name, permissions=_role_permissions(role),
+            user_id=member.id, groups=await _target_groups(db, tenant_id, member.id))
     exists = await db.execute(select(Tenant.id).where(Tenant.id == tenant_id, Tenant.is_active.is_(True)))
     if exists.scalar_one_or_none() is None:
         return None
