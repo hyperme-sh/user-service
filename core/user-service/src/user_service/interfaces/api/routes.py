@@ -11,7 +11,7 @@ from controlplane_api.event_types import (
     GROUP_MEMBER_REMOVED_V1,
     USER_CREATED_V1,
 )
-from api.common.portal_controls import PortalControls, evaluate_portal_controls
+from api.common.portal_controls import GROUP_HOST, GROUP_RENTER, PortalControls, evaluate_portal_controls
 from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
 from api.infrastructure.persistence.db_session import get_db_session
 from auth_service.schemas import AuthMeResponse
@@ -111,7 +111,12 @@ async def actor_portal_controls(
         from user_service.scoped_authority import tenant_admin
         if await tenant_admin(session,tenant_id,me.sub):
             return evaluate_portal_controls(['admin'],[])
-        return evaluate_portal_controls(['user'],[])
+        from user_service.scoped_authority import billing_member
+        from user_service.identity_host_setup import authorize_host_setup
+        groups = []
+        if await billing_member(session,tenant_id,me.sub):groups.append(GROUP_RENTER)
+        if await authorize_host_setup(me.sub,tenant_id,session):groups.append(GROUP_HOST)
+        return evaluate_portal_controls(['user'],groups)
     roles = list(me.roles)
     groups = list(me.groups)
     user = await _lookup_actor_user(session, tenant_id, me)

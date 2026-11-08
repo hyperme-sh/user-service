@@ -238,3 +238,26 @@ async def host_scope(session, tenant, subject):
             .mappings()
             .one_or_none()
         )
+
+
+async def billing_member(session, tenant, subject):
+    """A current org billing grant, independent of cached portal groups."""
+    if not await identity_active(session, subject) or not await active_tenant(
+        session, tenant
+    ):
+        return False
+    from user_service.infrastructure.operator_store import active_ban
+
+    async with scope(session, tenant):
+        user = await session.scalar(
+            text(
+                """SELECT u.id FROM users u
+            WHERE u.tenant_id=:tenant AND u.keycloak_sub=:subject AND u.is_active
+            AND u.deleted_at IS NULL AND EXISTS(SELECT 1 FROM organization_memberships m
+              WHERE m.tenant_id=u.tenant_id AND m.user_id=u.id AND m.enabled AND m.can_purchase_leases)"""
+            ),
+            {"tenant": tenant, "subject": subject},
+        )
+        return (
+            user is not None and await active_ban(session, tenant, "user", user) is None
+        )

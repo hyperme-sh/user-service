@@ -104,3 +104,29 @@ async def lookup(body: Query, request: Request, response: Response):
             else:
                 result.banned=await active_ban(session,body.tenant_id,users=body.users,groups=body.groups,devices=body.devices)
     return result
+
+
+class OrganizationQuery(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    version: Literal[1] = 1
+    request_id: uuid.UUID
+    tenant_id: uuid.UUID
+    subject: str = Field(min_length=1,max_length=512)
+
+
+@router.post('/organization',dependencies=[Depends(authenticate)])
+async def organization(body: OrganizationQuery,request: Request,response: Response):
+    from user_service.authority_routes import enabled
+    from user_service.identity_host_setup import authorize_host_organization
+    if not enabled():
+        raise HTTPException(503,'Scoped host organization authority is not activated')
+    if request.headers.get('X-Tenant-ID')!=str(body.tenant_id):
+        raise HTTPException(403,'Tenant header must match the organization query')
+    response.headers['Cache-Control']='no-store'
+    async with request.app.state.session_maker() as session,session.begin():
+        await session.execute(text('SET TRANSACTION READ ONLY'))
+        grant=await authorize_host_organization(body.subject,body.tenant_id,session)
+        if grant is None:
+            raise HTTPException(403,'Current configured host organization required')
+    return {**body.model_dump(mode='json'),'user_id':str(grant.user_id),
+        'organization_id':str(grant.organization_id),'observed_at':datetime.now(UTC).isoformat()}

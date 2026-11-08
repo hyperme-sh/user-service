@@ -7,6 +7,8 @@ import re
 from sqlalchemy import text
 
 IMMUTABLE = (
+    "owner_schema_version",
+    "owner_authority_version",
     "authority_host_owners",
     "authority_networks",
     "authority_network_admins",
@@ -78,14 +80,16 @@ async def check(engine):
             flags = (
                 await db.execute(
                     text(
-                        """SELECT c.relrowsecurity,c.relforcerowsecurity FROM pg_class c
+                        """SELECT c.relrowsecurity,c.relforcerowsecurity,pg_get_userbyid(c.relowner) FROM pg_class c
                 JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname=:table"""
                     ),
                     {"table": table},
                 )
             ).one_or_none()
-            if flags != (True, True):
+            if flags is None or tuple(flags[:2]) != (True, True):
                 raise RuntimeError("Authority row security is missing")
+            if flags[2] in {role["rolname"] for role in roles}:
+                raise RuntimeError("Runtime owns an authority RLS table")
         generation = os.environ.get("USER_TEST_FIXTURE_GENERATION")
         if generation:
             manifest = os.environ.get("USER_TEST_FIXTURE_SHA256", "")

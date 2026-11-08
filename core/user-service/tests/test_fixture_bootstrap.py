@@ -282,6 +282,14 @@ async def test_runtime_cannot_modify_bootstrap_authority(
                 f'REVOKE UPDATE(enabled) ON "{schema}".authority_network_admins FROM "{name}"'
             )
         await check(engine)
+        with root.begin() as db:
+            db.exec_driver_sql(f'ALTER TABLE "{schema}".users OWNER TO "{name}"')
+        try:
+            with pytest.raises(RuntimeError, match="owns an authority RLS table"):
+                await check(engine)
+        finally:
+            with root.begin() as db:
+                db.exec_driver_sql(f'ALTER TABLE "{schema}".users OWNER TO "{schema}"')
         privileged = create_async_engine(owner.url.set(drivername="postgresql+asyncpg"))
         try:
             with pytest.raises(RuntimeError, match="migrator"):
@@ -329,5 +337,174 @@ async def test_enrollment_reads_existing_capabilities_without_granting_roles(
                 assert result.granted == expected and "org_admin" in result.refused
                 assert result.org_admin is None
             assert await db.scalar(text("SELECT count(*) FROM api_keys")) == 0
+    finally:
+        await engine.dispose()
+
+
+async def test_host_org_http_uses_purpose_key_and_current_membership(
+    empty_authority_owner, tmp_path, monkeypatch
+):
+    bootstrap(empty_authority_owner)
+    from fastapi import FastAPI
+    import httpx
+    from user_service.host_authority import router
+    from user_service.scoped_authority import scope
+
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    key = tmp_path / "purpose"
+    key.write_text("a" * 64)
+    monkeypatch.setenv("HOST_IDENTITY_OWNER_TOKEN_FILE", str(key))
+    accounts = {a["key"]: a for a in MANIFEST["accounts"]}
+    tenant = uuid.UUID(
+        next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active")
+    )
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    maker = async_sessionmaker(engine)
+    app = FastAPI()
+    app.state.session_maker = maker
+    app.include_router(router, prefix="/api/v1")
+    headers = {"Authorization": "Bearer " + "a" * 64, "X-Tenant-ID": str(tenant)}
+    body = {
+        "version": 1,
+        "request_id": str(uuid.uuid4()),
+        "tenant_id": str(tenant),
+        "subject": accounts["host-owner"]["id"],
+    }
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            result = await client.post(
+                "/api/v1/internal/host-authority/organization",
+                headers=headers,
+                json=body,
+            )
+            assert (
+                result.status_code == 200
+                and result.json()["request_id"] == body["request_id"]
+            )
+            assert result.headers["cache-control"] == "no-store"
+            assert (
+                await client.post(
+                    "/api/v1/internal/host-authority/organization",
+                    headers={**headers, "Authorization": "Bearer wrong"},
+                    json=body,
+                )
+            ).status_code == 401
+            assert (
+                await client.post(
+                    "/api/v1/internal/host-authority/organization",
+                    headers=headers,
+                    json={**body, "subject": accounts["primary-admin"]["id"]},
+                )
+            ).status_code == 403
+            async with maker() as db, db.begin(), scope(db, tenant):
+                await db.execute(
+                    text(
+                        "UPDATE organization_memberships SET enabled=false WHERE user_id=:id"
+                    ),
+                    {"id": uuid.UUID(result.json()["user_id"])},
+                )
+            assert (
+                await client.post(
+                    "/api/v1/internal/host-authority/organization",
+                    headers=headers,
+                    json=body,
+                )
+            ).status_code == 403
+    finally:
+        await engine.dispose()
+
+
+async def test_banned_host_is_refused_from_fresh_empty_scope(
+    empty_authority_owner, monkeypatch
+):
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    from user_service.identity_host_setup import (
+        authorize_host_setup,
+        authorize_host_organization,
+    )
+    from user_service.scoped_authority import scope
+
+    tenant = uuid.UUID(
+        next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active")
+    )
+    account = next(a for a in MANIFEST["accounts"] if a["key"] == "host-owner")
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    maker = async_sessionmaker(engine)
+    try:
+        async with maker() as db, db.begin():
+            grant = await authorize_host_setup(account["id"], tenant, db)
+            assert grant
+            async with scope(db, tenant):
+                await db.execute(
+                    text(
+                        "INSERT INTO operator_bans(id,tenant_id,subject_kind,subject_id,reason,created_by,created_at) VALUES(:id,:tenant,'user',:user,'test','configured-admin',now())"
+                    ),
+                    {"id": uuid.uuid4(), "tenant": tenant, "user": grant.user_id},
+                )
+        async with maker() as db, db.begin():
+            assert not await db.scalar(
+                text("SELECT current_setting('app.current_tenant_id',true)")
+            )
+            assert await authorize_host_setup(account["id"], tenant, db) is None
+            assert await authorize_host_organization(account["id"], tenant, db) is None
+            assert not await db.scalar(
+                text("SELECT current_setting('app.current_tenant_id',true)")
+            )
+    finally:
+        await engine.dispose()
+
+
+async def test_portal_controls_follow_current_org_billing_and_host_capabilities(
+    empty_authority_owner, monkeypatch
+):
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    from auth_service.schemas import AuthMeResponse
+    from user_service.interfaces.api.routes import actor_portal_controls
+    from user_service.scoped_authority import scope
+
+    tenant = uuid.UUID(
+        next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active")
+    )
+    accounts = {a["key"]: a for a in MANIFEST["accounts"]}
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    maker = async_sessionmaker(engine)
+    try:
+        async with maker() as db, db.begin():
+            for key, pays, hosts in [
+                ("primary-payer", True, False),
+                ("host-owner", True, True),
+                ("primary-member", False, False),
+                ("disabled-member", False, False),
+                ("unassociated", False, False),
+            ]:
+                actor = AuthMeResponse(
+                    sub=accounts[key]["id"], roles=["admin"], groups=["host", "renter"]
+                )
+                controls = await actor_portal_controls(db, tenant, actor)
+                assert controls.can_checkout == pays and controls.can_mint_keys == pays
+                assert (
+                    controls.can_see_leases == pays
+                    and controls.can_see_host_status == hosts
+                )
+            async with scope(db, tenant):
+                await db.execute(
+                    text(
+                        "UPDATE organization_memberships SET can_purchase_leases=false"
+                    )
+                )
+            actor = AuthMeResponse(
+                sub=accounts["primary-payer"]["id"], groups=["renter"]
+            )
+            assert not (await actor_portal_controls(db, tenant, actor)).can_checkout
     finally:
         await engine.dispose()
