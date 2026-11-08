@@ -25,3 +25,17 @@ def install(connection, ddl):
             raise ValueError('Scope installation requires an empty declared generation')
     connection.exec_driver_sql(ddl)
     connection.execute(text('INSERT INTO identity_scope_schema VALUES(:revision,:digest)'),{'revision':'0002_scope_authority','digest':DDL_SHA256})
+
+
+async def runtime_generation(engine):
+    import os
+    selected=os.environ.get('USER_SCOPE_GENERATION','')
+    async with engine.connect() as db:
+        exists=await db.scalar(text("SELECT to_regclass(current_schema() || '.identity_scope_generation')"))
+        if exists is None:
+            if selected:raise RuntimeError('Configured scope generation is not installed')
+            return None
+        rows=(await db.execute(text('SELECT generation FROM identity_scope_generation'))).scalars().all()
+    if len(rows)!=1 or rows[0]!=selected:
+        raise RuntimeError('Installed scope generation requires matching runtime configuration')
+    return selected

@@ -57,6 +57,8 @@ def create_app(
         engine = create_async_engine(normalize_database_url(settings.database_url))
         try:
             await check_public_database(engine)
+            from user_service.scope_schema import runtime_generation
+            app.state.scope_generation=await runtime_generation(engine)
         except BaseException:
             await engine.dispose()
             raise

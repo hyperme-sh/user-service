@@ -19,12 +19,17 @@ async def ready(db: AsyncSession=Depends(get_db_session)):
     if not generation:raise HTTPException(503,'Configured scope generation is not active')
     installed=await db.scalar(text("SELECT to_regclass(current_schema() || '.identity_scope_generation')"))
     if installed is None:raise HTTPException(503,'Scope generation schema is not installed')
+    version=await db.scalar(text("SELECT to_regclass(current_schema() || '.identity_scope_schema')"))
+    if version is None:raise HTTPException(503,'Scope schema identity is not installed')
+    from user_service.scope_schema import DDL_SHA256
+    revisions=(await db.execute(text('SELECT revision,sha256 FROM identity_scope_schema'))).all()
+    if revisions != [('0002_scope_authority',DDL_SHA256)]:raise HTTPException(503,'Scope schema identity differs')
     rows=(await db.execute(text('SELECT generation FROM identity_scope_generation'))).scalars().all()
     if rows != [generation]:raise HTTPException(503,'Scope generation is not installed')
 
 
-async def legacy_scope_guard():
-    if os.environ.get('USER_SCOPE_GENERATION'):
+async def legacy_scope_guard(request: Request):
+    if os.environ.get('USER_SCOPE_GENERATION') or getattr(request.app.state,'scope_generation',None):
         raise HTTPException(403,'Use the explicit network or organization scope API')
 
 

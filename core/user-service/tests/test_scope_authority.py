@@ -220,3 +220,22 @@ async def test_private_scope_check_never_authenticates_service_token_as_browser(
     s.app.dependency_overrides[get_access_token_claims]=forbidden
     r=await s.client.post('/api/v1/internal/organization-authority/check',headers={'Authorization':'Bearer local-AUTH'},json={'subject':'local:admin','tenant_id':str(s.tenant),'organization_id':str(s.org)})
     assert r.status_code==200 and r.json()['organization_id']==str(s.org)
+
+
+async def test_installed_generation_cannot_fall_back_after_configuration_drift(scope_owner,monkeypatch):
+    from user_service.scope_schema import runtime_generation
+    s=scope_owner;monkeypatch.delenv('USER_SCOPE_GENERATION')
+    with pytest.raises(RuntimeError,match='matching runtime configuration'):
+        await runtime_generation(s.app.state.async_engine)
+    assert (await s.client.get('/api/v1/users',headers={'X-Tenant-ID':str(s.tenant)})).status_code==403
+
+
+async def test_scope_install_refuses_existing_authorization_data(scope_owner):
+    s=scope_owner;owner=s.app.state.async_engine.url.username.removesuffix('_reader')
+    ddl=Path(__file__).with_name('fixtures').joinpath('scope-authority.sql').read_text()
+    with s.admin.begin() as db:
+        db.exec_driver_sql('DROP TABLE identity_scope_schema')
+        db.exec_driver_sql(f'SET LOCAL ROLE "{owner}"')
+        with pytest.raises(ValueError,match='empty declared generation'):
+            install(db,ddl)
+        assert db.scalar(text('SELECT count(*) FROM tenants'))==2
