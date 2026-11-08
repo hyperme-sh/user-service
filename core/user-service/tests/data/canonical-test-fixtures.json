@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "environment": "test",
+  "generation": "test-reset-v1",
+  "provisioning": "configuration-only",
+  "network_authority_is_not_tenant_role": true,
+  "networks": [
+    {
+      "id": "hyperme.sh",
+      "admin": "network-admin"
+    },
+    {
+      "id": "s3r.ch",
+      "admin": "s3r-network-admin"
+    },
+    {
+      "id": "tennesseewindage",
+      "admin": "tw-network-admin"
+    }
+  ],
+  "tenants": [
+    {
+      "key": "active",
+      "id": "8f8e8d8c-7b6a-4a59-8c3d-2e1f0a9b8c7d",
+      "network": "hyperme.sh",
+      "name": "hyperme.sh TEST",
+      "active": true
+    },
+    {
+      "key": "isolation",
+      "id": "69d6d445-efc0-5e04-8bfc-4e171077f51f",
+      "network": "hyperme.sh",
+      "name": "Isolation TEST",
+      "active": false
+    }
+  ],
+  "organizations": [
+    {
+      "key": "primary",
+      "id": "6e5ea9b8-0a17-56a2-8b33-ef4797ca2b04",
+      "tenant": "active",
+      "legal_name": "Primary TEST organization"
+    },
+    {
+      "key": "other",
+      "id": "1cb47cec-7e01-5e24-8db3-7595c93efa58",
+      "tenant": "active",
+      "legal_name": "Independent TEST organization"
+    },
+    {
+      "key": "isolated",
+      "id": "fef9426d-1adc-5cc7-949a-8cf1f545b066",
+      "tenant": "isolation",
+      "legal_name": "Isolation TEST organization"
+    }
+  ],
+  "accounts": [
+    {
+      "key": "network-admin",
+      "id": "4d2bcb10-9115-5ffc-8c73-f4c6c5ac410b",
+      "email": "admin@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "network",
+          "target": "hyperme.sh",
+          "role": "admin"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-network-admin-password",
+      "tenant_context": null
+    },
+    {
+      "key": "s3r-network-admin",
+      "id": "5d47f239-d9ba-5784-a722-205fa9766d89",
+      "email": "admin@test.s3r.ch",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "network",
+          "target": "s3r.ch",
+          "role": "admin"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-s3r-network-admin-password",
+      "tenant_context": null
+    },
+    {
+      "key": "tw-network-admin",
+      "id": "c7cc2af6-0941-5c22-9a54-491adb2c4d3d",
+      "email": "admin@tennesseewindage.test",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "network",
+          "target": "tennesseewindage",
+          "role": "admin"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-tw-network-admin-password",
+      "tenant_context": null
+    },
+    {
+      "key": "primary-admin",
+      "id": "911c8d86-24a1-51f2-baca-dd25672b92c7",
+      "email": "orgadmin@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "primary",
+          "role": "admin"
+        }
+      ],
+      "can_purchase_leases": true,
+      "host_owner": false,
+      "password_secret": "test-fixture-primary-admin-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "host-owner",
+      "id": "b5c6ec59-ffbd-5516-b65d-90fa3c14a7e1",
+      "email": "leaser@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "primary",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": true,
+      "host_owner": true,
+      "password_secret": "test-fixture-host-owner-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "primary-payer",
+      "id": "305c5037-e850-5069-a782-b65ff6320d80",
+      "email": "renter@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "primary",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": true,
+      "host_owner": false,
+      "password_secret": "test-fixture-primary-payer-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "primary-member",
+      "id": "e71587d4-eb2a-50c6-b1e1-bf3674dadc40",
+      "email": "member@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "primary",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-primary-member-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "disabled-member",
+      "id": "e59396a4-1e77-5505-aebc-3e09aca39c6c",
+      "email": "disabled@test.hyperme.sh",
+      "enabled": false,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "primary",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-disabled-member-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "other-admin",
+      "id": "6a020d9a-0fb4-5b98-8815-2edd510da593",
+      "email": "otheradmin@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "other",
+          "role": "admin"
+        }
+      ],
+      "can_purchase_leases": true,
+      "host_owner": false,
+      "password_secret": "test-fixture-other-admin-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "other-payer",
+      "id": "d87d5b92-e1a6-5e3a-8289-e791a61da221",
+      "email": "otherpayer@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "other",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": true,
+      "host_owner": false,
+      "password_secret": "test-fixture-other-payer-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "other-member",
+      "id": "4bd8eb4a-ba36-5eb3-bd53-2f6eaaf2611d",
+      "email": "othermember@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "other",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-other-member-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "unassociated",
+      "id": "03a671f2-176c-549a-87f4-b36582b92157",
+      "email": "unassociated@test.hyperme.sh",
+      "enabled": true,
+      "grants": [],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-unassociated-password",
+      "tenant_context": "active"
+    },
+    {
+      "key": "wrongadmin",
+      "id": "a49379ba-63cc-5b5b-ae9f-e10272603ef8",
+      "email": "wrongadmin@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "tenant",
+          "target": "isolation",
+          "role": "admin"
+        },
+        {
+          "scope": "organization",
+          "target": "isolated",
+          "role": "admin"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-wrongadmin-password",
+      "tenant_context": "isolation"
+    },
+    {
+      "key": "isolated-member",
+      "id": "091d5cbf-91d1-5188-bcd4-f4512148bf60",
+      "email": "wrongmember@test.hyperme.sh",
+      "enabled": true,
+      "grants": [
+        {
+          "scope": "organization",
+          "target": "isolated",
+          "role": "member"
+        }
+      ],
+      "can_purchase_leases": false,
+      "host_owner": false,
+      "password_secret": "test-fixture-isolated-member-password",
+      "tenant_context": "isolation"
+    }
+  ],
+  "hosts": [
+    {
+      "name": "AGX64-1",
+      "owner": "host-owner",
+      "organization": "primary",
+      "sell_state": "paused",
+      "require_fresh_enrollment": true,
+      "copy_prior_certification": false
+    },
+    {
+      "name": "J4012-1",
+      "owner": "host-owner",
+      "organization": "primary",
+      "sell_state": "paused",
+      "require_fresh_enrollment": true,
+      "copy_prior_certification": false
+    },
+    {
+      "name": "MACMINI-1",
+      "owner": "host-owner",
+      "organization": "primary",
+      "sell_state": "paused",
+      "require_fresh_enrollment": true,
+      "copy_prior_certification": false
+    }
+  ],
+  "policy": {
+    "ad_hoc_fixture_creation": false,
+    "temporary_privilege_grants": false,
+    "runtime_bootstrap_credentials": false,
+    "org_admin_can_manage_only_own_org": true,
+    "org_admin_cannot_grant_network_or_tenant_roles": true,
+    "network_admin_has_no_cross_network_authority": true,
+    "inactive_tenant_cannot_activate_itself": true
+  }
+}

@@ -57,8 +57,11 @@ def create_app(
         engine = create_async_engine(normalize_database_url(settings.database_url))
         try:
             await check_public_database(engine)
-            from user_service.scope_schema import runtime_generation
-            app.state.scope_generation=await runtime_generation(engine)
+            from user_service.scoped_database import check as check_scoped_database
+            await check_scoped_database(engine)
+            from user_service.scope_adapter import check_configuration
+            check_configuration()
+            app.state.scope_generation = os.environ.get("USER_TEST_FIXTURE_GENERATION")
         except BaseException:
             await engine.dispose()
             raise
@@ -153,8 +156,10 @@ def create_app(
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
     app.include_router(user_api_router, prefix="/api/v1")
-    from user_service.scope_api import router as scope_router
-    app.include_router(scope_router, prefix="/api/v1")
+    from user_service.authority_routes import router as authority_router
+    app.include_router(authority_router,prefix="/api/v1")
+    from user_service.scope_adapter import router as scope_adapter_router
+    app.include_router(scope_adapter_router,prefix="/api/v1")
     from user_service.identity_api import router as identity_router
     app.include_router(identity_router,prefix="/api/v1")
     from user_service.host_authority import router as host_authority_router

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 import historical_db_fixture  # noqa: F401; verified private historical migrations
 
@@ -171,3 +172,27 @@ def _published_payloads_follow_wire_contracts(monkeypatch):
 @pytest.fixture(scope="session")
 def closure_sync_url(migrated_sync_url):
     return migrated_sync_url
+
+
+@pytest.fixture
+def empty_authority_owner(migrated_sync_url):
+    """A disposable nonprivileged User namespace, never the shared TEST database."""
+    from importlib.resources import files
+    from sqlalchemy.engine import make_url
+    from controlplane_events.owner_schema import migrate
+    from user_service.authority_migrate import install
+    name='bootstrap_'+uuid.uuid4().hex;password=uuid.uuid4().hex
+    root=create_engine(migrated_sync_url)
+    with root.begin() as db:
+        db.exec_driver_sql(f'CREATE ROLE "{name}" LOGIN PASSWORD \'{password}\' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE')
+        db.exec_driver_sql(f'CREATE SCHEMA "{name}" AUTHORIZATION "{name}"')
+        db.exec_driver_sql(f'ALTER ROLE "{name}" SET search_path TO "{name}",public')
+    engine=create_engine(make_url(migrated_sync_url).set(username=name,password=password))
+    migrate(engine,revision='0001_owner_schema',ddl=Path(__file__).parent.joinpath('fixtures/owner-schema.sql').read_text())
+    install(engine)
+    try:yield engine
+    finally:
+        engine.dispose()
+        with root.begin() as db:
+            db.exec_driver_sql(f'DROP SCHEMA "{name}" CASCADE');db.exec_driver_sql(f'DROP ROLE "{name}"')
+        root.dispose()

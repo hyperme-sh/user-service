@@ -463,6 +463,9 @@ async def grant_held_roles(
     if not user.sub or not user.sub.strip() or len(user.sub) > 512:
         raise EnrollmentError("A nonempty Keycloak subject of at most 512 characters is required")
     tenant_id = tenant_id or MARKETPLACE_TENANT_ID
+    from user_service.authority_routes import enabled
+    if enabled():
+        return await configured_enrollment(session,user,tenant_id,requested)
     await _require_tenant(session, tenant_id)
     await set_current_tenant_id_guc(session, tenant_id)
 
@@ -539,3 +542,29 @@ async def grant_held_roles(
         org_admin=org_admin_grant,
         device_enrolled=False,
     )
+
+
+async def configured_enrollment(session,user,tenant_id,requested):
+    """Read configured capabilities; enrollment cannot grant TEST authority."""
+    from user_service.scoped_authority import scope,actor_active
+    from user_service.identity_host_setup import authorize_host_organization
+    from user_service.infrastructure.operator_store import active_ban
+    if not await actor_active(session,tenant_id,user.sub):
+        raise EnrollmentError('Configured active identity and tenant required')
+    async with scope(session,tenant_id):
+        member=await get_tenant_membership_row(session,tenant_id,keycloak_sub=user.sub)
+        if (member is None or member.keycloak_sub!=user.sub or not member.is_active
+                or member.deleted_at is not None or await active_ban(session,tenant_id,'user',member.id)):
+            raise EnrollmentError('Configured active tenant membership required')
+        can_purchase=bool(await session.scalar(text("""SELECT EXISTS(SELECT 1 FROM organization_memberships
+            WHERE tenant_id=:tenant AND user_id=:user AND enabled AND can_purchase_leases)"""),
+            {'tenant':tenant_id,'user':member.id}))
+    host=await authorize_host_organization(user.sub,tenant_id,session)
+    available={HELD_RENTER} if can_purchase else set()
+    if host:available.add(HELD_HOST)
+    asked={str(x).strip().lower() for x in requested} if requested else available
+    granted=tuple(sorted(asked & available));refused=tuple(sorted(asked-available))
+    return EnrollmentGrantResult(granted=granted,refused=refused,
+        wallet_address=await _bound_wallet(session,user.sub),
+        renter=RenterGrant(True,GROUP_RENTER,None,True,True,True) if HELD_RENTER in granted else None,
+        host=HostGrant(host.organization_id,GROUP_HOST,False) if HELD_HOST in granted else None)
