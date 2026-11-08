@@ -540,3 +540,29 @@ async def test_signed_org_selection_limits_even_two_current_memberships(
                     text("SELECT * FROM organization_idp_links ORDER BY id")
                 )
             ).all() == before
+
+
+@pytest.mark.asyncio
+async def test_verified_first_login_creates_only_individual_profiles(authority, monkeypatch):
+    import asyncio
+    from fastapi import HTTPException
+    from user_service.scope_adapter import establish_login_tenant
+
+    issuer = "https://identity.test/realms/test"
+    monkeypatch.setenv("USER_LOGIN_TENANT_ID", str(authority.tenant))
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    monkeypatch.setenv("KEYCLOAK_ISSUER", issuer)
+    monkeypatch.setenv("USER_LOGIN_CLIENT_ID", "portal")
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=authority.maker)))
+    claims = {"iss": issuer, "azp": "portal", "sub": "new-person", "email_verified": True, "email": "individual@example.test"}
+    results = await asyncio.gather(*(establish_login_tenant(request, claims) for _ in range(2)))
+    assert all(r.status_code == 204 for r in results)
+    async with authority.maker() as db, db.begin():
+        for target in (None, authority.tenant):
+            async with scope(db, target):
+                rows = (await db.execute(text("SELECT role_id FROM users WHERE keycloak_sub='new-person' AND tenant_id IS NOT DISTINCT FROM CAST(:t AS uuid)"), {"t":target})).all()
+                assert rows == [(None,)]
+        assert not await allowed(db, subject="new-person", tenant=authority.tenant, organization=authority.org, action="organization.read")
+    with pytest.raises(HTTPException) as refused:
+        await establish_login_tenant(request, dict(claims, sub="different-person"))
+    assert refused.value.status_code == 409
