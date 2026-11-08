@@ -546,10 +546,10 @@ async def grant_held_roles(
 
 async def configured_enrollment(session,user,tenant_id,requested):
     """Read configured capabilities; enrollment cannot grant TEST authority."""
-    from user_service.scoped_authority import scope,identity_active,active_tenant
+    from user_service.scoped_authority import scope,actor_active
     from user_service.identity_host_setup import authorize_host_organization
     from user_service.infrastructure.operator_store import active_ban
-    if not await identity_active(session,user.sub) or not await active_tenant(session,tenant_id):
+    if not await actor_active(session,tenant_id,user.sub):
         raise EnrollmentError('Configured active identity and tenant required')
     async with scope(session,tenant_id):
         member=await get_tenant_membership_row(session,tenant_id,keycloak_sub=user.sub)

@@ -96,10 +96,36 @@ async def active_tenant(session, tenant):
         )
 
 
-async def tenant_admin(session, tenant, subject):
+async def actor_active(session, tenant, subject):
+    """Recheck both identity IDs under the destination tenant's current bans."""
     if not await identity_active(session, subject) or not await active_tenant(
         session, tenant
     ):
+        return False
+    from user_service.infrastructure.operator_store import active_ban
+
+    async with scope(session):
+        platform = await session.scalar(
+            text(
+                "SELECT id FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject"
+            ),
+            {"subject": subject},
+        )
+    async with scope(session, tenant):
+        member = await session.scalar(
+            text(
+                "SELECT id FROM users WHERE tenant_id=:tenant AND keycloak_sub=:subject"
+            ),
+            {"tenant": tenant, "subject": subject},
+        )
+        for user_id in {platform, member} - {None}:
+            if await active_ban(session, tenant, "user", user_id) is not None:
+                return False
+    return True
+
+
+async def tenant_admin(session, tenant, subject):
+    if not await actor_active(session, tenant, subject):
         return False
     network = await tenant_network(session, tenant)
     if network and await network_admin(session, network, subject):
@@ -118,9 +144,7 @@ async def tenant_admin(session, tenant, subject):
 
 
 async def organization_member(session, tenant, organization, subject):
-    if not await identity_active(session, subject) or not await active_tenant(
-        session, tenant
-    ):
+    if not await actor_active(session, tenant, subject):
         return None
     async with scope(session, tenant):
         return (
@@ -216,9 +240,7 @@ async def fixture_target(session, tenant, email):
 
 
 async def host_scope(session, tenant, subject):
-    if not await identity_active(session, subject) or not await active_tenant(
-        session, tenant
-    ):
+    if not await actor_active(session, tenant, subject):
         return None
     async with scope(session, tenant):
         return (
@@ -242,9 +264,7 @@ async def host_scope(session, tenant, subject):
 
 async def billing_member(session, tenant, subject):
     """A current org billing grant, independent of cached portal groups."""
-    if not await identity_active(session, subject) or not await active_tenant(
-        session, tenant
-    ):
+    if not await actor_active(session, tenant, subject):
         return False
     from user_service.infrastructure.operator_store import active_ban
 

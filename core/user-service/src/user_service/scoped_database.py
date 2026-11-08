@@ -68,6 +68,18 @@ async def check(engine):
                 raise RuntimeError(
                     "Bootstrap/migrator authority cannot be a runtime credential"
                 )
+            if await db.scalar(
+                text(
+                    """SELECT EXISTS(SELECT 1 FROM pg_class c
+                JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner
+                WHERE n.nspname=current_schema() AND r.rolname=:role
+                  AND c.relkind IN ('r','p','v','m','f','S'))"""
+                ),
+                {"role": role["rolname"]},
+            ):
+                raise RuntimeError(
+                    "Runtime owns an authority RLS table or other owner relation"
+                )
             for table in IMMUTABLE:
                 if await db.scalar(
                     text(

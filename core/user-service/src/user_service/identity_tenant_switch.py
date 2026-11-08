@@ -130,9 +130,9 @@ async def authorize_tenant_switch(
     db = session or get_db_session()
     from user_service.authority_routes import enabled
     if enabled():
-        from user_service.scoped_authority import active_tenant, identity_active, network_admin, tenant_network, scope
+        from user_service.scoped_authority import actor_active, network_admin, tenant_network, scope
         subject = user.sub
-        if not await identity_active(db, subject) or not await active_tenant(db, tenant_id):
+        if not await actor_active(db,tenant_id,subject):
             return None
         network = await tenant_network(db, tenant_id)
         if await network_admin(db, network, subject):

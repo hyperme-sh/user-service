@@ -155,8 +155,8 @@ async def require_live_role_admin(session, tenant_id, me):
 async def require_profile_editor(session, tenant_id, me, user_id, body):
     from user_service.authority_routes import enabled
     if enabled():
-        from user_service.scoped_authority import active_tenant,identity_active
-        if not await identity_active(session,me.sub) or not await active_tenant(session,tenant_id):
+        from user_service.scoped_authority import actor_active
+        if not await actor_active(session,tenant_id,me.sub):
             raise HTTPException(403,'Identity or tenant is inactive or unavailable')
     # Only a durable IdP subject binding establishes self. Token email and a
     # coincidentally matching local user ID must not confer write authority.
@@ -553,9 +553,9 @@ async def list_organizations(
 ):
     from user_service.authority_routes import enabled
     if enabled():
-        from user_service.scoped_authority import active_tenant,tenant_admin,scope
+        from user_service.scoped_authority import actor_active,tenant_admin,scope
         from sqlalchemy import text
-        if not await active_tenant(session,tenant_id):raise HTTPException(403,'Tenant is inactive or unavailable')
+        if not await actor_active(session,tenant_id,me.sub):raise HTTPException(403,'Identity or tenant is inactive or unavailable')
         if not await tenant_admin(session,tenant_id,me.sub):
             filters={"tenant":tenant_id,"subject":me.sub,"q":"%"+(q or "")+"%","limit":limit,"offset":offset}
             selection="""FROM organizations o JOIN organization_memberships m ON m.organization_id=o.id AND m.tenant_id=o.tenant_id
@@ -792,10 +792,10 @@ async def list_user_groups(
 ):
     from user_service.authority_routes import enabled
     if enabled():
-        from user_service.scoped_authority import active_tenant,tenant_admin
+        from user_service.scoped_authority import actor_active,tenant_admin
         actor=await SqlUserRepository(session).get_by_keycloak_sub(tenant_id,me.sub)
         own=actor is not None and actor.is_active and actor.id==user_id
-        if not await active_tenant(session,tenant_id) or not (own or await tenant_admin(session,tenant_id,me.sub)):
+        if not await actor_active(session,tenant_id,me.sub) or not (own or await tenant_admin(session,tenant_id,me.sub)):
             raise HTTPException(403,'Directory access is outside current scope')
     urepo = SqlUserRepository(session)
     user = await urepo.get(tenant_id, user_id)

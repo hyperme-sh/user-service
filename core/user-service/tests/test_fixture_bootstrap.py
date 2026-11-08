@@ -508,3 +508,119 @@ async def test_portal_controls_follow_current_org_billing_and_host_capabilities(
             assert not (await actor_portal_controls(db, tenant, actor)).can_checkout
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "key,kind,action",
+    [
+        ("network-admin", "platform", "tenant.admin"),
+        ("primary-admin", "profile", "organization.admin"),
+        ("primary-payer", "profile", "lease.purchase"),
+        ("primary-payer", "platform", "lease.purchase"),
+    ],
+)
+async def test_stale_actor_cannot_use_scoped_authority_after_user_ban(
+    empty_authority_owner, monkeypatch, key, kind, action
+):
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    from user_service.scoped_authority import scope
+
+    tenant = uuid.UUID(
+        next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active")
+    )
+    org = uuid.UUID(
+        next(o["id"] for o in MANIFEST["organizations"] if o["key"] == "primary")
+    )
+    actor = next(a for a in MANIFEST["accounts"] if a["key"] == key)
+    user = (
+        uuid.UUID(actor["id"])
+        if kind == "platform"
+        else identifier(
+            MANIFEST["generation"], "member", tenant, uuid.UUID(actor["id"])
+        )
+    )
+    query = dict(
+        subject=actor["id"],
+        tenant=tenant,
+        action=action,
+        organization=None if action == "tenant.admin" else org,
+    )
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    maker = async_sessionmaker(engine)
+    try:
+        async with maker() as db, db.begin():
+            assert await allowed(db, **query)
+            async with scope(db, tenant):
+                await db.execute(
+                    text(
+                        "INSERT INTO operator_bans(id,tenant_id,subject_kind,subject_id,reason,created_by,created_at) VALUES(:id,:tenant,'user',:user,'test','configured-admin',now())"
+                    ),
+                    {"id": uuid.uuid4(), "tenant": tenant, "user": user},
+                )
+        async with maker() as db, db.begin():
+            assert not await allowed(db, **query)
+    finally:
+        await engine.dispose()
+
+
+async def test_org_list_refuses_disabled_global_identity_with_stale_session(
+    empty_authority_owner, monkeypatch
+):
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    from fastapi import FastAPI
+    import httpx
+    from auth_service.schemas import AuthMeResponse
+    from auth_service.deps import get_current_tenant
+    from user_service.deps import get_current_user
+    from user_service.interfaces.api.routes import router
+    from api.infrastructure.persistence.db_session import get_db_session
+    from user_service.scoped_authority import scope
+
+    tenant = uuid.UUID(
+        next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active")
+    )
+    account = next(a for a in MANIFEST["accounts"] if a["key"] == "primary-payer")
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    maker = async_sessionmaker(engine)
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+
+    async def actor():
+        return AuthMeResponse(
+            sub=account["id"], tenant_id=tenant, roles=["admin"], groups=["renter"]
+        )
+
+    async def context():
+        return tenant
+
+    async def database():
+        async with maker() as db, db.begin(), scope(db, tenant):
+            yield db
+
+    app.dependency_overrides.update(
+        {get_current_user: actor, get_current_tenant: context, get_db_session: database}
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            headers = {"X-Tenant-ID": str(tenant)}
+            result = await client.get("/api/v1/organizations", headers=headers)
+            assert result.status_code == 200 and result.json()["total"] == 1
+            async with maker() as db, db.begin(), scope(db):
+                await db.execute(
+                    text(
+                        "UPDATE users SET is_active=false WHERE tenant_id IS NULL AND keycloak_sub=:subject"
+                    ),
+                    {"subject": account["id"]},
+                )
+            result = await client.get("/api/v1/organizations", headers=headers)
+            assert result.status_code == 403
+    finally:
+        await engine.dispose()
