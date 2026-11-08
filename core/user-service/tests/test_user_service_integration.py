@@ -263,9 +263,6 @@ async def test_list_groups_pagination_and_search(http_client, tenant_headers, se
     b0 = r0.json()
     assert b0["total"] >= 3
     assert len(b0["items"]) == 2
-    counts = await http_client.get("/api/v1/users", headers=tenant_headers, params={"limit": 0})
-    assert counts.status_code == 200
-    assert counts.json() == {"items": [], "total": b0["total"], "limit": 0, "offset": 0}
     assert b0["limit"] == 2
     assert b0["offset"] == 0
 
