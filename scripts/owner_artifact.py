@@ -80,13 +80,33 @@ def export(path, directory):
     (directory/'evidence.json').write_text(json.dumps(evidence, sort_keys=True, indent=2)+'\n')
 
 
+def qualify(path, directory, source_sha):
+    """Record this build without rewriting any historical release selection."""
+    if not re.fullmatch('[a-f0-9]{40}', source_sha):
+        raise ValueError('Exact source revision required')
+    directory = Path(directory)
+    export(path, directory)
+    evidence = json.loads((directory / 'evidence.json').read_text())
+    digest = evidence['artifact_sha256']
+    candidate = dict(schema_version=1, line=evidence['version'].rsplit('.', 1)[0],
+        purpose='artifact-qualification', stable_release=False, source_sha=source_sha,
+        components={'user-service': dict(version=evidence['version'], contract='contract.json',
+            contract_sha256=evidence['contract_sha256'],
+            artifact=dict(kind='package', uri='urn:sha256:' + digest, sha256=digest))})
+    with (directory / 'release.json').open('x') as stream:
+        stream.write(json.dumps(candidate, sort_keys=True, indent=2) + '\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     create = sub.add_parser('build'); create.add_argument('directory')
     read = sub.add_parser('export'); read.add_argument('archive'); read.add_argument('directory')
+    qualification = sub.add_parser('qualify'); qualification.add_argument('archive'); qualification.add_argument('directory'); qualification.add_argument('source_sha')
     args = parser.parse_args()
     if args.command == 'build':
         print(build(args.directory))
-    else:
+    elif args.command == 'export':
         export(args.archive, args.directory)
+    else:
+        qualify(args.archive, args.directory, args.source_sha)

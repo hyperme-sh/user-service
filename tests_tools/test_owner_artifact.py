@@ -56,3 +56,33 @@ def test_outer_duplicate_rejected(tmp_path):
     with zipfile.ZipFile(path, 'a') as z:
         z.writestr(z.namelist()[0], b'bad')
     with pytest.raises(ValueError): owner.inspect(path.read_bytes())
+
+
+def test_current_source_qualification_does_not_rewrite_prior_candidate(tmp_path):
+    import json
+    from test_release_candidate import verifier
+    pair(tmp_path)
+    archive = owner.build(tmp_path)
+    old = tmp_path / 'historical'
+    owner.qualify(archive, old, 'a' * 40)
+    retained = {p.name: p.read_bytes() for p in old.iterdir()}
+    wheel(tmp_path, 'user-service', runtime=b'new configured host enrollment\n')
+    archive = owner.build(tmp_path)
+    current = tmp_path / 'current'
+    owner.qualify(archive, current, 'b' * 40)
+    verifier.verify(current / 'release.json', current / 'contract.json', current / 'evidence.json', 'user-service')
+    manifest = json.loads((current / 'release.json').read_text())
+    assert manifest['source_sha'] == 'b' * 40
+    assert manifest['stable_release'] is False and manifest['purpose'] == 'artifact-qualification'
+    assert {p.name: p.read_bytes() for p in old.iterdir()} == retained
+    with pytest.raises(ValueError, match='artifact differs'):
+        verifier.verify(old / 'release.json', current / 'contract.json', current / 'evidence.json', 'user-service')
+    with pytest.raises(FileExistsError):
+        owner.qualify(archive, current, 'c' * 40)
+
+
+def test_qualification_requires_source_before_writing(tmp_path):
+    pair(tmp_path)
+    with pytest.raises(ValueError, match='source revision'):
+        owner.qualify(owner.build(tmp_path), tmp_path / 'invalid', 'main')
+    assert not (tmp_path / 'invalid').exists()
