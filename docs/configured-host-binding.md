@@ -17,3 +17,13 @@ HTTP mock, with no credentials or network. Testcontainers removes its own databa
 engine disposal and per-test owner cleanup retain no shared state. Commit this
 fixture definition before running it. Source/package qualification is separate
 from live TEST binding reconciliation and native paused host acceptance.
+
+
+Development CI records the actual two-wheel owner archive and exported complete
+runtime contract in its retained `qualification/` directory, bound to the exact
+checkout SHA with `stable_release=false`. The existing strict candidate verifier
+checks those current bytes. Historical checked-in candidates remain unchanged;
+they describe their selected bytes and cannot equal every later development
+build. Release admission and owner selection remain separate. The tooling
+regression retains an old candidate, changes runtime bytes, verifies the fresh
+qualification, and confirms the old record still rejects those new bytes.

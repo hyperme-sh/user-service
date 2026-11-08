@@ -40,13 +40,9 @@ jobs:
         run: |
           uv run --project core/user-service --frozen --no-sync pytest -q tests_tools
           archive=$(python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR")
-          exported=$(mktemp -d "$RUNNER_TEMP/user-owner-contract.XXXXXX")
-          python3 scripts/owner_artifact.py export "$archive" "$exported/contract"
-          for qualified_manifest in releases/qualification/current/release.json releases/candidate/release.json; do
-            if [[ -f "$qualified_manifest" ]]; then
-              python3 scripts/verify_release_candidate.py "$qualified_manifest" "$exported/contract/contract.json" "$exported/contract/evidence.json" user-service
-            fi
-          done
+          qualified="$SERVICE_ARTIFACT_DIR/qualification"
+          python3 scripts/owner_artifact.py qualify "$archive" "$qualified" "$GITHUB_SHA"
+          python3 scripts/verify_release_candidate.py "$qualified/release.json" "$qualified/contract.json" "$qualified/evidence.json" user-service
       - name: Verify local qualification outputs before optional PR retention
         run: |
           test -n "$(find "$SERVICE_ARTIFACT_DIR" -name '*.whl' -type f -size +0c -print -quit)"
