@@ -86,3 +86,45 @@ def test_qualification_requires_source_before_writing(tmp_path):
     with pytest.raises(ValueError, match='source revision'):
         owner.qualify(owner.build(tmp_path), tmp_path / 'invalid', 'main')
     assert not (tmp_path / 'invalid').exists()
+
+
+def test_qualification_stays_outside_flat_publisher_inventory(tmp_path):
+    dist = tmp_path / 'dist'
+    dist.mkdir()
+    pair(dist)
+    archive = owner.build(dist)
+    qualification = tmp_path / 'qualification'
+    owner.qualify(archive, qualification, 'a' * 40)
+    (dist / 'runtime-image.json').write_text('{"isolated_fixture":true}')
+    owner.verify_delivery(dist)
+    assert not (dist / 'qualification').exists()
+    assert (qualification / 'release.json').is_file()
+    # Reproduce the old upload layout: strict producer validation must refuse.
+    (dist / 'qualification').mkdir()
+    (dist / 'qualification' / 'contract.json').write_text('{}')
+    with pytest.raises(ValueError, match='flat regular files'):
+        owner.verify_delivery(dist)
+
+
+@pytest.mark.parametrize('case', ['empty', 'symlink', 'reserved', 'invalid'])
+def test_publisher_inventory_refuses_unsafe_entries(tmp_path, case):
+    if case == 'symlink':
+        (tmp_path / 'target.whl').write_bytes(b'fixture')
+        (tmp_path / 'link.whl').symlink_to('target.whl')
+    elif case == 'reserved':
+        (tmp_path / 'release-manifest.json').write_text('{}')
+    elif case == 'invalid':
+        (tmp_path / 'bad name.whl').write_bytes(b'fixture')
+    with pytest.raises(ValueError, match='flat regular files'):
+        owner.verify_delivery(tmp_path)
+
+
+def test_pr_and_main_retention_separate_qualification_from_delivery():
+    root = Path(__file__).resolve().parents[1]
+    for name in ('preparation', 'service'):
+        workflow = (root / '.github/workflows' / (name + '.yml')).read_text()
+        assert 'qualified="$OWNER_QUALIFICATION_DIR"' in workflow
+        assert 'qualified="$SERVICE_ARTIFACT_DIR/qualification"' not in workflow
+        assert 'name: owner-qualification' in workflow
+        assert 'path: ${{ env.OWNER_QUALIFICATION_DIR }}/*' in workflow
+        assert workflow.index('verify-delivery "$SERVICE_ARTIFACT_DIR"') < workflow.index('- name: Retain validated owner artifacts')

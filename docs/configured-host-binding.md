@@ -20,10 +20,19 @@ from live TEST binding reconciliation and native paused host acceptance.
 
 
 Development CI records the actual two-wheel owner archive and exported complete
-runtime contract in its retained `qualification/` directory, bound to the exact
+runtime contract in the separate retained `owner-qualification` Actions artifact, bound to the exact
 checkout SHA with `stable_release=false`. The existing strict candidate verifier
 checks those current bytes. Historical checked-in candidates remain unchanged;
 they describe their selected bytes and cannot equal every later development
 build. Release admission and owner selection remain separate. The tooling
 regression retains an old candidate, changes runtime bytes, verifies the fresh
 qualification, and confirms the old record still rejects those new bytes.
+
+The `tested-dist` publisher input contains only flat regular distribution files
+and the runtime-image receipt. Current qualification files live outside that
+directory and are uploaded separately. CI validates the flat inventory before
+upload, rejecting nested directories, symlinks, reserved/invalid names and the
+publisher's expanded-size limit. This preserves the pinned shared publisher's
+strict input checks. The regression reproduces the old nested qualification
+layout and rejects it before delivery. Historical failed runs and test tags are
+retained; normal qualification of a new source revision supplies new evidence.

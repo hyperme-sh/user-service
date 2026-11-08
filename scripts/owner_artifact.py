@@ -97,15 +97,29 @@ def qualify(path, directory, source_sha):
         stream.write(json.dumps(candidate, sort_keys=True, indent=2) + '\n')
 
 
+def verify_delivery(directory):
+    """Match the pinned publisher's flat regular-file input boundary."""
+    entries = list(Path(directory).iterdir())
+    if not entries or any(not p.is_file() or p.is_symlink()
+            or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.+-]*', p.name)
+            or p.name == 'release-manifest.json' for p in entries):
+        raise ValueError('Tested delivery requires flat regular files with valid unique names')
+    if sum(p.stat().st_size for p in entries) > 512 * 1024 * 1024:
+        raise ValueError('Tested delivery exceeds the pinned publisher size limit')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     create = sub.add_parser('build'); create.add_argument('directory')
     read = sub.add_parser('export'); read.add_argument('archive'); read.add_argument('directory')
     qualification = sub.add_parser('qualify'); qualification.add_argument('archive'); qualification.add_argument('directory'); qualification.add_argument('source_sha')
+    delivery = sub.add_parser('verify-delivery'); delivery.add_argument('directory')
     args = parser.parse_args()
     if args.command == 'build':
         print(build(args.directory))
+    elif args.command == 'verify-delivery':
+        verify_delivery(args.directory)
     elif args.command == 'export':
         export(args.archive, args.directory)
     else:

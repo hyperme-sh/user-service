@@ -49,6 +49,8 @@ jobs:
           output=$(mktemp -d "$RUNNER_TEMP/user-service-dist.XXXXXX")
           echo "SERVICE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
           echo "RELEASE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
+          qualification_parent=$(mktemp -d "$RUNNER_TEMP/user-owner-qualification.XXXXXX")
+          echo "OWNER_QUALIFICATION_DIR=$qualification_parent/current" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -83,7 +85,7 @@ jobs:
         run: |
           uv run --project core/user-service --frozen pytest -q tests_tools
           archive=$(python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR")
-          qualified="$SERVICE_ARTIFACT_DIR/qualification"
+          qualified="$OWNER_QUALIFICATION_DIR"
           python3 scripts/owner_artifact.py qualify "$archive" "$qualified" "$GITHUB_SHA"
           python3 scripts/verify_release_candidate.py "$qualified/release.json" "$qualified/contract.json" "$qualified/evidence.json" user-service
       - name: Publish the qualified main runtime and record its digest
@@ -126,6 +128,15 @@ jobs:
               repository=os.environ['GITHUB_REPOSITORY'], revision=os.environ['GITHUB_SHA'],
               run_id=int(os.environ['GITHUB_RUN_ID'])), sort_keys=True)+'\n')
           PYTHON
+      - name: Verify flat tested artifact inventory
+        run: python3 scripts/owner_artifact.py verify-delivery "$SERVICE_ARTIFACT_DIR"
+      - name: Retain current owner qualification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: owner-qualification
+          path: ${{ env.OWNER_QUALIFICATION_DIR }}/*
+          if-no-files-found: error
+          retention-days: 30
       - name: Retain validated owner artifacts
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
