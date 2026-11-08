@@ -247,6 +247,22 @@ async def test_scoped_login_and_host_context_are_read_only(
         await engine.dispose()
 
 
+async def test_unseeded_authority_schema_preserves_legacy_readiness(
+    empty_authority_owner, monkeypatch
+):
+    from user_service.scoped_database import check
+
+    monkeypatch.delenv("USER_SCOPED_AUTHORITY_REQUIRED", raising=False)
+    monkeypatch.delenv("USER_TEST_FIXTURE_GENERATION", raising=False)
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    try:
+        await check(engine)
+    finally:
+        await engine.dispose()
+
+
 async def test_runtime_cannot_modify_bootstrap_authority(
     empty_authority_owner, migrated_sync_url, monkeypatch
 ):
@@ -283,8 +299,15 @@ async def test_runtime_cannot_modify_bootstrap_authority(
         monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "0")
         with pytest.raises(RuntimeError, match="requires scoped authority"):
             await check(engine)
-        monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
         monkeypatch.delenv("USER_TEST_FIXTURE_GENERATION")
+        for legacy in (None, "0"):
+            if legacy is None:
+                monkeypatch.delenv("USER_SCOPED_AUTHORITY_REQUIRED", raising=False)
+            else:
+                monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", legacy)
+            with pytest.raises(RuntimeError, match="requires scoped authority"):
+                await check(engine)
+        monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
         with pytest.raises(RuntimeError, match="requires explicit readiness bindings"):
             await check(engine)
         monkeypatch.setenv("USER_TEST_FIXTURE_GENERATION", MANIFEST["generation"])

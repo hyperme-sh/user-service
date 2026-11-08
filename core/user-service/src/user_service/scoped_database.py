@@ -33,6 +33,16 @@ async def check(engine):
     if os.environ.get("USER_SCOPED_AUTHORITY_REQUIRED") != "1":
         if os.environ.get("USER_TEST_FIXTURE_GENERATION"):
             raise RuntimeError("Canonical TEST generation requires scoped authority")
+        # A sealed canonical database must never silently select legacy guards,
+        # even when every generation environment binding was omitted.
+        async with engine.begin() as db:
+            relation = await db.scalar(
+                text("SELECT to_regclass('authority_fixture_generation')")
+            )
+            if relation is not None and await db.scalar(
+                text("SELECT count(*) FROM authority_fixture_generation")
+            ):
+                raise RuntimeError("Seeded TEST generation requires scoped authority")
         return
     expected = hashlib.sha256(
         files("user_service").joinpath("authority_schema.sql").read_bytes()
