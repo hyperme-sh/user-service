@@ -228,3 +228,135 @@ async def create_member(
     session: AsyncSession = Depends(get_db_session),
 ):
     return await put_member(organization_id, body.user_id, body, me, tenant, session)
+
+
+class BillingQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    request_id: uuid.UUID
+    tenant_id: uuid.UUID
+    organization_id: uuid.UUID | None = None
+
+
+@router.post("/authority/billing-context")
+async def billing_context(
+    body: BillingQuery,
+    request: Request,
+    response: Response,
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    from datetime import UTC, datetime
+    from user_service.scoped_authority import actor_active
+
+    if not enabled():
+        raise HTTPException(503, "Scoped authority is not activated")
+    if me.tenant_id != body.tenant_id or request.headers.get("X-Tenant-ID") != str(
+        body.tenant_id
+    ):
+        raise HTTPException(403, "Billing context must match the verified tenant")
+    if not await actor_active(session, body.tenant_id, me.sub):
+        raise HTTPException(403, "Current active identity and tenant required")
+    async with scope(session):
+        identity = await session.scalar(
+            text(
+                "SELECT id FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject"
+            ),
+            {"subject": me.sub},
+        )
+    async with scope(session, body.tenant_id):
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        """SELECT m.organization_id FROM organization_memberships m
+            JOIN users u ON u.id=m.user_id AND u.tenant_id=m.tenant_id
+            JOIN organizations o ON o.id=m.organization_id AND o.tenant_id=m.tenant_id
+            WHERE m.tenant_id=:tenant AND m.enabled AND m.can_purchase_leases
+              AND u.keycloak_sub=:subject AND u.is_active AND u.deleted_at IS NULL
+              AND (CAST(:org AS uuid) IS NULL OR m.organization_id=CAST(:org AS uuid))
+            ORDER BY m.organization_id"""
+                    ),
+                    {
+                        "tenant": body.tenant_id,
+                        "subject": me.sub,
+                        "org": body.organization_id,
+                    },
+                )
+            )
+            .scalars()
+            .all()
+        )
+    if not rows:
+        raise HTTPException(403, "Current organization billing membership required")
+    if len(rows) != 1:
+        raise HTTPException(409, "Select an authorized billing organization explicitly")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "version": 1,
+        "request_id": str(body.request_id),
+        "tenant_id": str(body.tenant_id),
+        "subject": me.sub,
+        "user_id": str(identity),
+        "organization_id": str(rows[0]),
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+
+
+class IdentityQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: Literal[1] = 1
+    request_id: uuid.UUID
+    tenant_id: uuid.UUID
+
+
+@router.post("/authority/identity-context")
+async def identity_context(
+    body: IdentityQuery,
+    request: Request,
+    response: Response,
+    me: AuthMeResponse = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    from datetime import UTC, datetime
+    from user_service.scoped_authority import (
+        actor_active,
+        tenant_network,
+        network_admin,
+    )
+
+    if not enabled():
+        raise HTTPException(503, "Scoped authority is not activated")
+    if me.tenant_id != body.tenant_id or request.headers.get("X-Tenant-ID") != str(
+        body.tenant_id
+    ):
+        raise HTTPException(403, "Identity context must match the verified tenant")
+    if not await actor_active(session, body.tenant_id, me.sub):
+        raise HTTPException(403, "Current active identity and tenant required")
+    network = await tenant_network(session, body.tenant_id)
+    administrative = await network_admin(session, network, me.sub)
+    async with scope(session, body.tenant_id):
+        member = await session.scalar(
+            text(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id=:tenant AND keycloak_sub=:subject AND is_active AND deleted_at IS NULL)"
+            ),
+            {"tenant": body.tenant_id, "subject": me.sub},
+        )
+    if not administrative and not member:
+        raise HTTPException(403, "Current tenant identity required")
+    async with scope(session):
+        identity = await session.scalar(
+            text(
+                "SELECT id FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject"
+            ),
+            {"subject": me.sub},
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "version": 1,
+        "request_id": str(body.request_id),
+        "tenant_id": str(body.tenant_id),
+        "subject": me.sub,
+        "user_id": str(identity),
+        "observed_at": datetime.now(UTC).isoformat(),
+    }

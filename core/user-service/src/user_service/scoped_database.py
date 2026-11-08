@@ -50,8 +50,12 @@ async def check(engine):
             (
                 await db.execute(
                     text(
-                        """SELECT rolname,(rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication) privileged
-            FROM pg_roles WHERE pg_has_role(session_user,oid,'SET') OR rolname=current_user"""
+                        """WITH RECURSIVE reachable(oid) AS (
+                SELECT oid FROM pg_roles WHERE rolname IN (session_user,current_user)
+                UNION SELECT m.roleid FROM pg_auth_members m JOIN reachable r ON m.member=r.oid
+                WHERE m.inherit_option OR m.set_option
+            ) SELECT rolname,(rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication) privileged
+              FROM pg_roles WHERE oid IN (SELECT oid FROM reachable)"""
                     )
                 )
             )

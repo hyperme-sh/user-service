@@ -62,6 +62,19 @@ async def test_canonical_graph_has_no_implicit_network_admin_tenant_role(
     maker = async_sessionmaker(engine)
     try:
         async with maker() as db, db.begin():
+            for network in MANIFEST["networks"]:
+                subject = accounts[network["admin"]]["id"]
+                assert await allowed(
+                    db, subject=subject, action="network.admin", network=network["id"]
+                )
+                for other in MANIFEST["networks"]:
+                    if other["id"] != network["id"]:
+                        assert not await allowed(
+                            db,
+                            subject=subject,
+                            action="network.admin",
+                            network=other["id"],
+                        )
             assert await allowed(
                 db,
                 subject=accounts["network-admin"]["id"],
@@ -622,5 +635,244 @@ async def test_org_list_refuses_disabled_global_identity_with_stale_session(
                 )
             result = await client.get("/api/v1/organizations", headers=headers)
             assert result.status_code == 403
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("mixed_path", [False, True])
+async def test_readiness_rejects_inherited_table_owner_with_set_false(
+    empty_authority_owner, migrated_sync_url, monkeypatch, mixed_path
+):
+    bootstrap(empty_authority_owner)
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import make_url
+    from user_service.scoped_database import check
+
+    root = create_engine(migrated_sync_url)
+    schema = empty_authority_owner.url.username
+    runtime = "runtime_" + uuid.uuid4().hex
+    owner = "table_owner_" + uuid.uuid4().hex
+    bridge = "bridge_" + uuid.uuid4().hex
+    password = uuid.uuid4().hex
+    with root.begin() as db:
+        for name in [runtime, owner, bridge]:
+            db.exec_driver_sql(
+                f'CREATE ROLE "{name}" NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE'
+            )
+        db.exec_driver_sql(f"ALTER ROLE \"{runtime}\" LOGIN PASSWORD '{password}'")
+        db.exec_driver_sql(
+            f'GRANT USAGE ON SCHEMA "{schema}" TO "{runtime}","{owner}","{bridge}"'
+        )
+        db.exec_driver_sql(
+            f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema}" TO "{runtime}"'
+        )
+        db.exec_driver_sql(
+            f'ALTER ROLE "{runtime}" SET search_path TO "{schema}",public'
+        )
+        db.exec_driver_sql(f'ALTER TABLE "{schema}".users OWNER TO "{owner}"')
+        if mixed_path:
+            db.exec_driver_sql(
+                f'GRANT "{owner}" TO "{bridge}" WITH INHERIT TRUE, SET FALSE'
+            )
+            db.exec_driver_sql(
+                f'GRANT "{bridge}" TO "{runtime}" WITH INHERIT FALSE, SET TRUE'
+            )
+        else:
+            db.exec_driver_sql(
+                f'GRANT "{owner}" TO "{runtime}" WITH INHERIT TRUE, SET FALSE'
+            )
+    engine = create_async_engine(
+        make_url(migrated_sync_url).set(
+            drivername="postgresql+asyncpg", username=runtime, password=password
+        )
+    )
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    try:
+        with pytest.raises(RuntimeError, match="owns an authority RLS table"):
+            await check(engine)
+    finally:
+        await engine.dispose()
+        with root.begin() as db:
+            db.exec_driver_sql(f'ALTER TABLE "{schema}".users OWNER TO "{schema}"')
+            for name in [runtime, bridge, owner]:
+                db.exec_driver_sql(f'DROP OWNED BY "{name}"')
+                db.exec_driver_sql(f'DROP ROLE "{name}"')
+        root.dispose()
+
+
+async def test_billing_context_and_operator_use_current_owner_graph(
+    empty_authority_owner, monkeypatch
+):
+    from controlplane_api.config import settings
+
+    monkeypatch.setattr(
+        settings,
+        "api_key_exchange_jwt_secret",
+        "canonical-operator-isolated-test-secret-not-a-live-key",
+    )
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    from fastapi import FastAPI
+    import httpx
+    from auth_service.schemas import AuthMeResponse
+    from user_service.deps import get_current_user
+    from api.infrastructure.persistence.db_session import get_db_session
+    from user_service.authority_routes import router
+    from user_service.scoped_authority import scope
+    from user_service.interfaces.api import operator_routes
+    from starlette.requests import Request
+    from api.infrastructure.security.tenant_session_jwt import mint_tenant_session_jwt
+
+    accounts = {a["key"]: a for a in MANIFEST["accounts"]}
+    tenant = uuid.UUID(
+        next(t["id"] for t in MANIFEST["tenants"] if t["key"] == "active")
+    )
+    orgs = {o["key"]: o["id"] for o in MANIFEST["organizations"]}
+    actor = "primary-payer"
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg")
+    )
+    maker = async_sessionmaker(engine)
+
+    async def user():
+        return AuthMeResponse(
+            sub=accounts[actor]["id"],
+            tenant_id=tenant,
+            roles=["admin"],
+            groups=["renter"],
+        )
+
+    async def database():
+        async with maker() as db, db.begin():
+            yield db
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides.update({get_current_user: user, get_db_session: database})
+    headers = {"X-Tenant-ID": str(tenant)}
+    body = {"version": 1, "request_id": str(uuid.uuid4()), "tenant_id": str(tenant)}
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            result = await client.post(
+                "/api/v1/authority/billing-context", headers=headers, json=body
+            )
+            assert (
+                result.status_code == 200
+                and result.json()["user_id"] == accounts[actor]["id"]
+            )
+            assert result.json()["organization_id"] == orgs["primary"]
+            assert result.headers["cache-control"] == "no-store"
+            assert (
+                await client.post(
+                    "/api/v1/authority/billing-context",
+                    headers=headers,
+                    json={**body, "organization_id": orgs["other"]},
+                )
+            ).status_code == 403
+            for actor in [
+                "network-admin",
+                "primary-member",
+                "unassociated",
+                "disabled-member",
+                "wrongadmin",
+            ]:
+                assert (
+                    await client.post(
+                        "/api/v1/authority/billing-context", headers=headers, json=body
+                    )
+                ).status_code == 403
+            actor = "primary-payer"
+            async with maker() as db, db.begin(), scope(db, tenant):
+                await db.execute(
+                    text(
+                        "UPDATE organization_memberships SET enabled=false WHERE user_id=:id"
+                    ),
+                    {
+                        "id": identifier(
+                            MANIFEST["generation"],
+                            "member",
+                            tenant,
+                            uuid.UUID(accounts[actor]["id"]),
+                        )
+                    },
+                )
+            assert (
+                await client.post(
+                    "/api/v1/authority/billing-context", headers=headers, json=body
+                )
+            ).status_code == 403
+            identity = await client.post(
+                "/api/v1/authority/identity-context", headers=headers, json=body
+            )
+            assert (
+                identity.status_code == 200
+                and identity.json()["user_id"] == accounts[actor]["id"]
+            )
+            async with maker() as db, db.begin(), scope(db):
+                await db.execute(
+                    text(
+                        "UPDATE users SET is_active=false WHERE tenant_id IS NULL AND keycloak_sub=:subject"
+                    ),
+                    {"subject": accounts[actor]["id"]},
+                )
+            assert (
+                await client.post(
+                    "/api/v1/authority/identity-context", headers=headers, json=body
+                )
+            ).status_code == 403
+            actor = "other-payer"
+            result = await client.post(
+                "/api/v1/authority/billing-context", headers=headers, json=body
+            )
+            assert (
+                result.status_code == 200
+                and result.json()["organization_id"] == orgs["other"]
+            )
+        async with maker() as db, db.begin():
+            monkeypatch.setattr(operator_routes, "_db", lambda: db)
+
+            def request(key):
+                token = mint_tenant_session_jwt(
+                    claims={"sub": accounts[key]["id"]},
+                    tenant_id=tenant,
+                    extra_permissions=["operator:console", "operator:support"],
+                )
+                return Request(
+                    {
+                        "type": "http",
+                        "method": "GET",
+                        "path": "/operator/session",
+                        "headers": [
+                            (b"authorization", ("Bearer " + token).encode()),
+                            (b"x-tenant-id", str(tenant).encode()),
+                        ],
+                    }
+                )
+
+            result = await operator_routes.current_operator(
+                request("network-admin"), operator_routes.require_support
+            )
+            assert "operator:support" in result["permissions"]
+            for key in [
+                "primary-admin",
+                "other-admin",
+                "s3r-network-admin",
+                "wrongadmin",
+            ]:
+                with pytest.raises(__import__("fastapi").HTTPException) as refusal:
+                    await operator_routes.current_operator(
+                        request(key), operator_routes.require_support
+                    )
+                assert refusal.value.status_code == 403
+            async with scope(db, network="hyperme.sh"):
+                await db.execute(
+                    text("UPDATE authority_network_admins SET enabled=false")
+                )
+            with pytest.raises(__import__("fastapi").HTTPException):
+                await operator_routes.current_operator(
+                    request("network-admin"), operator_routes.require_support
+                )
     finally:
         await engine.dispose()

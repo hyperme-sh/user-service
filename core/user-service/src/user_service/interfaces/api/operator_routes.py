@@ -132,6 +132,24 @@ def require_program(request: Request) -> dict:
     return claims
 
 
+async def current_operator(request,legacy):
+    from user_service.authority_routes import enabled
+    if not enabled():return await asyncio.to_thread(legacy,request)
+    from user_service.scoped_authority import actor_active,tenant_network,network_admin
+    claims=await asyncio.to_thread(_session_claims,request)
+    tenant=_tenant(claims);subject=_actor(claims);session=_db()
+    if session is None:raise HTTPException(503,'Current operator directory unavailable')
+    network=await tenant_network(session,tenant)
+    if (not await actor_active(session,tenant,subject) or not network
+            or not await network_admin(session,network,subject)):
+        raise HTTPException(403,'Current network administrator required')
+    from controlplane_tenancy.tenant_guc import set_current_tenant_id_guc
+    await set_current_tenant_id_guc(session,tenant)
+    # Operator capabilities follow the explicit current network grant, never
+    # tenant role labels or an old permissions claim on a retained session.
+    return {**claims,'permissions':sorted([CONSOLE,SUPPORT,PROGRAM,RESOLVE])}
+
+
 def _tenant(claims: dict) -> uuid.UUID:
     return uuid.UUID(str(claims["tenant_id"]))
 
@@ -171,7 +189,7 @@ async def _persist_audit(row) -> None:
 
 @router.get("/session")
 async def operator_session(request: Request) -> dict:
-    claims = await asyncio.to_thread(require_console, request)
+    claims = await current_operator(request,require_console)
     perms = sorted(permissions_from_claims(claims))
     return {
         "tenant_id": str(_tenant(claims)),
@@ -186,13 +204,13 @@ async def operator_session(request: Request) -> dict:
 
 @router.get("/plugins")
 async def operator_plugins(request: Request) -> dict:
-    await asyncio.to_thread(require_console, request)
+    await current_operator(request,require_console)
     return {"plugins": plugin_registry()}
 
 
 @router.get("/plugins/{plugin_id}")
 async def operator_plugin(request: Request, plugin_id: str) -> dict:
-    await asyncio.to_thread(require_console, request)
+    await current_operator(request,require_console)
     row = plugin_by_id(plugin_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown plugin")
@@ -205,7 +223,7 @@ async def list_bans(
     subject_kind: str | None = None,
     subject_id: uuid.UUID | None = None,
 ) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     tenant_id = _tenant(claims)
     session = _db()
     if session is not None:
@@ -226,7 +244,7 @@ async def list_bans(
 
 @router.post("/bans", status_code=status.HTTP_201_CREATED)
 async def create_ban(request: Request, body: BanBody) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     try:
         row = (BanBook() if session is not None else ban_book()).ban(
@@ -270,7 +288,7 @@ async def create_ban(request: Request, body: BanBody) -> dict:
 
 @router.post("/bans/{ban_id}/lift")
 async def lift_ban(request: Request, ban_id: uuid.UUID, body: LiftBody) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     try:
         if session is not None:
@@ -318,7 +336,7 @@ def _maybe_notice(email: str | None, *, lifted: bool, user_id: str):
 @router.post("/mail/password-reset")
 async def password_reset(request: Request, body: MailBody) -> dict:
     """Request the bound identity provider's expiring password action email."""
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     if session is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
@@ -374,7 +392,7 @@ async def list_audit(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict:
-    claims = await asyncio.to_thread(require_console, request)
+    claims = await current_operator(request,require_console)
     if not support_allowed(permissions_from_claims(claims)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, SUPPORT_REQUIRED)
     tenant_id = _tenant(claims)
@@ -392,14 +410,14 @@ async def list_audit(
 
 @router.get("/peers")
 async def list_peers(request: Request) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     rows = peer_book().for_tenant(_tenant(claims))
     return {"items": [row.public() for row in rows]}
 
 
 @router.post("/peers", status_code=status.HTTP_201_CREATED)
 async def save_peer(request: Request, body: PeerBody) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     ok, detail = ping_health(body.base_url, fetch=_default_ping)
     row = peer_book().save(
         tenant_id=_tenant(claims),
@@ -440,7 +458,7 @@ def _default_ping(url: str) -> tuple[bool, str]:
 async def catalog_health(request: Request) -> dict:
     """Catalog hop health. payments-access is not the Stripe case."""
 
-    await asyncio.to_thread(require_support, request)
+    await current_operator(request,require_support)
     hops = [
         ("turn", "http://127.0.0.1:8012/health"),
         ("oracles", "http://127.0.0.1:8013/health"),
@@ -461,7 +479,7 @@ async def catalog_health(request: Request) -> dict:
 async def soft_delete_user(request: Request, user_id: uuid.UUID, body: ReasonBody) -> dict:
     """Soft-delete is not a ban and does not write operator_bans."""
 
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     deleted_at = datetime.now(UTC).isoformat()
     if session is not None:
@@ -495,7 +513,7 @@ async def soft_delete_user(request: Request, user_id: uuid.UUID, body: ReasonBod
 async def clear_model_preference(request: Request, user_id: uuid.UUID, body: ReasonBody) -> dict:
     """Clear another user's model_name. Not a cert-suite edit."""
 
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     if session is not None:
         from controlplane_tenancy.directory import clear_model_preference as clear_owned_preference
@@ -519,7 +537,7 @@ async def directory_users(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     if session is None:
         return {"items": [], "total": 0, "limit": limit, "offset": offset, "q": q}
@@ -553,7 +571,7 @@ async def directory_orgs(
     request: Request,
     q: str | None = Query(default=None, max_length=256),
 ) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     if session is None:
         return {"items": [], "q": q}
@@ -572,7 +590,7 @@ async def directory_orgs(
 
 @router.post("/users/{user_id}/membership")
 async def edit_membership(request: Request, user_id: uuid.UUID, body: MembershipBody) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     if session is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
@@ -607,7 +625,7 @@ async def edit_membership(request: Request, user_id: uuid.UUID, body: Membership
 
 @router.post("/users/{user_id}/role")
 async def edit_role(request: Request, user_id: uuid.UUID, body: RoleBody) -> dict:
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     session = _db()
     if session is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "directory store unavailable")
@@ -632,7 +650,7 @@ async def edit_role(request: Request, user_id: uuid.UUID, body: RoleBody) -> dic
 async def record_suspend(request: Request) -> dict:
     """Temporary verbs only. This route never writes operator_bans."""
 
-    claims = await asyncio.to_thread(require_support, request)
+    claims = await current_operator(request,require_support)
     body = await request.json()
     kind = str(body.get("subject_kind") or "")
     verb = str(body.get("verb") or "")

@@ -74,3 +74,23 @@ Seeding, image publication, isolated caller qualification, shared TEST cutover a
 fresh native host qualification are separate gates. The owner seed receipt is not
 a deployment receipt or evidence of host certification. Infra must bind its final
 acceptance receipt to actual owner images and the staged database cluster identity.
+
+`POST /authority/billing-context` resolves one current billing organization for the
+verified caller and returns its canonical User identity ID. It accepts a tenant,
+nonce and optional explicit organization selector, never a body subject. Missing
+billing authority is 403; an unselected ambiguous org is 409. This is for new
+spending, not settlement of existing obligations.
+
+`POST /authority/identity-context` returns the canonical User identity within a
+currently authorized tenant context without requiring an active billing org.
+Disabled identities, inactive tenants, current user bans and wrong-network
+contexts are refused. This lets consumers verify ownership of existing leases or
+payments after an org billing grant is revoked. Consumers still compare the
+canonical ID or recorded subject against their own durable resource ownership.
+
+Scoped operator endpoints require the current administrator of the tenant's
+network. A retained operator permissions claim or an org/tenant role label cannot
+substitute for that network grant. Checks retain the verified target tenant scope
+for subsequent operator directory and ban operations. Runtime readiness follows
+both inherited and settable role chains, including mixed paths with SET FALSE
+on an inherited table owner.
