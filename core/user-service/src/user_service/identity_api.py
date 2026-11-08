@@ -31,6 +31,8 @@ def authenticate(request: Request):
 
 @router.post('/{operation}',dependencies=[Depends(authenticate)])
 async def execute(operation: Literal['enroll','tenant-switch','tenant-switch-current','host-setup','session-member','bind-wallet','get-wallet','seed-operator','seed-host','provision-operator'], command: Command, request: Request):
+    if os.environ.get('USER_SCOPE_GENERATION'):
+        raise HTTPException(403,'Use the explicit scoped identity owner contract')
     from user_service.identity_enrollment import grant_held_roles
     from user_service.identity_tenant_switch import authorize_tenant_switch
     from user_service.identity_wallet_bind import upsert_wallet_binding, get_wallet_binding

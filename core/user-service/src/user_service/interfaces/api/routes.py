@@ -51,7 +51,9 @@ from user_service.infrastructure.persistence.repos import (
     SqlUserRepository,
 )
 
-router = APIRouter(tags=["Users & groups"])
+from user_service.scope_api import legacy_scope_guard
+
+router = APIRouter(tags=["Users & groups"], dependencies=[Depends(legacy_scope_guard)])
 
 
 def _user_to_response(u) -> UserResponse:
