@@ -148,8 +148,14 @@ async def authorize_tenant_switch(
         if member is None or not member.is_active or member.deleted_at is not None:
             return None
         role = await _role_for(db, member)
-        if role is None or await _banned(db, tenant_id, member.id):
+        if await _banned(db, tenant_id, member.id):
             return None
+        if member.role_id is None:
+            # An individual profile establishes context, not authority. Do not
+            # infer organization roles, billing rights or legacy group grants.
+            return TenantSwitchGrant(role_name="user", user_id=member.id)
+        if role is None:
+            return None  # A foreign or invalid assigned role is not roleless.
         # Organization administration never becomes a tenant administrator role.
         return TenantSwitchGrant(role_name=role.name, permissions=_role_permissions(role),
             user_id=member.id, groups=await _target_groups(db, tenant_id, member.id))

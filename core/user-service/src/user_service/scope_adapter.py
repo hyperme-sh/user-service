@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import text
+from auth_service.deps import get_access_token_claims
 from auth_service.schemas import AuthMeResponse
 from user_service.deps import get_current_user
 
@@ -193,6 +194,58 @@ async def check_network(
             manifest_sha256=seal[1],
             permissions=list(grant.permissions),
         )
+
+
+@router.post("/authority/login-tenant", status_code=204)
+async def establish_login_tenant(
+    request: Request, claims: dict = Depends(get_access_token_claims)
+):
+    """Create the individual profile for this deployment's portal login."""
+    from user_service.scoped_authority import active_tenant
+
+    destination = os.environ.get("USER_LOGIN_TENANT_ID")
+    if not destination or os.environ.get("USER_SCOPED_AUTHORITY_REQUIRED") != "1":
+        raise HTTPException(503, "Login tenant unavailable")
+    try:
+        tenant = uuid.UUID(destination)
+    except ValueError:
+        raise HTTPException(503, "Login tenant unavailable") from None
+    issuer = os.environ.get("KEYCLOAK_ISSUER")
+    client = os.environ.get("USER_LOGIN_CLIENT_ID")
+    subject = claims.get("sub")
+    if (not issuer or not client or claims.get("iss") != issuer or claims.get("azp") != client
+            or not isinstance(subject, str) or not subject.strip() or len(subject) > 512):
+        raise HTTPException(403, "Portal identity required")
+    async with request.app.state.session_maker() as db, db.begin():
+        if not await active_tenant(db, tenant):
+            raise HTTPException(403, "Login tenant inactive")
+        await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:subject,0))"), {"subject": subject})
+        async with scope(db):
+            existing = (await db.execute(text(
+                "SELECT is_active,deleted_at,sso_provider_id FROM users WHERE tenant_id IS NULL AND keycloak_sub=:sub FOR UPDATE"
+            ), {"sub": subject})).one_or_none()
+            if existing:
+                if not existing.is_active or existing.deleted_at is not None:
+                    raise HTTPException(403, "Account inactive")
+                # Managed and legacy profiles retain their assigned destinations.
+                if existing.sso_provider_id and existing.sso_provider_id != issuer:
+                    raise HTTPException(403, "Account issuer differs")
+                return Response(status_code=204)
+        email = claims.get("email")
+        if not isinstance(email, str) or not email.strip() or len(email) > 512 or claims.get("email_verified") is not True:
+            raise HTTPException(403, "Verified contact required")
+        for target in (None, tenant):
+            async with scope(db, target):
+                inserted = await db.scalar(text("""
+                    INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,sso_provider_id)
+                    VALUES(:id,:tenant,:sub,:email,:given,:family,'unspecified',true,:issuer)
+                    ON CONFLICT DO NOTHING RETURNING id
+                """), {"id": uuid.uuid4(), "tenant": target, "sub": subject, "email": email,
+                       "given": str(claims.get("given_name") or "")[:255],
+                       "family": str(claims.get("family_name") or "")[:255], "issuer": issuer})
+                if inserted is None:
+                    raise HTTPException(409, "Account reconciliation required")
+    return Response(status_code=204)
 
 
 @router.get("/authority/contexts")

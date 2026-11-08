@@ -127,3 +127,32 @@ current memberships (network admins may administer their own tenant). Both refus
 inactive/disabled/banned actors. Signed organization sessions further restrict
 member operations and checkout to their selected org, even when an actor has two
 current memberships. Header/body substitution cannot widen signed selection.
+
+## First-time portal profiles
+
+`POST /api/v1/authority/login-tenant` accepts a verified issuer access token.
+Enable it only with `USER_SCOPED_AUTHORITY_REQUIRED=1`, an active configured
+`USER_LOGIN_TENANT_ID`, `KEYCLOAK_ISSUER` and `USER_LOGIN_CLIENT_ID`. The request
+cannot choose a tenant, organization or role. The verified issuer and authorized
+client must match deployment configuration; a new subject also needs verified
+contact email. Invalid or absent deployment configuration fails closed.
+
+The owner serializes concurrent callbacks for the subject and atomically creates
+the global identity and individual tenant profile. Repeated callbacks preserve
+existing managed profiles, including network administrators without tenant
+membership. Email collisions do not link accounts or change existing subjects.
+Disabled/deleted identities are not reactivated or replaced.
+
+A roleless individual can establish a basic `user` tenant context with no
+permissions or groups. An assigned foreign/invalid role is still refused, and
+disabled profiles, inactive tenants and current bans remain checked. Provisioning
+adds no organization membership, spending capability, host grant or administrator
+authority. Membership revocation and configured fixture provisioning remain
+separate owner operations.
+
+Portal discovery should first read `/authority/contexts`, provision only when
+discovery succeeds with no contexts and login-tenant behavior is configured, then
+read current contexts again. Existing contexts and refusals must not trigger
+enrollment. Shared canonical TEST identities are not disposable signup fixtures;
+qualify first-time creation with isolated services and PostgreSQL fixtures rather
+than adding live accounts or repairing their privileges.
