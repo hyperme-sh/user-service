@@ -198,3 +198,35 @@ RLS flags and all data. Run it with the database policy owner, outside applicati
 startup. Receipt files contain policy digests, never row contents or credentials.
 This does not install historical migrations in runtime wheels or reconcile a live
 database automatically. Qualify the exact selected database and runtime separately.
+
+
+### Explicit network and organization scope contract
+
+The additive `0002_scope_authority.sql` is for a fresh, empty, nonprivileged owner
+namespace only. The `scope_schema.install(connection, ddl)` operator entrypoint
+verifies its immutable digest and baseline, refuses existing authorization data,
+and records an idempotent separate revision without changing `0001` history.
+DDL stays outside runtime wheels. Provisioning is a separate private controller;
+this contract does not seed or accept a shared TEST generation.
+
+`USER_SCOPE_GENERATION` enables generation-bound scope APIs. The installed marker
+must match. It blocks legacy tenant-wide user/operator routes and identity grants
+so they cannot bypass the new contract. Network authority comes only from current
+subject-bound network grants. Organization member CRUD requires a signed current
+org selection plus a live same-org admin membership. Composite foreign keys bind
+both the organization and user to the exact tenant. An org membership cannot grant
+a tenant or network role. Removing a membership leaves the global user and other
+org memberships intact. Disabled, deleted, banned, revoked and inactive-tenant
+identities are refused even if older tokens claim admin.
+
+`POST /api/v1/internal/organization-authority/check` exposes current membership,
+member-management or purchase authority. AUTH, PAYMENT and PLANE use distinct
+`*_SCOPE_AUTHORITY_TOKEN` credentials. Auth may request member/management facts;
+Payment and Plane may request member/purchase facts. Duplicate credentials are
+refused. No browser token, caller role header or caller email establishes authority.
+The response binds subject, user, network, tenant, organization, role, billing
+capability, generation and manifest digest. Consumers must recheck current facts.
+
+The owning Infra manifest is canonical. Bootstrap/receipt generation, remaining
+consumer adoption, and shared TEST cutover stay separate under issue #63. This
+source change does not authorize temporary privileges or repair a live database.
