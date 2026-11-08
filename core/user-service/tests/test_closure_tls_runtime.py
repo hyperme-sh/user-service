@@ -47,6 +47,7 @@ def certificates(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("repository", ["ghcr.io/hyperme-sh/user-service",
+    "ghcr.io/hyperme-sh/user-service/runtime",
     "acrfybercg47.azurecr.io/user-service"])
 async def test_real_tls_proxy_private_intake_and_denial_with_trust_failure(private, certificates, monkeypatch, repository):
     _, private_app, subject, lookups, validated = private
@@ -156,6 +157,7 @@ async def test_private_startup_failure_is_sanitized(monkeypatch):
 
 
 @pytest.mark.parametrize("repository", ["ghcr.io/hyperme-sh/user-service",
+    "ghcr.io/hyperme-sh/user-service/runtime",
     "acrfybercg47.azurecr.io/user-service"])
 def test_private_runtime_accepts_deployment_owner_digest(monkeypatch, repository):
     monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + "@sha256:" + "a" * 64)
@@ -163,6 +165,8 @@ def test_private_runtime_accepts_deployment_owner_digest(monkeypatch, repository
 
 
 @pytest.mark.parametrize("image", ["ghcr.io/fyberlabs/user-service@sha256:" + "a" * 64,
+    "ghcr.io/hyperme-sh/user-service/runtime:test",
+    "ghcr.io/hyperme-sh/user-service/runtime/other@sha256:" + "a" * 64,
     "ghcr.io/hyperme-sh/user-service:test", "ghcr.io/hyperme-sh/other@sha256:" + "a" * 64,
     "acrfybercg47.azurecr.io/user-service:test",
     "acrfybercg47.azurecr.io/other@sha256:" + "a" * 64,

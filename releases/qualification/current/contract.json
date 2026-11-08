@@ -26,7 +26,7 @@
       "user_service/closure_processor.py": "d0749e714e182daa594bba818728d5df62070c96b916ff94e0af42da94a5363b",
       "user_service/closure_proxy.py": "3e2a2ed6600ea4938fa465930ff96edaa3da76d30cd855e8aac2b34445ff2287",
       "user_service/closure_public_database.py": "572bceed8fa33ed03da9301155308200f537dda96a8edfb284ed651a5d530a75",
-      "user_service/closure_runtime.py": "fc945ded469f5abfb8448d435c422591858184f8312808cbf93121342012833c",
+      "user_service/closure_runtime.py": "b6625717c7efd0a7f615273167de694174749f830387b27be5575bc0f7d60e32",
       "user_service/closure_transport.py": "0c9127cdf50e0720700fa20d5e74ea1b2ec7ffd1feb24a9450fec4b82a617aeb",
       "user_service/closure_worker.py": "e9e5a2f07ca0b48ce9c8b62582d1a6df844551753ea8afbbee117312ba3853d1",
       "user_service/deps.py": "0c71caec80758825b3c2e855a4edd0ba85d51622fcd8b2387bfe56162dcbd01d",
