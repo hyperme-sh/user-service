@@ -102,14 +102,12 @@ async def delete_member(organization_id: uuid.UUID,user_id: uuid.UUID,tenant_id:
 
 
 @router.post('/internal/organization-authority/check')
-async def check(body: AuthorityBody,request: Request):
+async def check(body: AuthorityBody,request: Request,db: AsyncSession=Depends(get_db_session)):
     supplied=request.headers.get('Authorization','').encode()
     callers=[name for name in ('AUTH','PAYMENT','PLANE') if (token:=os.environ.get(name+'_SCOPE_AUTHORITY_TOKEN')) and hmac.compare_digest(supplied,('Bearer '+token).encode())]
     if len(callers)!=1:raise HTTPException(401,'Unique service scope credential required')
     if body.capability=='manage-members' and callers[0]!='AUTH':raise HTTPException(403,'Service capability refused')
     if body.capability=='purchase' and callers[0] not in ('PAYMENT','PLANE'):raise HTTPException(403,'Service capability refused')
     if not body.subject.strip() or len(body.subject)>512:raise HTTPException(422,'Verified subject required')
-    async with request.app.state.session_maker() as db:
-        async with db.begin():
-            grant=await organization_member(db,body.subject,body.tenant_id,body.organization_id,body.capability)
-            return None if grant is None else asdict(grant)
+    grant=await organization_member(db,body.subject,body.tenant_id,body.organization_id,body.capability)
+    return None if grant is None else asdict(grant)

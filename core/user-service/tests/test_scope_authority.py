@@ -239,3 +239,20 @@ async def test_scope_install_refuses_existing_authorization_data(scope_owner):
         with pytest.raises(ValueError,match='empty declared generation'):
             install(db,ddl)
         assert db.scalar(text('SELECT count(*) FROM tenants'))==2
+
+
+async def test_concurrent_private_checks_need_only_one_pool_connection_each(scope_owner):
+    import asyncio
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    s=scope_owner
+    engine=create_async_engine(s.app.state.async_engine.url,pool_size=1,max_overflow=0,pool_timeout=0.5)
+    original=s.app.state.session_maker
+    s.app.state.session_maker=async_sessionmaker(engine,expire_on_commit=False)
+    try:
+        async def check():
+            return await s.client.post('/api/v1/internal/organization-authority/check',headers={'Authorization':'Bearer local-AUTH'},json={'subject':'local:admin','tenant_id':str(s.tenant),'organization_id':str(s.org)})
+        results=await asyncio.gather(*(check() for _ in range(4)))
+        assert all(r.status_code==200 and r.json()['user_id']==str(s.users['admin']) for r in results)
+    finally:
+        s.app.state.session_maker=original
+        await engine.dispose()
