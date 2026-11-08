@@ -64,7 +64,7 @@
       "user_service/password_reset_authority.py": "24fdfaa7fb56d05d074461b7085dd796009ef773a91546c02a4c3f7d88041107",
       "user_service/reconcile_identity_rls.py": "a6181079afe4aed7202007e89d2e5d31686b9a53400e90cd7124acd26d4e4d71",
       "user_service/scope_adapter.py": "c35a1206ec20a4b4f9c558f0e188cabf20557133722dfa4c9c4e0376e6e165a5",
-      "user_service/scope_api.py": "466bc897a01638a01e41a255b04912d9f54b12938a7d872290d9172be6f63af7",
+      "user_service/scope_api.py": "a9ba1ece5e6d31492154effd6d06c6e7fbff20197c6891286d3e092939cbeefc",
       "user_service/scope_schema.py": "772297c4d0934b0c3053654040fd85f4c8405db0b0751ac550abad430c88d47b",
       "user_service/scoped_authority.py": "d5a9173c3c3b7ec4eeb78852ddc441e8d2110d93df03a236cfcd4f8e3616aed6",
       "user_service/scoped_database.py": "ec5924d039b5812f82112928e11d0af0b3a3c9086e5572ef82ce7cb2a29672a4",

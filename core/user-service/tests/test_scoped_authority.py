@@ -500,3 +500,43 @@ async def test_signed_org_selection_limits_even_two_current_memberships(
     assert (
         await authority_http.get(own, headers=selected(s.org, "wrong-network"))
     ).status_code == 403
+
+    # Exercise the actual legacy org read/IdP mutation routes under the same
+    # canonical graph and signed session, rather than only the new member API.
+    from user_service.app import create_app
+    import httpx
+
+    app = create_app(test_event_sink=[])
+    app.state.session_maker = s.maker
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://owner.test"
+    ) as client:
+        assert (
+            await client.get(
+                f"/api/v1/organizations/{s.org}", headers=selected(s.org, network)
+            )
+        ).status_code == 200
+        before = None
+        async with s.maker() as db, scope(db, s.tenant):
+            before = (
+                await db.execute(
+                    text("SELECT * FROM organization_idp_links ORDER BY id")
+                )
+            ).all()
+        assert (
+            await client.get(
+                f"/api/v1/organizations/{s.other}", headers=selected(s.org, network)
+            )
+        ).status_code == 403
+        assert (
+            await client.delete(
+                f"/api/v1/organizations/{s.other}/idp-links/{uuid.uuid4()}",
+                headers=selected(s.org, network),
+            )
+        ).status_code == 403
+        async with s.maker() as db, scope(db, s.tenant):
+            assert (
+                await db.execute(
+                    text("SELECT * FROM organization_idp_links ORDER BY id")
+                )
+            ).all() == before
