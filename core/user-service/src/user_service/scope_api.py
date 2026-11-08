@@ -46,7 +46,17 @@ async def scope_claims(request: Request, claims: dict=Depends(get_access_token_c
     db.info['verified_scope_network']=claims['network_id']
 
 
-router=APIRouter(dependencies=[Depends(ready)])
+router=APIRouter()
+# Authenticate before reserving a connection: account admission may call back
+# into a private owner endpoint and must not deadlock the same pool.
+public=APIRouter(dependencies=[Depends(get_current_user),Depends(ready)])
+
+
+async def service_caller(request: Request):
+    supplied=request.headers.get('Authorization','').encode()
+    callers=[name for name in ('AUTH','PAYMENT','PLANE') if (token:=os.environ.get(name+'_SCOPE_AUTHORITY_TOKEN')) and hmac.compare_digest(supplied,('Bearer '+token).encode())]
+    if len(callers)!=1:raise HTTPException(401,'Unique service scope credential required')
+    return callers[0]
 
 
 class MemberBody(BaseModel):
@@ -64,7 +74,7 @@ class AuthorityBody(BaseModel):
     capability: Literal['member','manage-members','purchase']='member'
 
 
-@router.get('/networks/{network_id}/authority')
+@public.get('/networks/{network_id}/authority')
 async def network_authority(network_id: str, me: AuthMeResponse=Depends(get_current_user), db: AsyncSession=Depends(get_db_session)):
     grant=await network_admin(db,me.sub,network_id)
     if grant is None:raise HTTPException(403,'Current network authority required')
@@ -78,13 +88,13 @@ async def admin(db,me,tenant_id,organization_id):
     return grant
 
 
-@router.get('/organizations/{organization_id}/members', dependencies=[Depends(scope_claims)])
+@public.get('/organizations/{organization_id}/members', dependencies=[Depends(scope_claims)])
 async def members(organization_id: uuid.UUID, limit: int=Query(50,ge=1,le=500),offset: int=Query(0,ge=0), tenant_id: uuid.UUID=Depends(require_matched_tenant), me: AuthMeResponse=Depends(get_current_user), db: AsyncSession=Depends(get_db_session)):
     await admin(db,me,tenant_id,organization_id)
     return [dict(r) for r in (await db.execute(text('SELECT user_id,role,can_purchase,active FROM identity_org_memberships WHERE tenant_id=:tenant AND organization_id=:org ORDER BY user_id LIMIT :limit OFFSET :offset'),{'tenant':tenant_id,'org':organization_id,'limit':limit,'offset':offset})).mappings()]
 
 
-@router.put('/organizations/{organization_id}/members/{user_id}', dependencies=[Depends(scope_claims)])
+@public.put('/organizations/{organization_id}/members/{user_id}', dependencies=[Depends(scope_claims)])
 async def put_member(organization_id: uuid.UUID,user_id: uuid.UUID,body: MemberBody,tenant_id: uuid.UUID=Depends(require_matched_tenant),me: AuthMeResponse=Depends(get_current_user),db: AsyncSession=Depends(get_db_session)):
     await admin(db,me,tenant_id,organization_id)
     target=await db.scalar(text('SELECT id FROM users WHERE id=:user AND tenant_id=:tenant AND is_active AND deleted_at IS NULL'),{'user':user_id,'tenant':tenant_id})
@@ -95,19 +105,19 @@ async def put_member(organization_id: uuid.UUID,user_id: uuid.UUID,body: MemberB
     return dict(await member_record(db,tenant_id,organization_id,user_id))
 
 
-@router.delete('/organizations/{organization_id}/members/{user_id}',status_code=204, dependencies=[Depends(scope_claims)])
+@public.delete('/organizations/{organization_id}/members/{user_id}',status_code=204, dependencies=[Depends(scope_claims)])
 async def delete_member(organization_id: uuid.UUID,user_id: uuid.UUID,tenant_id: uuid.UUID=Depends(require_matched_tenant),me: AuthMeResponse=Depends(get_current_user),db: AsyncSession=Depends(get_db_session)):
     await admin(db,me,tenant_id,organization_id)
     await db.execute(text('DELETE FROM identity_org_memberships WHERE tenant_id=:tenant AND organization_id=:org AND user_id=:user'),{'tenant':tenant_id,'org':organization_id,'user':user_id})
 
 
-@router.post('/internal/organization-authority/check')
-async def check(body: AuthorityBody,request: Request,db: AsyncSession=Depends(get_db_session)):
-    supplied=request.headers.get('Authorization','').encode()
-    callers=[name for name in ('AUTH','PAYMENT','PLANE') if (token:=os.environ.get(name+'_SCOPE_AUTHORITY_TOKEN')) and hmac.compare_digest(supplied,('Bearer '+token).encode())]
-    if len(callers)!=1:raise HTTPException(401,'Unique service scope credential required')
-    if body.capability=='manage-members' and callers[0]!='AUTH':raise HTTPException(403,'Service capability refused')
-    if body.capability=='purchase' and callers[0] not in ('PAYMENT','PLANE'):raise HTTPException(403,'Service capability refused')
+@router.post('/internal/organization-authority/check',dependencies=[Depends(service_caller),Depends(ready)])
+async def check(body: AuthorityBody,caller: str=Depends(service_caller),db: AsyncSession=Depends(get_db_session)):
+    if body.capability=='manage-members' and caller!='AUTH':raise HTTPException(403,'Service capability refused')
+    if body.capability=='purchase' and caller not in ('PAYMENT','PLANE'):raise HTTPException(403,'Service capability refused')
     if not body.subject.strip() or len(body.subject)>512:raise HTTPException(422,'Verified subject required')
     grant=await organization_member(db,body.subject,body.tenant_id,body.organization_id,body.capability)
     return None if grant is None else asdict(grant)
+
+
+router.include_router(public)

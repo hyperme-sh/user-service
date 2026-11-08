@@ -256,3 +256,20 @@ async def test_concurrent_private_checks_need_only_one_pool_connection_each(scop
     finally:
         s.app.state.session_maker=original
         await engine.dispose()
+
+
+async def test_authentication_can_call_private_owner_before_public_readiness(scope_owner):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from user_service.deps import get_current_user
+    s=scope_owner
+    engine=create_async_engine(s.app.state.async_engine.url,pool_size=1,max_overflow=0,pool_timeout=1)
+    original=s.app.state.session_maker;s.app.state.session_maker=async_sessionmaker(engine,expire_on_commit=False)
+    async def authenticate():
+        r=await s.client.post('/api/v1/internal/organization-authority/check',headers={'Authorization':'Bearer local-AUTH'},json={'subject':'local:network-a','tenant_id':str(s.tenant),'organization_id':str(s.org)})
+        assert r.status_code==200
+        return AuthMeResponse(sub='local:network-a',roles=['admin'])
+    s.app.dependency_overrides[get_current_user]=authenticate
+    try:
+        assert (await s.client.get('/api/v1/networks/local-a/authority')).status_code==200
+    finally:
+        s.app.state.session_maker=original;await engine.dispose()
