@@ -184,3 +184,17 @@ commands accept only the opaque subject and target tenant from the authenticated
 auth-service caller.
 
 The additive `tenant-switch-current` command lets Auth require the current authority during rolling adoption; the existing command also receives the ban check. Tenant switching applies durable user bans in the destination tenant within the owner transaction, including platform overrides and legacy email-bound memberships. Auth must consume that decision without a process-local ban cache.
+
+
+### Historical identity RLS reconciliation
+
+The immutable historical public schema can cast the empty platform scope to UUID.
+Use `python -m user_service.reconcile_identity_rls --database-url-file PRIVATE_FILE
+--receipt RECEIPT.json` to inspect the exact four-table/sixteen-policy inventory.
+After reviewing that receipt, add `--apply` to repair known predicates atomically.
+The tool refuses unknown policy inventories, roles, commands or definitions;
+replay is idempotent. It preserves platform/tenant read and write boundaries,
+RLS flags and all data. Run it with the database policy owner, outside application
+startup. Receipt files contain policy digests, never row contents or credentials.
+This does not install historical migrations in runtime wheels or reconcile a live
+database automatically. Qualify the exact selected database and runtime separately.

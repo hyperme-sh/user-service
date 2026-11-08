@@ -12,12 +12,32 @@ from controlplane_api.permissions import Permission
 from user_service.identity_tenant_switch import authorize_tenant_switch
 
 
-@pytest.fixture(scope='module')
-def owner_switch_schema(postgres_sync_url):
+@pytest.fixture(scope='module', params=['fresh','historical-reconciled'])
+def owner_switch_schema(postgres_sync_url, request):
     from pathlib import Path
     import hashlib
     from sqlalchemy import create_engine
     from controlplane_events.owner_schema import migrate
+    if request.param == 'historical-reconciled':
+        from controlplane_db.migrations import upgrade
+        from user_service.reconcile_identity_rls import reconcile
+        name = 'switch_history_' + uuid.uuid4().hex
+        admin = create_engine(postgres_sync_url, isolation_level='AUTOCOMMIT')
+        with admin.connect() as db:
+            db.execute(text(f'CREATE DATABASE "{name}"'))
+        url = make_url(postgres_sync_url).set(database=name)
+        engine = create_engine(url)
+        try:
+            upgrade(url.render_as_string(hide_password=False), chains=['platform','events'])
+            with engine.begin() as db:
+                assert reconcile(db, apply=True)['changed'] == 16
+            yield url.render_as_string(hide_password=False), 'public'
+        finally:
+            engine.dispose()
+            with admin.connect() as db:
+                db.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+            admin.dispose()
+        return
     name = 'switch_owner_' + uuid.uuid4().hex
     password = uuid.uuid4().hex
     admin = create_engine(postgres_sync_url)
