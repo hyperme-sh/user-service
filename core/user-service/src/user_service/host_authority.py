@@ -15,7 +15,9 @@ from controlplane_tenancy.tenant_guc import set_current_tenant_id_guc
 from controlplane_tenancy.tenant_membership import get_tenant_membership_row, get_tenant_role_group_ids, get_active_tenant_role_member
 from operator_ban_store import active_ban
 
-router = APIRouter(prefix='/internal/host-authority')
+from user_service.scope_api import legacy_scope_guard
+
+router = APIRouter(prefix='/internal/host-authority',dependencies=[Depends(legacy_scope_guard)])
 
 class Query(BaseModel):
     model_config = ConfigDict(extra='forbid')

@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.infrastructure.persistence.db_session import get_db_session
 from auth_service.schemas import AuthMeResponse
+from auth_service.deps import get_access_token_claims
 from user_service.deps import get_current_user, require_matched_tenant
 from user_service.scoped_authority import (
     allowed,
@@ -18,7 +19,58 @@ from user_service.scoped_authority import (
     tenant_admin,
 )
 
-router = APIRouter()
+
+async def selected_scope(
+    request: Request,
+    me: AuthMeResponse = Depends(get_current_user),
+    claims: dict = Depends(get_access_token_claims),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """A signed org selection narrows current authority; it never grants it."""
+    if claims.get("scope_version") != 1:
+        return
+    from user_service.scoped_authority import tenant_network
+
+    try:
+        tenant = uuid.UUID(str(claims["tenant_id"]))
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(403, "Signed scope tenant is invalid")
+    if (
+        claims.get("sub") != me.sub
+        or claims.get("spanopticon_auth") != "tenant_session"
+    ):
+        raise HTTPException(403, "Verified scope identity required")
+    seal = (
+        await session.execute(
+            text("SELECT generation,manifest_sha256 FROM authority_fixture_generation")
+        )
+    ).one_or_none()
+    network = await tenant_network(session, tenant)
+    if (
+        seal is None
+        or (claims.get("scope_generation"), claims.get("scope_manifest_sha256"))
+        != tuple(seal)
+        or claims.get("network_id") != network
+    ):
+        raise HTTPException(403, "Signed scope generation differs")
+    if claims.get("scope_kind") == "network":
+        return
+    selected = claims.get("organization_id")
+    try:
+        selected = uuid.UUID(str(selected))
+    except (ValueError, TypeError):
+        raise HTTPException(403, "Signed organization selection required")
+    target = request.path_params.get("organization_id")
+    if request.method == "POST" and request.url.path.endswith(
+        ("/authority/check", "/authority/billing-context")
+    ):
+        target = (await request.json()).get("organization_id") or target
+    if target is not None and str(target) != str(selected):
+        raise HTTPException(403, "Organization differs from signed selection")
+    request.state.selected_organization = selected
+
+
+router = APIRouter(dependencies=[Depends(selected_scope)])
 
 
 class Check(BaseModel):
@@ -280,7 +332,8 @@ async def billing_context(
                     {
                         "tenant": body.tenant_id,
                         "subject": me.sub,
-                        "org": body.organization_id,
+                        "org": body.organization_id
+                        or getattr(request.state, "selected_organization", None),
                     },
                 )
             )

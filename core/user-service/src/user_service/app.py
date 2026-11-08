@@ -59,6 +59,9 @@ def create_app(
             await check_public_database(engine)
             from user_service.scoped_database import check as check_scoped_database
             await check_scoped_database(engine)
+            from user_service.scope_adapter import check_configuration
+            check_configuration()
+            app.state.scope_generation = os.environ.get("USER_TEST_FIXTURE_GENERATION")
         except BaseException:
             await engine.dispose()
             raise
@@ -155,6 +158,8 @@ def create_app(
     app.include_router(user_api_router, prefix="/api/v1")
     from user_service.authority_routes import router as authority_router
     app.include_router(authority_router,prefix="/api/v1")
+    from user_service.scope_adapter import router as scope_adapter_router
+    app.include_router(scope_adapter_router,prefix="/api/v1")
     from user_service.identity_api import router as identity_router
     app.include_router(identity_router,prefix="/api/v1")
     from user_service.host_authority import router as host_authority_router

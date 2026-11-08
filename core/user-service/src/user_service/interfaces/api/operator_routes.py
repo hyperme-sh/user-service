@@ -12,7 +12,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import Depends, APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,7 +39,9 @@ from controlplane_api.operator.plugins import plugin_by_id, plugin_registry
 from api.infrastructure.persistence.db_session import get_db_session
 from api.infrastructure.security.tenant_session_jwt import try_decode_tenant_session_jwt
 
-router = APIRouter(prefix="/operator", tags=["operator"])
+from user_service.scope_api import legacy_scope_guard
+
+router = APIRouter(prefix="/operator", tags=["operator"], dependencies=[Depends(legacy_scope_guard)])
 
 CONSOLE_REQUIRED = "operator:console required"
 SUPPORT_REQUIRED = "operator:support required"

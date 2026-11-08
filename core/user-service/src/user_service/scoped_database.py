@@ -36,18 +36,28 @@ async def check(engine):
         # A sealed canonical database must never silently select legacy guards,
         # even when every generation environment binding was omitted.
         async with engine.begin() as db:
-            relation = await db.scalar(
-                text("SELECT to_regclass('authority_fixture_generation')")
-            )
-            if relation is not None and await db.scalar(
-                text("SELECT count(*) FROM authority_fixture_generation")
-            ):
-                raise RuntimeError("Seeded TEST generation requires scoped authority")
+            for table in ("authority_fixture_generation", "identity_scope_generation"):
+                relation = await db.scalar(
+                    text("SELECT to_regclass(:table)"), {"table": table}
+                )
+                if relation is not None and await db.scalar(
+                    text("SELECT count(*) FROM " + table)
+                ):
+                    raise RuntimeError(
+                        "Seeded TEST generation requires scoped authority"
+                    )
         return
     expected = hashlib.sha256(
         files("user_service").joinpath("authority_schema.sql").read_bytes()
     ).hexdigest()
     async with engine.begin() as db:
+        prototype = await db.scalar(
+            text("SELECT to_regclass('identity_scope_generation')")
+        )
+        if prototype is not None and await db.scalar(
+            text("SELECT count(*) FROM identity_scope_generation")
+        ):
+            raise RuntimeError("Competing authority generations cannot be activated")
         schema = await db.scalar(text("SELECT current_schema()"))
         if not schema or schema == "public":
             raise RuntimeError("Scoped User runtime requires its own schema")

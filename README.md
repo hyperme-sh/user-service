@@ -198,3 +198,15 @@ RLS flags and all data. Run it with the database policy owner, outside applicati
 startup. Receipt files contain policy digests, never row contents or credentials.
 This does not install historical migrations in runtime wheels or reconcile a live
 database automatically. Qualify the exact selected database and runtime separately.
+
+
+### Canonical network and organization authority
+
+See [docs/scoped-authority.md](docs/scoped-authority.md). The authority_* graph is
+now the single provisioning and runtime authority model. Auth's organization and
+network scope response contracts are retained through scope_adapter, backed by
+that same current graph. The earlier identity_scope_* prototype HTTP routes and
+authorizers are retired; do not install or seed their schema in this generation.
+Its immutable migration and digest inspector remain only for provenance.
+Startup refuses a competing seeded prototype generation, a missing canonical
+mode, or mismatched Auth/canonical generation configuration.

@@ -425,3 +425,78 @@ async def test_global_identity_disable_refuses_still_active_org_membership(autho
     assert not await check(
         s, "payer", "lease.purchase", tenant=s.tenant, organization=s.org
     )
+
+
+async def test_signed_org_selection_limits_even_two_current_memberships(
+    authority, authority_http
+):
+    from api.infrastructure.security.tenant_session_jwt import mint_tenant_session_jwt
+
+    s = authority
+    async with s.maker() as db, db.begin():
+        await db.execute(
+            text(
+                "INSERT INTO authority_fixture_generation(generation,manifest_sha256,subjects_sha256,source_sha) VALUES('local-selection',:digest,:digest,:source)"
+            ),
+            {"digest": "a" * 64, "source": "b" * 40},
+        )
+        async with scope(db, s.tenant):
+            await db.execute(
+                text(
+                    "INSERT INTO organization_memberships(tenant_id,organization_id,user_id,role,can_purchase_leases) VALUES(:tenant,:org,:user,'admin',true)"
+                ),
+                {"tenant": s.tenant, "org": s.other, "user": s.users["org-admin"]},
+            )
+
+    def selected(org, network="hyperme.sh"):
+        token = mint_tenant_session_jwt(
+            claims={
+                "sub": "org-admin",
+                "azp": "controlplane-frontend",
+                "scope_version": 1,
+                "organization_id": str(org),
+                "network_id": network,
+                "scope_generation": "local-selection",
+                "scope_manifest_sha256": "a" * 64,
+            },
+            tenant_id=s.tenant,
+        )
+        import jwt
+        from controlplane_api.config import settings
+
+        key = settings.usable_api_key_exchange_secret()
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["HS256"],
+            issuer="https://spanopticon.internal/tenant-session",
+        )
+        claims.update(
+            scope_version=1,
+            organization_id=str(org),
+            network_id=network,
+            scope_generation="local-selection",
+            scope_manifest_sha256="a" * 64,
+        )
+        token = jwt.encode(claims, key, algorithm="HS256")
+        return {"Authorization": "Bearer " + token, "X-Tenant-ID": str(s.tenant)}
+
+    # Bind the helper to the actual local fixture network, without relying on JWT roles.
+    from user_service.scoped_authority import tenant_network
+
+    async with s.maker() as db:
+        network = await tenant_network(db, s.tenant)
+    own = f"/api/v1/organizations/{s.org}/members"
+    other = f"/api/v1/organizations/{s.other}/members"
+    result = await authority_http.get(own, headers=selected(s.org, network))
+    assert result.status_code == 200, result.text
+    result = await authority_http.get(
+        other, headers={**selected(s.org, network), "X-Organization-ID": str(s.other)}
+    )
+    assert result.status_code == 403, result.text
+    assert (
+        await authority_http.get(other, headers=selected(s.other, network))
+    ).status_code == 200
+    assert (
+        await authority_http.get(own, headers=selected(s.org, "wrong-network"))
+    ).status_code == 403

@@ -780,6 +780,12 @@ async def test_billing_context_and_operator_use_current_owner_graph(
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides.update({get_current_user: user, get_db_session: database})
+    from auth_service.deps import get_access_token_claims
+
+    async def issuer_claims():
+        return {"sub": accounts[actor]["id"]}
+
+    app.dependency_overrides[get_access_token_claims] = issuer_claims
     headers = {"X-Tenant-ID": str(tenant)}
     body = {"version": 1, "request_id": str(uuid.uuid4()), "tenant_id": str(tenant)}
     try:
@@ -934,3 +940,129 @@ async def test_billing_context_and_operator_use_current_owner_graph(
                 )
     finally:
         await engine.dispose()
+
+
+async def test_auth_scope_adapter_uses_only_canonical_graph(
+    empty_authority_owner, monkeypatch
+):
+    import asyncio
+    import httpx
+    from fastapi import FastAPI
+    from user_service.scope_adapter import router, check_configuration
+    from user_service.scoped_authority import scope
+
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    monkeypatch.setenv("USER_TEST_FIXTURE_GENERATION", MANIFEST["generation"])
+    monkeypatch.setenv("USER_SCOPE_GENERATION", MANIFEST["generation"])
+    for name in ("AUTH", "PAYMENT", "PLANE"):
+        monkeypatch.setenv(name + "_SCOPE_AUTHORITY_TOKEN", "isolated-" + name)
+    check_configuration()
+    engine = create_async_engine(
+        empty_authority_owner.url.set(drivername="postgresql+asyncpg"),
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=1,
+    )
+    maker = async_sessionmaker(engine)
+    app = FastAPI()
+    app.state.session_maker = maker
+    app.include_router(router, prefix="/api/v1")
+    accounts = {a["key"]: a for a in MANIFEST["accounts"]}
+    tenants = {t["key"]: t["id"] for t in MANIFEST["tenants"]}
+    orgs = {o["key"]: o["id"] for o in MANIFEST["organizations"]}
+    path = "/api/v1/internal/organization-authority/check"
+    body = dict(
+        subject=accounts["host-owner"]["id"],
+        tenant_id=tenants["active"],
+        organization_id=orgs["primary"],
+        capability="member",
+    )
+    headers = {"Authorization": "Bearer isolated-AUTH"}
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://local"
+        ) as client:
+            for actor, org, tenant, allowed in [
+                ("host-owner", "primary", "active", True),
+                ("primary-admin", "primary", "active", True),
+                ("other-admin", "other", "active", True),
+                ("other-admin", "primary", "active", False),
+                ("primary-payer", "other", "active", False),
+                ("disabled-member", "primary", "active", False),
+                ("unassociated", "primary", "active", False),
+                ("wrongadmin", "primary", "active", False),
+                ("wrongadmin", "isolated", "isolation", False),
+                ("isolated-member", "isolated", "isolation", False),
+                ("network-admin", "primary", "active", False),
+                ("host-owner", "primary", "isolation", False),
+            ]:
+                result = await client.post(
+                    path,
+                    headers=headers,
+                    json={
+                        **body,
+                        "subject": accounts[actor]["id"],
+                        "organization_id": orgs[org],
+                        "tenant_id": tenants[tenant],
+                    },
+                )
+                assert result.status_code == 200, result.text
+                assert (result.json() is not None) == allowed
+                if allowed:
+                    assert result.json()["user_id"] == accounts[actor]["id"]
+                    assert result.json()["generation"] == MANIFEST["generation"]
+                    assert (
+                        result.json()["manifest_sha256"]
+                        == hashlib.sha256(DATA).hexdigest()
+                    )
+                    assert result.headers["cache-control"] == "no-store"
+            replies = await asyncio.gather(
+                *(client.post(path, headers=headers, json=body) for _ in range(4))
+            )
+            assert all(r.status_code == 200 and r.json() for r in replies)
+            assert (
+                await client.post(
+                    path, headers={"Authorization": "Bearer wrong"}, json=body
+                )
+            ).status_code == 401
+            assert (
+                await client.post(
+                    path,
+                    headers={"Authorization": "Bearer isolated-PAYMENT"},
+                    json={**body, "capability": "manage-members"},
+                )
+            ).status_code == 403
+            assert (
+                await client.post(
+                    path, headers=headers, json={**body, "capability": "purchase"}
+                )
+            ).status_code == 403
+            async with maker() as db, db.begin(), scope(
+                db, uuid.UUID(tenants["active"])
+            ):
+                await db.execute(
+                    text(
+                        "UPDATE organization_memberships SET enabled=false WHERE user_id IN (SELECT id FROM users WHERE keycloak_sub=:subject)"
+                    ),
+                    {"subject": body["subject"]},
+                )
+            result = await client.post(path, headers=headers, json=body)
+            assert result.status_code == 200 and result.json() is None
+    finally:
+        await engine.dispose()
+
+
+def test_auth_selection_requires_single_canonical_generation(monkeypatch):
+    from user_service.scope_adapter import check_configuration
+
+    monkeypatch.setenv("USER_SCOPE_GENERATION", "test-reset-v1")
+    monkeypatch.delenv("USER_SCOPED_AUTHORITY_REQUIRED", raising=False)
+    with pytest.raises(RuntimeError, match="canonical authority"):
+        check_configuration()
+    monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
+    monkeypatch.setenv("USER_TEST_FIXTURE_GENERATION", "different")
+    with pytest.raises(RuntimeError, match="canonical authority"):
+        check_configuration()
+    monkeypatch.setenv("USER_TEST_FIXTURE_GENERATION", "test-reset-v1")
+    check_configuration()

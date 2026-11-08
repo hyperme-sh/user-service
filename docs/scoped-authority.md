@@ -94,3 +94,36 @@ substitute for that network grant. Checks retain the verified target tenant scop
 for subsequent operator directory and ban operations. Runtime readiness follows
 both inherited and settable role chains, including mixed paths with SET FALSE
 on an inherited table owner.
+
+
+## Auth compatibility and discovery
+
+The normal app mounts one membership CRUD implementation and one canonical graph.
+The prototype `identity_scope_*` HTTP authorizer is retired; its earlier immutable
+migration remains for inspection, never canonical provisioning. No second seed
+controller or grant inventory is used. `USER_SCOPE_GENERATION`, when configured,
+must equal `USER_TEST_FIXTURE_GENERATION` with scoped authority required.
+
+Auth's purpose-key HTTPS `/api/v1/internal/organization-authority/check` preserves
+its exact subject/tenant/org/generation/digest DTO, with canonical global User ID.
+It reads current organization membership, bans and global/tenant state. AUTH may
+request member or management facts; PAYMENT/PLANE may request member or purchase
+facts. Duplicate purpose credentials are refused. These are private verified-subject
+contracts; normal Payment/Plane callers continue using the bearer-bound public
+billing/identity contracts. They never assert a subject with a service key.
+
+`/api/v1/internal/network-authority/check` accepts only the AUTH purpose key and
+verified subject plus selected tenant. It requires current own-network admin
+authority, active identity/tenant and current ban checks; it returns no org and no
+billing capability. Its permissions come from the existing current network-admin
+tenant-switch authorizer, never client claims. Revocation takes effect immediately.
+
+`GET /api/v1/authority/contexts` accepts a normal verified issuer identity and
+returns only active contexts backed by a current tenant profile or owned-network
+admin grant. Network admins need no implicit tenant profile. Unassociated fixtures
+may discover their declared tenant but have no organizations or spending grant.
+`GET /api/v1/organizations` accepts the matching verified tenant/header and lists
+current memberships (network admins may administer their own tenant). Both refuse
+inactive/disabled/banned actors. Signed organization sessions further restrict
+member operations and checkout to their selected org, even when an actor has two
+current memberships. Header/body substitution cannot widen signed selection.
