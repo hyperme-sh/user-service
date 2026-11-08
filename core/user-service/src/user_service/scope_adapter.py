@@ -206,12 +206,15 @@ async def establish_login_tenant(
     destination = os.environ.get("USER_LOGIN_TENANT_ID")
     if not destination or os.environ.get("USER_SCOPED_AUTHORITY_REQUIRED") != "1":
         raise HTTPException(503, "Login tenant unavailable")
-    tenant = uuid.UUID(destination)
+    try:
+        tenant = uuid.UUID(destination)
+    except ValueError:
+        raise HTTPException(503, "Login tenant unavailable") from None
     issuer = os.environ.get("KEYCLOAK_ISSUER")
     client = os.environ.get("USER_LOGIN_CLIENT_ID")
     subject = claims.get("sub")
     if (not issuer or not client or claims.get("iss") != issuer or claims.get("azp") != client
-            or not isinstance(subject, str) or not subject or len(subject) > 512):
+            or not isinstance(subject, str) or not subject.strip() or len(subject) > 512):
         raise HTTPException(403, "Portal identity required")
     async with request.app.state.session_maker() as db, db.begin():
         if not await active_tenant(db, tenant):

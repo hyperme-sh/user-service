@@ -542,12 +542,8 @@ async def test_signed_org_selection_limits_even_two_current_memberships(
             ).all() == before
 
 
-@pytest.mark.asyncio
-async def test_verified_first_login_creates_only_individual_profiles(authority, monkeypatch):
-    import asyncio
-    from fastapi import HTTPException
-    from user_service.scope_adapter import establish_login_tenant
-
+@pytest.fixture
+def login_context(authority, monkeypatch):
     issuer = "https://identity.test/realms/test"
     monkeypatch.setenv("USER_LOGIN_TENANT_ID", str(authority.tenant))
     monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "1")
@@ -555,7 +551,20 @@ async def test_verified_first_login_creates_only_individual_profiles(authority, 
     monkeypatch.setenv("USER_LOGIN_CLIENT_ID", "portal")
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=authority.maker)))
     claims = {"iss": issuer, "azp": "portal", "sub": "new-person", "email_verified": True, "email": "individual@example.test"}
-    results = await asyncio.gather(*(establish_login_tenant(request, claims) for _ in range(2)))
+    return request, claims
+
+
+@pytest.mark.asyncio
+async def test_verified_first_login_creates_only_individual_profiles(authority, login_context):
+    import asyncio
+    from fastapi import HTTPException
+    from auth_service.schemas import AuthMeResponse
+    from user_service.scope_adapter import establish_login_tenant
+    from user_service.identity_tenant_switch import authorize_tenant_switch
+    from user_service.identity_session_member import authorize_session_member
+
+    request, claims = login_context
+    results = await asyncio.gather(*(establish_login_tenant(request, claims) for _ in range(8)))
     assert all(r.status_code == 204 for r in results)
     async with authority.maker() as db, db.begin():
         for target in (None, authority.tenant):
@@ -563,6 +572,119 @@ async def test_verified_first_login_creates_only_individual_profiles(authority, 
                 rows = (await db.execute(text("SELECT role_id FROM users WHERE keycloak_sub='new-person' AND tenant_id IS NOT DISTINCT FROM CAST(:t AS uuid)"), {"t":target})).all()
                 assert rows == [(None,)]
         assert not await allowed(db, subject="new-person", tenant=authority.tenant, organization=authority.org, action="organization.read")
+        # Provisioning must lead to a usable individual context. Caller role and
+        # contact claims must not confer the authority of an existing admin.
+        actor = AuthMeResponse(sub="new-person", email="network-admin@example.invalid", roles=["admin"])
+        grant = await authorize_tenant_switch(actor, authority.tenant, db)
+        assert grant is not None and grant.role_name == "user"
+        assert grant.permissions == () and grant.groups == ()
+        member = await authorize_session_member("new-person", authority.tenant, db)
+        assert member is not None and member.user_id == grant.user_id
+        assert await authorize_tenant_switch(actor, authority.isolated, db) is None
+        assert not await allowed(db, subject="new-person", tenant=authority.tenant, action="tenant.admin")
+        assert not await allowed(db, subject="new-person", network="hyperme.sh", action="network.admin")
+        assert not await allowed(db, subject="new-person", tenant=authority.tenant, organization=authority.org, action="lease.purchase")
     with pytest.raises(HTTPException) as refused:
         await establish_login_tenant(request, dict(claims, sub="different-person"))
     assert refused.value.status_code == 409
+
+
+@pytest.mark.parametrize("profile", ["identity", "tenant"])
+async def test_first_login_never_reactivates_disabled_profiles(authority, login_context, profile):
+    from fastapi import HTTPException
+    from auth_service.schemas import AuthMeResponse
+    from user_service.scope_adapter import establish_login_tenant
+    from user_service.identity_tenant_switch import authorize_tenant_switch
+    from user_service.identity_session_member import authorize_session_member
+
+    request, claims = login_context
+    await establish_login_tenant(request, claims)
+    target = None if profile == "identity" else authority.tenant
+    async with authority.maker() as db, db.begin(), scope(db, target):
+        await db.execute(text("UPDATE users SET is_active=false WHERE keycloak_sub=:sub"), {"sub": claims["sub"]})
+    if profile == "identity":
+        with pytest.raises(HTTPException) as denied:
+            await establish_login_tenant(request, claims)
+        assert denied.value.status_code == 403
+    else:
+        # Repeated callbacks preserve a managed destination and never repair it.
+        assert (await establish_login_tenant(request, claims)).status_code == 204
+    async with authority.maker() as db, db.begin():
+        assert await authorize_tenant_switch(AuthMeResponse(sub=claims["sub"]), authority.tenant, db) is None
+        assert await authorize_session_member(claims["sub"], authority.tenant, db) is None
+        async with scope(db, target):
+            assert await db.scalar(text("SELECT is_active FROM users WHERE keycloak_sub=:sub"), {"sub": claims["sub"]}) is False
+
+
+@pytest.mark.parametrize("change", [
+    {"iss": "https://other.test/realms/test"}, {"azp": "different-client"},
+    {"sub": " "}, {"email_verified": False}, {"email": ""},
+])
+async def test_login_refuses_untrusted_claims_without_provisioning(authority, login_context, change):
+    from fastapi import HTTPException
+    from user_service.scope_adapter import establish_login_tenant
+
+    request, claims = login_context
+    with pytest.raises(HTTPException) as denied:
+        await establish_login_tenant(request, dict(claims, **change))
+    assert denied.value.status_code == 403
+    async with authority.maker() as db, db.begin():
+        for target in (None, authority.tenant):
+            async with scope(db, target):
+                assert not await db.scalar(text("SELECT EXISTS(SELECT 1 FROM users WHERE email=:email)"), {"email": claims["email"]})
+
+
+@pytest.mark.parametrize("setting,status", [("invalid", 503), ("missing", 503), ("off", 503), ("inactive", 403)])
+async def test_login_requires_active_deployment_binding(authority, login_context, monkeypatch, setting, status):
+    from fastapi import HTTPException
+    from user_service.scope_adapter import establish_login_tenant
+
+    request, claims = login_context
+    if setting == "invalid":
+        monkeypatch.setenv("USER_LOGIN_TENANT_ID", "not-a-uuid")
+    elif setting == "missing":
+        monkeypatch.delenv("USER_LOGIN_TENANT_ID")
+    elif setting == "off":
+        monkeypatch.setenv("USER_SCOPED_AUTHORITY_REQUIRED", "0")
+    else:
+        monkeypatch.setenv("USER_LOGIN_TENANT_ID", str(authority.isolated))
+    with pytest.raises(HTTPException) as denied:
+        await establish_login_tenant(request, claims)
+    assert denied.value.status_code == status
+    async with authority.maker() as db, db.begin(), scope(db):
+        assert not await db.scalar(text("SELECT EXISTS(SELECT 1 FROM users WHERE keycloak_sub=:sub)"), {"sub": claims["sub"]})
+
+
+@pytest.mark.parametrize("actor", ["network-admin", "other-network-admin", "wrongadmin"])
+async def test_login_preserves_managed_profiles_without_new_tenant_membership(authority, login_context, actor):
+    from user_service.scope_adapter import establish_login_tenant
+
+    request, claims = login_context
+
+    async def snapshot():
+        async with authority.maker() as db, db.begin():
+            rows = []
+            for target in (None, authority.tenant, authority.isolated):
+                async with scope(db, target):
+                    rows += (await db.execute(text("SELECT id,tenant_id,role_id,sso_provider_id,is_active FROM users WHERE keycloak_sub=:sub ORDER BY id"), {"sub": actor})).all()
+            return rows
+
+    before = await snapshot()
+    assert (await establish_login_tenant(request, dict(claims, sub=actor))).status_code == 204
+    assert await snapshot() == before
+
+
+async def test_roleless_session_change_does_not_accept_foreign_assigned_role(authority, login_context):
+    from auth_service.schemas import AuthMeResponse
+    from user_service.scope_adapter import establish_login_tenant
+    from user_service.identity_tenant_switch import authorize_tenant_switch
+
+    request, claims = login_context
+    await establish_login_tenant(request, claims)
+    rid = uuid.uuid4()
+    async with authority.maker() as db, db.begin():
+        async with scope(db, authority.isolated):
+            await db.execute(text("INSERT INTO roles(id,tenant_id,name,permissions) VALUES(:id,:tenant,'foreign-admin','[\"*\"]'::jsonb)"), {"id": rid, "tenant": authority.isolated})
+        async with scope(db, authority.tenant):
+            await db.execute(text("UPDATE users SET role_id=:role WHERE keycloak_sub=:sub"), {"role": rid, "sub": claims["sub"]})
+        assert await authorize_tenant_switch(AuthMeResponse(sub=claims["sub"]), authority.tenant, db) is None
