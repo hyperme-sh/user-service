@@ -1,6 +1,6 @@
 # First-login TEST fixture owner contract
 
-`python -I -m user_service.first_login_fixture prepare|restore` is an owner
+`python -I -m user_service.first_login_fixture prepare|inspect|restore` is an owner
 operator entry point, never an HTTP route or runtime capability. Infra owns its
 checked-in definition, session/browser lifecycle, deployment fence and invocation.
 Do not invoke it on shared TEST until that Infra lifecycle is committed and the
@@ -36,8 +36,19 @@ Required operator environment: `USER_TEST_FIRST_LOGIN_ENABLED=1`,
 Keep that connection and journal private, outside ordinary runtime configuration.
 Required arguments are `--manifest`, `--subjects` and `--journal`. Output contains
 only restoration/change booleans. Infra must first verify canonical readiness,
-serialize shared acceptance and invalidate existing sessions through Auth; after
+serialize use of this actor and use a fresh normal login context; after
 normal login and refusal probes it must log out, restore, verify readiness and
 all three paused host bindings, then remove its private temporary login material.
 Preserve the journal until successful restoration has been independently verified.
 This owner contract alone is not shared deployment or live acceptance evidence.
+
+The `inspect` action verifies the same journal and bindings without data writes.
+It emits only `absent`, `created-roleless` or `baseline` and `changed: false`.
+Infra must observe absence before normal Portal login and creation afterward,
+then independently verify baseline restoration before removing its pending fence.
+
+If preparation refused before writing a journal, `verify-baseline` independently
+checks the exact original canonical profile IDs, roles and declaration without
+writes. It refuses an existing journal or a newly created profile. Infra may use
+that proof to cancel an unprepared operation after confirming its isolated owner
+container has stopped. A missing journal never authorizes reconstruction.

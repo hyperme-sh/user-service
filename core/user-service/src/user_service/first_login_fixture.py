@@ -54,7 +54,7 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
     meta = journal.parent.lstat()
     if not stat.S_ISDIR(meta.st_mode) or meta.st_uid != os.geteuid() or meta.st_mode & 0o077:
         raise ValueError('Private operator-owned journal directory required')
-    if action not in ('prepare', 'restore'):
+    if action not in ('prepare', 'restore', 'inspect', 'verify-baseline'):
         raise ValueError('Unknown lifecycle operation')
     with engine.begin() as db:
         flags = db.execute(text('''SELECT r.rolsuper,r.rolbypassrls,r.rolcreaterole,r.rolcreatedb,
@@ -95,13 +95,14 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
         if snapshot is not None and snapshot.get('binding') != binding:
             raise ValueError('Journal belongs to a different fixture')
         current = rows()
-        if action == 'prepare':
+        if action in ('prepare', 'verify-baseline'):
             if snapshot is not None:
                 raise ValueError('Existing journal requires restoration, never another preparation')
             if (len(current) != 2 or {r['tenant_id'] for r in current} != {None, tenants['active']['id']}
                     or any(r['keycloak_sub'] != actor['id'] or r['email'] != actor['email']
                            or not r['is_active'] or r['deleted_at'] or r['password'] for r in current)
                     or next(r for r in current if r['tenant_id'] is None)['id'] != actor['id']
+                    or any(r['id'] != (str(identifier(generation, 'member', tenants['active']['id'], actor['id'])) if r['tenant_id'] else actor['id']) for r in current)
                     or any(r['role_id'] != (str(identifier(generation, 'role', tenants['active']['id'], 'user')) if r['tenant_id'] else None) for r in current)):
                 raise ValueError('Canonical unassociated baseline differs')
             scope(None, tenants['active']['network'])
@@ -111,13 +112,15 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
             snapshot = dict(binding=binding, users=current, mapping=mapping)
         elif snapshot is None:
             raise ValueError('Original private journal required')
-        if action == 'restore' and current == snapshot['users']:
+        if action in ('restore', 'inspect') and current == snapshot['users']:
             scope(None, tenants['active']['network'])
             actual = db.scalar(text('SELECT to_jsonb(a) FROM authority_fixture_accounts a WHERE user_id=CAST(:id AS uuid)'), {'id': actor['id']})
             if actual != snapshot['mapping']:
                 raise ValueError('Baseline mapping differs')
+            if action == 'inspect':
+                return {'profile_state': 'baseline', 'changed': False}
             return {'restored': True, 'changed': False}
-        if action == 'restore' and (len(current) not in (0, 2) or any(
+        if action in ('restore', 'inspect') and (len(current) not in (0, 2) or any(
                 r['keycloak_sub'] != actor['id'] or r['email'] != actor['email'] or r['role_id'] is not None
                 or not r['is_active'] or r['deleted_at'] or r['sso_provider_id'] != issuer or r['password']
                 for r in current) or (current and {r['tenant_id'] for r in current} != {None, tenants['active']['id']})):
@@ -133,6 +136,10 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
                 for needle in needles:
                     if db.scalar(text('SELECT EXISTS(SELECT 1 FROM ' + quote(table) + " r WHERE strpos(to_jsonb(r)::text,:needle)>0)"), {'needle': needle}):
                         raise ValueError('Actor has dependent owner state; no changes made')
+        if action == 'verify-baseline':
+            return {'profile_state': 'baseline', 'changed': False}
+        if action == 'inspect':
+            return {'profile_state': 'created-roleless' if current else 'absent', 'changed': False}
         if action == 'prepare':
             write_new(journal, snapshot)  # fsync before committing any deletion
         scope(None, tenants['active']['network'])
@@ -152,7 +159,7 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('prepare', 'restore'))
+    parser.add_argument('action', choices=('prepare', 'restore', 'inspect', 'verify-baseline'))
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--subjects', type=Path, required=True)
     parser.add_argument('--journal', type=Path, required=True)

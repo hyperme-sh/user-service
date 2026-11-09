@@ -30,8 +30,12 @@ async def test_normal_login_after_prepare_and_exact_idempotent_restoration(empty
     owner = empty_authority_owner
     bootstrap(owner)
     journal = tmp_path / 'original.json'
+    assert invoke(owner, journal, 'verify-baseline') == {'profile_state':'baseline', 'changed':False}
     assert invoke(owner, journal, 'prepare') == {'restored': False, 'changed': True}
     assert profile(owner) is None
+    with pytest.raises(ValueError, match='requires restoration'):
+        invoke(owner, journal, 'verify-baseline')
+    assert invoke(owner, journal, 'inspect')['profile_state'] == 'absent'
     assert journal.stat().st_mode & 0o777 == 0o600
     tenant = next(t['id'] for t in MANIFEST['tenants'] if t['key'] == 'active')
     monkeypatch.setenv('USER_SCOPED_AUTHORITY_REQUIRED', '1')
@@ -44,12 +48,14 @@ async def test_normal_login_after_prepare_and_exact_idempotent_restoration(empty
     try:
         assert (await establish_login_tenant(request, claims)).status_code == 204
         created = profile(owner)
+        assert invoke(owner, journal, 'inspect')['profile_state'] == 'created-roleless'
         assert created['role_id'] is None and created['sso_provider_id'] == ISSUER
         assert (await establish_login_tenant(request, claims)).status_code == 204
         assert profile(owner) == created
     finally:
         await engine.dispose()
     assert invoke(owner, journal, 'restore') == {'restored': True, 'changed': True}
+    assert invoke(owner, journal, 'inspect')['profile_state'] == 'baseline'
     original = json.loads(journal.read_text())['users']
     assert profile(owner) == next(r for r in original if r['tenant_id'])
     assert invoke(owner, journal, 'restore') == {'restored': True, 'changed': False}
