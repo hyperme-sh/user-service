@@ -194,3 +194,11 @@ def test_rollback_sees_writer_committed_before_table_lock(empty_authority_owner)
     with owner.begin() as db:
         m.scope(db, tenant)
         assert db.scalar(text("SELECT count(*) FROM event_inbox WHERE event_id=:event"), {"event": event_id}) == 1
+
+
+def test_schema_marker_drift_refuses_before_topology_mutation(empty_authority_owner):
+    owner=empty_authority_owner;bootstrap(owner);before=generation(owner)
+    with owner.begin() as db:db.execute(text("UPDATE owner_authority_version SET sha256=:digest"),{'digest':'0'*64})
+    with pytest.raises(ValueError,match='authority schema'):apply(owner)
+    assert generation(owner)==before
+    with owner.begin() as db:assert db.scalar(text('SELECT count(*) FROM tenants'))==2

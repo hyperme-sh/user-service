@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from importlib.resources import files
 import re
 import uuid
 
@@ -91,6 +92,9 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 or not flags["owns_schema"] or flags["nspname"] == "public"):
             raise ValueError("Nonprivileged User schema owner required")
         db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(current_schema(),0))"))
+        schema_sha = sha(files("user_service").joinpath("authority_schema.sql").read_bytes())
+        if db.execute(text("SELECT revision,sha256 FROM owner_authority_version")).all() != [("0002_authority",schema_sha)]:
+            raise ValueError("Exact owner authority schema required")
         scope(db)
         generation = db.execute(text("SELECT generation,manifest_sha256,subjects_sha256,source_sha FROM authority_fixture_generation FOR UPDATE")).mappings().all()
         if len(generation) != 1 or generation[0]["generation"] != proposal["generation"]:
