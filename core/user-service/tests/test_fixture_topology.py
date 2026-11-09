@@ -94,3 +94,49 @@ def test_rollback_refuses_modified_metadata(empty_authority_owner):
         db.execute(text("UPDATE roles SET permissions='[\"modified\"]'::jsonb WHERE tenant_id=:id AND name='user'"),{'id':uuid.UUID(m.ADDITION['id'])})
     with pytest.raises(ValueError,match='metadata changed'):apply(owner,action='rollback')
     assert generation(owner)[0]==m.sha(DESIRED)
+
+
+@pytest.mark.parametrize("table, key, change", [
+    ("roles", "tenant_id", "description='modified'"),
+    ("tenants", "id", "custom_domain='modified.invalid'"),
+    ("tenants", "id", "features=jsonb_build_object('modified',true)"),
+])
+def test_rollback_preserves_edited_owner_metadata(empty_authority_owner, table, key, change):
+    owner = empty_authority_owner
+    bootstrap(owner)
+    apply(owner)
+    tenant = uuid.UUID(m.ADDITION["id"])
+    with owner.begin() as db:
+        m.scope(db, tenant)
+        db.execute(text(f"UPDATE {table} SET {change} WHERE {key}=:id"), {"id": tenant})
+    with pytest.raises(ValueError, match="metadata changed"):
+        apply(owner, action="rollback")
+    assert generation(owner)[0] == m.sha(DESIRED)
+
+
+def test_rollback_sees_writer_committed_before_table_lock(empty_authority_owner):
+    from sqlalchemy import event
+
+    owner = empty_authority_owner
+    bootstrap(owner)
+    apply(owner)
+    tenant = uuid.UUID(m.ADDITION["id"])
+    event_id = uuid.uuid4()
+
+    def commit_event(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("LOCK TABLE event_inbox "):
+            with owner.begin() as writer:
+                m.scope(writer, tenant)
+                writer.execute(text("INSERT INTO event_inbox(event_id,tenant_id,envelope) "
+                                    "VALUES(:event,:tenant,'{}')"), {"event": event_id, "tenant": tenant})
+
+    event.listen(owner, "before_cursor_execute", commit_event)
+    try:
+        with pytest.raises(ValueError, match="in use.*event_inbox"):
+            apply(owner, action="rollback")
+    finally:
+        event.remove(owner, "before_cursor_execute", commit_event)
+    assert generation(owner)[0] == m.sha(DESIRED)
+    with owner.begin() as db:
+        m.scope(db, tenant)
+        assert db.scalar(text("SELECT count(*) FROM event_inbox WHERE event_id=:event"), {"event": event_id}) == 1

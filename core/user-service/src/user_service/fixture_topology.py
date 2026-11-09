@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy import create_engine, inspect, text
 
-from user_service.fixture_bootstrap import S3RCH_TEST_TENANT as ADDITION, identifier
+from user_service.fixture_bootstrap import S3RCH_TEST_TENANT as ADDITION
 from user_service.adopt_test_tenant import _install
 
 
@@ -63,6 +63,18 @@ def protected(db, manifest):
     return sha(json.dumps(sorted(values),separators=(",",":")).encode())
 
 
+def inserted_metadata(db):
+    """Fingerprint every column of the rows rollback would delete."""
+    scope(db, ADDITION["id"], ADDITION["network"])
+    rows = []
+    for table in ("tenants", "authority_tenants", "roles", "groups", "service_tenants"):
+        key = "id" if table == "tenants" else "tenant_id"
+        statement = text(f"SELECT to_jsonb(t)::text FROM {table} t WHERE {key}=:tenant")
+        for value in db.scalars(statement, {"tenant": uuid.UUID(ADDITION["id"])}):
+            rows.append((table, value))
+    return sha(json.dumps(sorted(rows)).encode())
+
+
 def transition(engine, previous, desired, *, operation_id, source_sha, action="apply"):
     proposal = plan(previous, desired)
     operation_id = str(uuid.UUID(operation_id))
@@ -70,7 +82,10 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
         raise ValueError("Exact owner source and supported action required")
     before, after = json.loads(previous), json.loads(desired)
     with engine.begin() as db:
-        db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+        # Rollback checks each table after locking it and must see intervening commits.
+        isolation = "READ COMMITTED" if action == "rollback" else "SERIALIZABLE"
+        db.execute(text(f"SET TRANSACTION ISOLATION LEVEL {isolation}"))
+        db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
         flags = db.execute(text("""SELECT r.rolsuper,r.rolbypassrls,r.rolcreaterole,r.rolcreatedb,r.rolreplication,
             n.nspowner=r.oid AS owns_schema,n.nspname FROM pg_roles r JOIN pg_namespace n ON n.nspname=current_schema()
             WHERE r.rolname=current_user""")).mappings().one()
@@ -108,6 +123,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 raise ValueError("Existing identities or grants changed")
             receipt = {**proposal,"operation_id":operation_id,"source_sha":source_sha,
                        "predecessor_source_sha":generation["source_sha"],"subjects_sha256":generation["subjects_sha256"],
+                       "inserted_metadata_sha256":inserted_metadata(db),
                        "protected_sha256":fingerprint,"state":"applied","runtime_accepted":False}
             db.execute(text("INSERT INTO authority_fixture_transitions VALUES(:id,:before,:after,:source,'applied',CAST(:receipt AS jsonb))"),
                        {"id":operation_id,"before":sha(previous),"after":sha(desired),"source":source_sha,"receipt":json.dumps(receipt)})
@@ -129,12 +145,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                         raise ValueError("New tenant is in use; rollback refused: "+table)
             for table in ("roles", "groups", "service_tenants"):
                 db.execute(text(f"LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE"))
-            roles = db.execute(text("SELECT id::text,name,permissions FROM roles WHERE tenant_id=:id ORDER BY name"),{"id":uuid.UUID(ADDITION["id"])}).all()
-            expected_roles = [(str(identifier(proposal["generation"],"role",ADDITION["id"],name)),name,[]) for name in ("admin","host","user")]
-            groups = db.execute(text("SELECT id::text,name,role_id::text FROM groups WHERE tenant_id=:id ORDER BY name"),{"id":uuid.UUID(ADDITION["id"])}).all()
-            expected_groups = [(str(identifier(proposal["generation"],"group",ADDITION["id"],name)),name,
-                str(identifier(proposal["generation"],"role",ADDITION["id"],"host" if name=="host" else "user"))) for name in ("host","renter")]
-            if roles != expected_roles or groups != expected_groups:
+            if inserted_metadata(db) != journal["receipt"].get("inserted_metadata_sha256"):
                 raise ValueError("New tenant metadata changed; rollback refused")
             db.execute(text("DELETE FROM groups WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
             db.execute(text("DELETE FROM roles WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
