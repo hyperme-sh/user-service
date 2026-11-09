@@ -13,6 +13,15 @@ from sqlalchemy import create_engine, text
 NAMESPACE = uuid.UUID("55462e7c-b03c-494c-aaba-e5e0f7b46097")
 
 
+S3RCH_TEST_TENANT = {
+    "key": "s3rch",
+    "id": "afee9b29-1706-5590-bbbf-e58df8945ac0",
+    "network": "s3r.ch",
+    "name": "s3r.ch TEST",
+    "active": True,
+}
+
+
 def identifier(generation, *parts):
     return uuid.uuid5(NAMESPACE, ":".join([generation, *map(str, parts)]))
 
@@ -36,7 +45,10 @@ def validate(manifest, bindings, *, generation, issuer):
     ]:
         if len(name) != len(manifest[key]):
             raise ValueError("Duplicate configuration identities")
-    if len(tenants) != 2 or sum(row["active"] is True for row in tenants.values()) != 1:
+    base = {key: row for key, row in tenants.items() if key != "s3rch"}
+    if "s3rch" in tenants and tenants["s3rch"] != S3RCH_TEST_TENANT:
+        raise ValueError("Unexpected s3r.ch TEST tenant")
+    if len(base) != 2 or sum(row["active"] is True for row in base.values()) != 1:
         raise ValueError("TEST requires the active/isolation tenant pair")
     if bindings["issuer"] != issuer or bindings["generation"] != generation:
         raise ValueError("Identity inventory belongs to another authority")
@@ -131,6 +143,43 @@ def validate(manifest, bindings, *, generation, issuer):
     return networks, tenants, orgs, accounts, subjects
 
 
+def insert_tenant(db, generation, tenant, tid):
+    role_ids = {}
+    db.execute(
+        text(
+            "INSERT INTO tenants(id,name,is_active) VALUES(:id,:name,:active)"
+        ),
+        {"id": tid, "name": tenant["name"], "active": tenant["active"]},
+    )
+    db.execute(
+        text("INSERT INTO authority_tenants VALUES(:id,:network)"),
+        {"id": tid, "network": tenant["network"]},
+    )
+    for name in ["user", "admin", "host"]:
+        rid = identifier(generation, "role", tid, name)
+        role_ids[name] = rid
+        db.execute(
+            text(
+                "INSERT INTO roles(id,tenant_id,name,permissions) VALUES(:id,:tenant,:name,'[]'::jsonb)"
+            ),
+            {"id": rid, "tenant": tid, "name": name},
+        )
+    for group in ["renter", "host"]:
+        gid = identifier(generation, "group", tid, group)
+        db.execute(
+            text(
+                "INSERT INTO groups(id,tenant_id,name,role_id) VALUES(:id,:tenant,:name,:role)"
+            ),
+            {
+                "id": gid,
+                "tenant": tid,
+                "name": group,
+                "role": role_ids["host" if group == "host" else "user"],
+            },
+        )
+    return role_ids
+
+
 def seed(
     engine,
     manifest_bytes,
@@ -219,38 +268,8 @@ def seed(
         for key, tenant in tenants.items():
             tid = uuid.UUID(tenant["id"])
             scope(tid)
-            db.execute(
-                text(
-                    "INSERT INTO tenants(id,name,is_active) VALUES(:id,:name,:active)"
-                ),
-                {"id": tid, "name": tenant["name"], "active": tenant["active"]},
-            )
-            db.execute(
-                text("INSERT INTO authority_tenants VALUES(:id,:network)"),
-                {"id": tid, "network": tenant["network"]},
-            )
-            for name in ["user", "admin", "host"]:
-                rid = identifier(generation, "role", tid, name)
-                roles[key, name] = rid
-                db.execute(
-                    text(
-                        "INSERT INTO roles(id,tenant_id,name,permissions) VALUES(:id,:tenant,:name,'[]'::jsonb)"
-                    ),
-                    {"id": rid, "tenant": tid, "name": name},
-                )
-            for group in ["renter", "host"]:
-                gid = identifier(generation, "group", tid, group)
-                db.execute(
-                    text(
-                        "INSERT INTO groups(id,tenant_id,name,role_id) VALUES(:id,:tenant,:name,:role)"
-                    ),
-                    {
-                        "id": gid,
-                        "tenant": tid,
-                        "name": group,
-                        "role": roles[key, "host" if group == "host" else "user"],
-                    },
-                )
+            role_ids = insert_tenant(db, generation, tenant, tid)
+            roles.update({(key, name): rid for name, rid in role_ids.items()})
         for key, org in orgs.items():
             tid = uuid.UUID(tenants[org["tenant"]]["id"])
             scope(tid)
