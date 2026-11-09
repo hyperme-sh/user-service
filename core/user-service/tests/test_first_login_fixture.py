@@ -157,3 +157,20 @@ def test_undeclared_tenant_cascade_cannot_delete_hidden_membership(empty_authori
     with owner.begin() as db:
         db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t':str(extra)})
         assert db.scalar(text('SELECT count(*) FROM user_group_memberships WHERE id=:id'), {'id':membership}) == 1
+
+
+def test_interrupted_journal_publication_leaves_no_invalid_recovery_record(empty_authority_owner, tmp_path, monkeypatch):
+    import user_service.first_login_fixture as module
+    owner = empty_authority_owner
+    bootstrap(owner)
+    before = profile(owner)
+    journal = tmp_path / 'original.json'
+    def interrupted(*args, **kwargs):
+        raise OSError('simulated interruption before atomic publication')
+    with monkeypatch.context() as isolated:
+        isolated.setattr(module.os, 'link', interrupted)
+        with pytest.raises(OSError, match='interruption'):
+            invoke(owner, journal, 'prepare')
+    assert not journal.exists() and list(tmp_path.iterdir()) == []
+    assert profile(owner) == before
+    assert invoke(owner, journal, 'verify-baseline') == {'profile_state':'baseline', 'changed':False}

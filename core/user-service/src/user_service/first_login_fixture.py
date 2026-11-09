@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import tempfile
 
 from sqlalchemy import create_engine, text
 from user_service.fixture_bootstrap import validate, identifier
@@ -19,14 +20,19 @@ def encode(value):
 
 
 def write_new(path, value):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, 'wb') as stream:
-        stream.write(encode(value)); stream.flush(); os.fsync(stream.fileno())
+    fd, temporary = tempfile.mkstemp(prefix='.first-login-journal-', dir=Path(path).parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(encode(value)); stream.flush(); os.fsync(stream.fileno())
+        os.link(temporary, path, follow_symlinks=False)
+    finally:
+        os.unlink(temporary)
     directory = os.open(Path(path).parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         os.fsync(directory)
     finally:
         os.close(directory)
+
 
 
 def read_private(path):
