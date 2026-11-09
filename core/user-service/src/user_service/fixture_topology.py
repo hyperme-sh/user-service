@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy import create_engine, inspect, text
 
-from user_service.fixture_bootstrap import S3RCH_TEST_TENANT as ADDITION, identifier
+from user_service.fixture_bootstrap import S3RCH_TEST_TENANT as ADDITION
 from user_service.adopt_test_tenant import _install
 
 
@@ -72,7 +72,7 @@ def inserted_metadata(db):
         rows = db.execute(text(f"SELECT row_to_json(t)::text FROM {table} t WHERE {key}=:id"),
                           {"id": uuid.UUID(ADDITION["id"])}).scalars().all()
         result[table] = sorted((json.loads(row) for row in rows), key=lambda row: json.dumps(row, sort_keys=True))
-    return result
+    return sha(json.dumps(result,sort_keys=True,separators=(",", ":")).encode())
 
 
 def transition(engine, previous, desired, *, operation_id, source_sha, action="apply"):
@@ -83,6 +83,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
     before, after = json.loads(previous), json.loads(desired)
     with engine.begin() as db:
         db.execute(text("SET TRANSACTION ISOLATION LEVEL "+("READ COMMITTED" if action=="rollback" else "SERIALIZABLE")))
+        db.execute(text("SET LOCAL TIME ZONE 'UTC'"))
         flags = db.execute(text("""SELECT r.rolsuper,r.rolbypassrls,r.rolcreaterole,r.rolcreatedb,r.rolreplication,
             n.nspowner=r.oid AS owns_schema,n.nspname FROM pg_roles r JOIN pg_namespace n ON n.nspname=current_schema()
             WHERE r.rolname=current_user""")).mappings().one()
@@ -123,7 +124,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 raise ValueError("Existing identities or grants changed")
             receipt = {**proposal,"operation_id":operation_id,"source_sha":source_sha,
                        "predecessor_source_sha":generation["source_sha"],"subjects_sha256":generation["subjects_sha256"],
-                       "protected_sha256":fingerprint,"inserted_metadata":inserted_metadata(db),"state":"applied","runtime_accepted":False}
+                       "protected_sha256":fingerprint,"inserted_metadata_sha256":inserted_metadata(db),"state":"applied","runtime_accepted":False}
             db.execute(text("INSERT INTO authority_fixture_transitions VALUES(:id,:before,:after,:source,'applied',CAST(:receipt AS jsonb))"),
                        {"id":operation_id,"before":sha(previous),"after":sha(desired),"source":source_sha,"receipt":json.dumps(receipt)})
             target_sha, target_source = sha(desired), generation["source_sha"]
@@ -146,7 +147,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 if table in ("tenants", "authority_tenants", "roles", "groups", "service_tenants"):continue
                 if db.scalar(text(f"SELECT EXISTS(SELECT 1 FROM {quote(table)} WHERE tenant_id=:id)"),{"id":uuid.UUID(ADDITION["id"])}):
                     raise ValueError("New tenant is in use; rollback refused: "+table)
-            if inserted_metadata(db) != journal["receipt"].get("inserted_metadata"):
+            if inserted_metadata(db) != journal["receipt"].get("inserted_metadata_sha256"):
                 raise ValueError("New tenant metadata changed; rollback refused")
             db.execute(text("DELETE FROM groups WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
             db.execute(text("DELETE FROM roles WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
