@@ -94,3 +94,57 @@ def test_rollback_refuses_modified_metadata(empty_authority_owner):
         db.execute(text("UPDATE roles SET permissions='[\"modified\"]'::jsonb WHERE tenant_id=:id AND name='user'"),{'id':uuid.UUID(m.ADDITION['id'])})
     with pytest.raises(ValueError,match='metadata changed'):apply(owner,action='rollback')
     assert generation(owner)[0]==m.sha(DESIRED)
+
+
+@pytest.mark.parametrize("table,column,value", [
+    ("tenants","custom_domain","changed.example.invalid"),
+    ("tenants","features",'{"changed":true}'),
+    ("roles","description","preserve role edit"),
+    ("groups","description","preserve group edit"),
+])
+def test_rollback_preserves_all_inserted_metadata_edits(empty_authority_owner,table,column,value):
+    owner=empty_authority_owner;bootstrap(owner);apply(owner)
+    key='id' if table=='tenants' else 'tenant_id'
+    with owner.begin() as db:
+        m.scope(db,m.ADDITION['id'])
+        expression='CAST(:value AS jsonb)' if column=='features' else ':value'
+        db.execute(text(f'UPDATE {table} SET {column}={expression} WHERE {key}=:id'),{'id':uuid.UUID(m.ADDITION['id']),'value':value})
+    with pytest.raises(ValueError,match='metadata changed'):apply(owner,action='rollback')
+    with owner.begin() as db:
+        m.scope(db,m.ADDITION['id'])
+        assert db.scalar(text(f'SELECT count(*) FROM {table} WHERE {key}=:id'),{'id':uuid.UUID(m.ADDITION['id'])})>0
+
+
+@pytest.mark.parametrize('table,key',[('event_inbox','event_id'),('service_outbox','id')])
+def test_rollback_observes_writer_committed_while_acquiring_locks(empty_authority_owner,table,key):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    from sqlalchemy import event
+    owner=empty_authority_owner;bootstrap(owner);apply(owner)
+    attempted=threading.Event()
+    def at_lock(connection,cursor,statement,*args):
+        if statement==f'LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE':attempted.set()
+    event.listen(owner,'before_cursor_execute',at_lock)
+    writer=owner.connect();tx=writer.begin()
+    row=uuid.uuid4()
+    try:
+        m.scope(writer,m.ADDITION['id'])
+        writer.execute(text(f'INSERT INTO {table}({key},tenant_id,envelope) VALUES(:id,:tenant,\'{{}}\'::jsonb)'),{'id':row,'tenant':uuid.UUID(m.ADDITION['id'])})
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future=executor.submit(apply,owner,action='rollback')
+            assert attempted.wait(10),'rollback never reached the contended table'
+            tx.commit()
+            with pytest.raises(ValueError,match='in use'):future.result(timeout=10)
+        with owner.begin() as db:
+            m.scope(db,m.ADDITION['id'])
+            assert db.scalar(text(f'SELECT count(*) FROM {table} WHERE {key}=:id'),{'id':row})==1
+        assert generation(owner)[0]==m.sha(DESIRED)
+    finally:
+        if tx.is_active:tx.rollback()
+        writer.close();event.remove(owner,'before_cursor_execute',at_lock)
+
+
+def test_rollback_after_uncommitted_intent_is_harmless(empty_authority_owner):
+    owner=empty_authority_owner;bootstrap(owner);before=generation(owner)
+    assert apply(owner,action='rollback')['state']=='not-applied'
+    assert generation(owner)==before
