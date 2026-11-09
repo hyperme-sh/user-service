@@ -76,6 +76,14 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
         quote = db.dialect.identifier_preparer.quote
         for table in tables:
             db.exec_driver_sql('LOCK TABLE ' + quote(table) + ' IN SHARE ROW EXCLUSIVE MODE')
+        # tenants is the unscoped owner registry. Refuse hidden or undeclared
+        # tenant scopes before following any ON DELETE CASCADE edge.
+        if db.scalar(text("SELECT relrowsecurity FROM pg_class WHERE oid='tenants'::regclass")):
+            raise ValueError('Unscoped tenant inventory required')
+        installed = {(str(row.id), row.is_active) for row in db.execute(text('SELECT id,is_active FROM tenants'))}
+        expected = {(tenant['id'], tenant['active']) for tenant in tenants.values()}
+        if installed != expected:
+            raise ValueError('Installed tenant inventory differs from canonical fixtures')
         scopes = [(None, network['id']) for network in manifest['networks']]
         scopes += [(tenant['id'], None) for tenant in tenants.values()]
 

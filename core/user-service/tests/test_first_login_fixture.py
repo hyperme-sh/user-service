@@ -135,3 +135,25 @@ def test_wrong_journal_and_missing_original_never_reconstruct_seed(empty_authori
     with pytest.raises(ValueError, match='different fixture'):
         invoke(owner, journal, 'restore')
     assert profile(owner) == before
+
+
+def test_undeclared_tenant_cascade_cannot_delete_hidden_membership(empty_authority_owner, tmp_path):
+    owner = empty_authority_owner
+    bootstrap(owner)
+    before = profile(owner)
+    extra, group, membership = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    with owner.begin() as db:
+        db.execute(text("INSERT INTO tenants(id,name,is_active) VALUES(:id,'undeclared isolation regression',true)"), {'id': extra})
+        db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': str(extra)})
+        role=uuid.uuid4()
+        db.execute(text("INSERT INTO roles(id,tenant_id,name,permissions) VALUES(:id,:t,'foreign','[]'::jsonb)"), {'id':role,'t':extra})
+        db.execute(text("INSERT INTO groups(id,tenant_id,name,role_id) VALUES(:id,:t,'foreign',:role)"), {'id':group, 't':extra, 'role':role})
+        db.execute(text('INSERT INTO user_group_memberships(id,user_id,group_id,tenant_id) VALUES(:id,CAST(:u AS uuid),:g,:t)'),
+                   {'id':membership, 'u':before['id'], 'g':group, 't':extra})
+    journal = tmp_path / 'original.json'
+    with pytest.raises(ValueError, match='Installed tenant inventory differs'):
+        invoke(owner, journal, 'prepare')
+    assert not journal.exists() and profile(owner) == before
+    with owner.begin() as db:
+        db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t':str(extra)})
+        assert db.scalar(text('SELECT count(*) FROM user_group_memberships WHERE id=:id'), {'id':membership}) == 1
