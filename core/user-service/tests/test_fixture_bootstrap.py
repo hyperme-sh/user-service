@@ -1147,3 +1147,21 @@ def test_successor_requires_exact_seed_and_packaged_contract(monkeypatch):
     for field in receipt:
         monkeypatch.setenv("USER_TEST_SEED_COMPATIBILITY", json.dumps({**receipt, field: "incorrect"}))
         assert not matches_seed(row, row[0], row[1], source)
+
+
+def test_product_tenant_adoption_is_atomic_and_repeatable(empty_authority_owner):
+    from user_service.adopt_test_tenant import _install
+    from user_service.fixture_bootstrap import S3RCH_TEST_TENANT
+
+    engine = empty_authority_owner
+    baseline = bootstrap(engine)["manifest_sha256"]
+    candidate = json.dumps({**MANIFEST, "tenants": [*MANIFEST["tenants"], S3RCH_TEST_TENANT]}).encode()
+    digest = hashlib.sha256(candidate).hexdigest()
+    tenant = uuid.UUID(S3RCH_TEST_TENANT["id"])
+    for _ in range(2):
+        with engine.begin() as db:
+            _install(db, MANIFEST["generation"], baseline, digest, tenant)
+            assert db.scalar(text("SELECT count(*) FROM roles WHERE tenant_id=:id"), {"id": tenant}) == 3
+            assert db.scalar(text("SELECT count(*) FROM users WHERE tenant_id=:id"), {"id": tenant}) == 0
+    with pytest.raises(ValueError, match="Installed generation differs"), engine.begin() as db:
+        _install(db, MANIFEST["generation"], baseline, "0" * 64, tenant)
