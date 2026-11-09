@@ -1165,3 +1165,42 @@ def test_product_tenant_adoption_is_atomic_and_repeatable(empty_authority_owner)
             assert db.scalar(text("SELECT count(*) FROM users WHERE tenant_id=:id"), {"id": tenant}) == 0
     with pytest.raises(ValueError, match="Installed generation differs"), engine.begin() as db:
         _install(db, MANIFEST["generation"], baseline, "0" * 64, tenant)
+
+
+@pytest.mark.parametrize("recreation", [1, 2])
+def test_recreated_owner_oauth_grants(empty_authority_owner, recreation):
+    manifest = json.loads(DATA)
+    from user_service.fixture_bootstrap import S3RCH_TEST_TENANT
+    manifest["tenants"].append(S3RCH_TEST_TENANT)
+    manifest["organizations"].append({"key": "s3rch-primary", "id": str(identifier("test","s3rch-org")), "tenant":"s3rch"})
+    manifest["main_organizations"] = {"active": "primary", "isolation": "isolated", "s3rch":"s3rch-primary"}
+    manifest["oauth_accounts"] = [
+        {"key": key, "id": str(identifier("test", key)), "email": key+"@example.invalid",
+         "tenant_role": role, "main_organization_role": org_role}
+        for key, role, org_role in [("microsoft","admin","admin"), ("github","member",None), ("google","member","member")]
+    ]
+    data = json.dumps(manifest).encode()
+    bindings = json.loads(BINDINGS)
+    bindings["manifest_sha256"] = hashlib.sha256(data).hexdigest()
+    bindings["oauth_subjects"] = [
+        {"account_key": a["key"], "id": a["id"], "email": a["email"], "enabled": True}
+        for a in manifest["oauth_accounts"]
+    ]
+    bootstrap(empty_authority_owner, data, json.dumps(bindings).encode())
+    orgs = {o["key"]: o["id"] for o in manifest["organizations"]}
+    with empty_authority_owner.begin() as db:
+        for tenant in manifest["tenants"]:
+            db.execute(text("SELECT set_config('app.current_tenant_id',:tid,true)"), {"tid":tenant["id"]})
+            for account in manifest["oauth_accounts"]:
+                row = db.execute(text("""
+                    SELECT r.name, m.role, m.organization_id
+                    FROM users u JOIN roles r ON r.id=u.role_id
+                    LEFT JOIN organization_memberships m ON m.user_id=u.id AND m.tenant_id=u.tenant_id
+                    WHERE u.tenant_id=:tid AND u.keycloak_sub=:sub
+                """), {"tid":tenant["id"], "sub":account["id"]}).one()
+                assert row.name == ("admin" if account["tenant_role"] == "admin" else "user")
+                assert row.role == account["main_organization_role"]
+                if row.role:
+                    assert str(row.organization_id) == orgs[manifest["main_organizations"][tenant["key"]]]
+                else:
+                    assert row.organization_id is None
