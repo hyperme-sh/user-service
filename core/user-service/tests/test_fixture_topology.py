@@ -40,7 +40,7 @@ def test_atomic_extension_and_post_commit_retry_are_noop(empty_authority_owner):
     assert receipt['protected_sha256']==fingerprint
     assert receipt['runtime_accepted'] is False
     assert apply(owner)==receipt
-    assert generation(owner)==(m.sha(DESIRED),SOURCE,before[2])
+    assert generation(owner)==(m.sha(DESIRED),before[1],before[2])
     with owner.begin() as db:
         assert db.scalar(text('SELECT count(*) FROM authority_fixture_transitions'))==1
         assert m.protected(db,MANIFEST)==fingerprint
@@ -85,3 +85,12 @@ def test_unexpected_live_topology_and_operation_reuse_refuse(empty_authority_own
     apply(owner)
     with pytest.raises(ValueError,match='Operation identity'):
         m.transition(owner,DATA,DESIRED,operation_id=OP,source_sha='c'*40)
+
+
+def test_rollback_refuses_modified_metadata(empty_authority_owner):
+    owner=empty_authority_owner;bootstrap(owner);apply(owner)
+    with owner.begin() as db:
+        m.scope(db,m.ADDITION['id'])
+        db.execute(text("UPDATE roles SET permissions='[\"modified\"]'::jsonb WHERE tenant_id=:id AND name='user'"),{'id':uuid.UUID(m.ADDITION['id'])})
+    with pytest.raises(ValueError,match='metadata changed'):apply(owner,action='rollback')
+    assert generation(owner)[0]==m.sha(DESIRED)

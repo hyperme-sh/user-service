@@ -100,6 +100,8 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 raise ValueError("Expected predecessor generation; no reseed or repair")
             topology(db, before)
             fingerprint = protected(db, before)
+            if db.scalar(text("SELECT EXISTS(SELECT 1 FROM service_tenants WHERE tenant_id=:id)"),{"id":uuid.UUID(ADDITION["id"])}):
+                raise ValueError("Undeclared tenant already has owner state")
             _install(db, proposal["generation"], sha(previous), sha(desired), uuid.UUID(ADDITION["id"]))
             topology(db, after)
             if protected(db, before) != fingerprint:
@@ -109,9 +111,9 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                        "protected_sha256":fingerprint,"state":"applied","runtime_accepted":False}
             db.execute(text("INSERT INTO authority_fixture_transitions VALUES(:id,:before,:after,:source,'applied',CAST(:receipt AS jsonb))"),
                        {"id":operation_id,"before":sha(previous),"after":sha(desired),"source":source_sha,"receipt":json.dumps(receipt)})
-            target_sha, target_source = sha(desired), source_sha
+            target_sha, target_source = sha(desired), generation["source_sha"]
         else:
-            if not journal or journal["state"] != "applied" or generation["manifest_sha256"] != sha(desired) or generation["source_sha"] != source_sha:
+            if not journal or journal["state"] != "applied" or generation["manifest_sha256"] != sha(desired) or generation["source_sha"] != journal["receipt"]["predecessor_source_sha"]:
                 raise ValueError("Exact applied transition required for rollback")
             topology(db, after)
             scope(db, ADDITION["id"])
@@ -120,12 +122,12 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
             inspector = inspect(db)
             quote = db.dialect.identifier_preparer.quote
             for table in inspector.get_table_names(schema=flags["nspname"]):
-                if table in ("authority_tenants", "roles", "groups"):continue
+                if table in ("authority_tenants", "roles", "groups", "service_tenants"):continue
                 if "tenant_id" in {c["name"] for c in inspector.get_columns(table,schema=flags["nspname"])}:
                     db.execute(text(f"LOCK TABLE {quote(table)} IN SHARE ROW EXCLUSIVE MODE"))
                     if db.scalar(text(f"SELECT EXISTS(SELECT 1 FROM {quote(table)} WHERE tenant_id=:id)"),{"id":uuid.UUID(ADDITION["id"])}):
-                        raise ValueError("New tenant is in use; rollback refused")
-            for table in ("roles", "groups"):
+                        raise ValueError("New tenant is in use; rollback refused: "+table)
+            for table in ("roles", "groups", "service_tenants"):
                 db.execute(text(f"LOCK TABLE {table} IN SHARE ROW EXCLUSIVE MODE"))
             roles = db.execute(text("SELECT id::text,name,permissions FROM roles WHERE tenant_id=:id ORDER BY name"),{"id":uuid.UUID(ADDITION["id"])}).all()
             expected_roles = [(str(identifier(proposal["generation"],"role",ADDITION["id"],name)),name,[]) for name in ("admin","host","user")]
@@ -137,6 +139,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
             db.execute(text("DELETE FROM groups WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
             db.execute(text("DELETE FROM roles WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
             db.execute(text("DELETE FROM authority_tenants WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
+            db.execute(text("DELETE FROM service_tenants WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
             db.execute(text("DELETE FROM tenants WHERE id=:id"),{"id":uuid.UUID(ADDITION["id"])})
             topology(db, before)
             receipt = {**journal["receipt"],"state":"rolled-back"}
