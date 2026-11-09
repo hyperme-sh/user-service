@@ -1168,7 +1168,7 @@ def test_product_tenant_adoption_is_atomic_and_repeatable(empty_authority_owner)
 
 
 @pytest.mark.parametrize("recreation", [1, 2])
-def test_recreated_owner_oauth_grants(empty_authority_owner, recreation):
+async def test_recreated_owner_oauth_grants(empty_authority_owner, recreation):
     manifest = json.loads(DATA)
     from user_service.fixture_bootstrap import S3RCH_TEST_TENANT
     manifest["tenants"].append(S3RCH_TEST_TENANT)
@@ -1204,3 +1204,19 @@ def test_recreated_owner_oauth_grants(empty_authority_owner, recreation):
                     assert str(row.organization_id) == orgs[manifest["main_organizations"][tenant["key"]]]
                 else:
                     assert row.organization_id is None
+
+    from user_service.scoped_authority import organization_member, tenant_admin
+    engine = create_async_engine(empty_authority_owner.url.set(drivername="postgresql+asyncpg"))
+    try:
+        async with async_sessionmaker(engine)() as session, session.begin():
+            for tenant in manifest["tenants"]:
+                tid = uuid.UUID(tenant["id"])
+                oid = uuid.UUID(orgs[manifest["main_organizations"][tenant["key"]]])
+                for actor in manifest["oauth_accounts"]:
+                    assert await tenant_admin(session, tid, actor["id"]) == (
+                        tenant["active"] and actor["tenant_role"] == "admin")
+                    member = await organization_member(session, tid, oid, actor["id"])
+                    expected = actor["main_organization_role"] if tenant["active"] else None
+                    assert (member.role if member else None) == expected
+    finally:
+        await engine.dispose()
