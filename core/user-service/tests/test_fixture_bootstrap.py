@@ -1129,3 +1129,21 @@ def test_auth_selection_requires_single_canonical_generation(monkeypatch):
         check_configuration()
     monkeypatch.setenv("USER_TEST_FIXTURE_GENERATION", "test-reset-v1")
     check_configuration()
+
+
+def test_successor_requires_exact_seed_and_packaged_contract(monkeypatch):
+    from importlib.resources import files
+    from user_service.scoped_database import matches_seed
+
+    row = ("fixture", "a" * 64, "b" * 40, "c" * 64)
+    source = "d" * 40
+    assert not matches_seed(row, row[0], row[1], source)
+    receipt = dict(generation=row[0], manifest_sha256=row[1], seed_source=row[2],
+                   subjects_sha256=row[3], runtime_source=source, contract_sha256={
+                       name: hashlib.sha256(files("user_service").joinpath(name).read_bytes()).hexdigest()
+                       for name in ("fixture_bootstrap.py", "authority_schema.sql")})
+    monkeypatch.setenv("USER_TEST_SEED_COMPATIBILITY", json.dumps(receipt))
+    assert matches_seed(row, row[0], row[1], source)
+    for field in receipt:
+        monkeypatch.setenv("USER_TEST_SEED_COMPATIBILITY", json.dumps({**receipt, field: "incorrect"}))
+        assert not matches_seed(row, row[0], row[1], source)

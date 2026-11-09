@@ -1,6 +1,7 @@
 """Readiness refuses migrator credentials or an unbound TEST generation."""
 
 import hashlib
+import json
 from importlib.resources import files
 import os
 import re
@@ -27,6 +28,28 @@ RLS = (
     "organization_memberships",
     "authority_fixture_accounts",
 )
+
+
+def matches_seed(row, generation, manifest, runtime_source):
+    if row is None or tuple(row[:2]) != (generation, manifest):
+        return False
+    if row[2] == runtime_source:
+        return True
+    # The controller supplies an attestation for this exact image revision. Compare
+    # the original DB marker and the packaged fixture contract independently.
+    attestation = os.environ.get("USER_TEST_SEED_COMPATIBILITY")
+    if not attestation:
+        return False
+    expected = {
+        "generation": generation, "manifest_sha256": manifest,
+        "seed_source": row[2], "subjects_sha256": row[3],
+        "runtime_source": runtime_source,
+        "contract_sha256": {
+            name: hashlib.sha256(files("user_service").joinpath(name).read_bytes()).hexdigest()
+            for name in ("fixture_bootstrap.py", "authority_schema.sql")
+        },
+    }
+    return json.loads(attestation) == expected
 
 
 async def check(engine):
@@ -146,11 +169,11 @@ async def check(engine):
             row = (
                 await db.execute(
                     text(
-                        "SELECT generation,manifest_sha256,source_sha FROM authority_fixture_generation"
+                        "SELECT generation,manifest_sha256,source_sha,subjects_sha256 FROM authority_fixture_generation"
                     )
                 )
             ).one_or_none()
-            if row != (generation, manifest, source):
+            if not matches_seed(row, generation, manifest, source):
                 raise RuntimeError(
                     "Configured fixture generation is not seeded for this runtime"
                 )
