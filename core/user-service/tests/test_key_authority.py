@@ -104,7 +104,9 @@ async def test_network_admin_cannot_bypass_organization_scope_allowlist(key_fact
     # A legitimate s3r.ch network service grant remains usable on its own door.
     positive=await query(s,c,subject='other-network-admin',operation=operation,purpose=None if operation=='read' else 'service',
         network_id='s3r.ch',scope_kind='network',organization_id=None,scopes=['oracles:attest'])
+    assert positive.status_code==200,positive.text
     assert positive.json()['allowed'] is True
     refused=await query(s,c,subject='other-network-admin',operation=operation,purpose=None if operation=='read' else 'service',
         network_id='s3r.ch',scopes=['oracles:attest'])
+    assert refused.status_code==200,refused.text
     assert refused.json()['allowed'] is False and refused.json()['org_admin'] is False
