@@ -94,3 +94,17 @@ async def test_capabilities_require_the_same_purpose_credential(key_facts):
     response=await c.get('/api/v1/internal/key-authority/capabilities',headers={'Authorization':'Bearer '+'d'*64})
     assert response.status_code==200 and response.json()=={'api_key_authority_version':1}
     assert (await c.get('/api/v1/internal/key-authority/capabilities')).status_code==401
+
+
+@pytest.mark.parametrize('operation',['read','mint','manage','use'])
+async def test_network_admin_cannot_bypass_organization_scope_allowlist(key_facts,operation):
+    s,c=key_facts
+    async with s.maker() as db,db.begin(),scope(db,s.tenant):
+        await db.execute(text("UPDATE authority_tenants SET network_id='s3r.ch' WHERE tenant_id=:tenant"),{'tenant':s.tenant})
+    # A legitimate s3r.ch network service grant remains usable on its own door.
+    positive=await query(s,c,subject='other-network-admin',operation=operation,purpose='service',
+        network_id='s3r.ch',scope_kind='network',organization_id=None,scopes=['oracles:attest'])
+    assert positive.json()['allowed'] is True
+    refused=await query(s,c,subject='other-network-admin',operation=operation,purpose='service',
+        network_id='s3r.ch',scopes=['oracles:attest'])
+    assert refused.json()['allowed'] is False and refused.json()['org_admin'] is False

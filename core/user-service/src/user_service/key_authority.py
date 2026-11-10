@@ -81,7 +81,7 @@ async def lookup(body: Query,request: Request,response: Response):
             elif body.purpose=='renter':
                 decision=await allowed(session,action='lease.purchase',**target)
             else:decision=admin
-        elif valid:
+        elif valid and body.scope_kind=='network':
             admin=await allowed(session,subject=body.subject,action='network.admin',network=body.network_id)
             decision=admin and (body.operation=='read' or (
                 body.purpose=='service' and body.scopes==['oracles:attest'] and body.network_id=='s3r.ch'))
