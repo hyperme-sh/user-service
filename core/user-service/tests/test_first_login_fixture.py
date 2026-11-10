@@ -176,16 +176,24 @@ def test_interrupted_journal_publication_leaves_no_invalid_recovery_record(empty
     assert invoke(owner, journal, 'verify-baseline') == {'profile_state':'baseline', 'changed':False}
 
 
-def test_deactivated_tenant_profile_restored_in_place(empty_authority_owner, tmp_path):
+async def test_deactivated_tenant_profile_restored_in_place(empty_authority_owner, tmp_path):
     owner = empty_authority_owner
     bootstrap(owner)
     journal = tmp_path / 'original.json'
     original = profile(owner)
     assert invoke(owner, journal, 'prepare-deactivation') == {'profile_state': 'baseline', 'changed': False}
     assert profile(owner) == original
-    with owner.begin() as db:
-        db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': original['tenant_id']})
-        db.execute(text('UPDATE users SET is_active=false, deleted_at=now() WHERE id=CAST(:id AS uuid)'), {'id': original['id']})
+    from user_service.infrastructure.persistence.repos import SqlUserRepository
+    engine = create_async_engine(owner.url.set(drivername='postgresql+asyncpg'))
+    try:
+        async with async_sessionmaker(engine).begin() as session:
+            await session.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': original['tenant_id']})
+            repo = SqlUserRepository(session)
+            ids = uuid.UUID(original['tenant_id']), uuid.UUID(original['id'])
+            assert await repo.soft_delete(*ids)
+            assert not await repo.soft_delete(*ids)
+    finally:
+        await engine.dispose()
     assert invoke(owner, journal, 'inspect')['profile_state'] == 'deactivated'
     with owner.begin() as db:
         db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': original['tenant_id']})
