@@ -210,3 +210,27 @@ authorizers are retired; do not install or seed their schema in this generation.
 Its immutable migration and digest inspector remain only for provenance.
 Startup refuses a competing seeded prototype generation, a missing canonical
 mode, or mismatched Auth/canonical generation configuration.
+
+## API-key owner schema
+
+`python -m user_service.api_key_schema --database-url-file FILE` explicitly adds
+key scope bindings, tenant retirement fences and a bounded exact-subject inventory
+function to the existing nonprivileged User owner schema. It verifies the frozen
+baseline and existing authority contract, serializes with other owner migrations,
+and records its own immutable DDL identity. Replay verifies that identity; it does
+not alter the baseline, seed accounts or grant runtime permissions. Application
+startup never runs this migration. Infra owns deployment and permanent service
+role grants after qualification.
+
+Key bindings enforce key/tenant and organization/tenant references under forced
+RLS. The private inventory returns only IDs, tenants, purposes and fingerprints;
+it uses each tenant's ordinary RLS context and restores the caller context. It
+has no PUBLIC execute grant and never returns secret hashes. API authorization
+and the original closure-permit guard remain the service owner's responsibility.
+
+The dedicated `/api/v1/internal/key-authority` receiver checks the live authority
+seal and current identity/membership in a read-only transaction. Its purpose
+credential authorizes no directory writes. Organization keys currently require
+empty explicit scope lists; their purpose selects renter, IR or service access.
+The only nonempty supported list is `oracles:attest` for a service key held by the
+current s3r.ch network admin. Arbitrary client-supplied scope names are refused.
