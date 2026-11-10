@@ -238,3 +238,11 @@ Live-provider/mainnet records, conflicting identities, unknown dependency owners
 and incomplete owner/storage acknowledgments remain pending. Native package
 qualification does not establish deployed TEST acceptance for #13. Runtime
 routing and mutation-authority acceptance under #41 remain separate.
+
+
+The explicit API-key schema installer preserves the recorded v1 bytes and applies
+`0002_api_key_tenant_mirror` as a forward migration. Its key-table trigger records
+only the current RLS-bound key tenant into the owner tenant mirror through a
+fixed-path, schema-qualified definer function. The key runtime needs no direct
+mirror or User-directory grants. Replay refuses unknown or modified history;
+application startup performs no migration or grants.

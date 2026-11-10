@@ -132,10 +132,12 @@ async def test_key_only_writer_needs_no_tenant_mirror_or_directory_grant(authori
         with engine.begin() as db:
             db.exec_driver_sql(f'SET LOCAL search_path=pg_catalog,{quoted}')
             db.execute(text("SELECT set_config('app.current_tenant_id',:tenant,true)"),{'tenant':str(s.tenant)})
+            db.exec_driver_sql('CREATE TEMP TABLE service_tenants(tenant_id uuid)')
             key=uuid.uuid4()
             db.execute(text("INSERT INTO api_keys(id,tenant_id,key_prefix,secret_hash,purpose,created_by_sub) VALUES(:id,:tenant,:prefix,'isolated','renter','payer')"),
                 {'id':key,'tenant':s.tenant,'prefix':key.hex[:16]})
             assert db.scalar(text('SELECT count(*) FROM api_keys WHERE id=:id'),{'id':key})==1
+            assert db.scalar(text('SELECT count(*) FROM pg_temp.service_tenants'))==0
             assert not db.scalar(text("SELECT has_table_privilege(current_user,:table,'INSERT')"),{'table':schema+'.service_tenants'})
         with s.sync.begin() as db:
             assert db.scalar(text('SELECT count(*) FROM service_tenants WHERE tenant_id=:tenant'),{'tenant':s.tenant})==1
@@ -150,3 +152,23 @@ async def test_key_only_writer_needs_no_tenant_mirror_or_directory_grant(authori
             db.exec_driver_sql(f'REVOKE ALL ON SCHEMA {quoted} FROM {caller}')
             db.exec_driver_sql(f'DROP ROLE {caller}')
         root.dispose()
+
+
+async def test_key_schema_advances_recorded_v1_without_rewriting_its_identity(authority):
+    import hashlib
+    from importlib.resources import files
+    s=authority
+    first=files('user_service').joinpath('api_key_schema.sql').read_text()
+    expected=hashlib.sha256(first.encode()).hexdigest()
+    with s.sync.begin() as db:
+        schema=s.sync.dialect.identifier_preparer.quote_identifier(db.scalar(text('SELECT current_schema()')))
+        db.exec_driver_sql(first.replace('__OWNER_SCHEMA__',schema))
+        db.exec_driver_sql('CREATE TABLE api_key_schema_version(revision text PRIMARY KEY,sha256 text NOT NULL)')
+        db.execute(text("INSERT INTO api_key_schema_version VALUES('0001_api_key_authority',:digest)"),{'digest':expected})
+    install(s.sync);install(s.sync)
+    with s.sync.begin() as db:
+        versions=db.execute(text('SELECT revision,sha256 FROM api_key_schema_version ORDER BY revision')).all()
+        assert versions[0]==('0001_api_key_authority',expected)
+        assert versions[1][0]=='0002_api_key_tenant_mirror'
+        db.exec_driver_sql("UPDATE api_key_schema_version SET sha256=repeat('f',64) WHERE revision='0001_api_key_authority'")
+    with pytest.raises(ValueError,match='identity differs'):install(s.sync)
