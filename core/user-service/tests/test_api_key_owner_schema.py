@@ -108,3 +108,45 @@ async def test_execute_only_caller_cannot_shadow_inventory(authority,migrated_sy
             db.exec_driver_sql(f'DROP OWNED BY {caller}')
             db.exec_driver_sql(f'DROP ROLE {caller}')
         root.dispose()
+
+
+async def test_key_only_writer_needs_no_tenant_mirror_or_directory_grant(authority,migrated_sync_url):
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.exc import DBAPIError
+    s=authority;install(s.sync);install(s.sync)
+    caller='key_writer_'+uuid.uuid4().hex;password=uuid.uuid4().hex
+    root=create_engine(migrated_sync_url)
+    with root.begin() as db:
+        db.exec_driver_sql(f"CREATE ROLE {caller} LOGIN NOINHERIT PASSWORD '{password}' NOSUPERUSER NOBYPASSRLS")
+    with s.sync.begin() as db:
+        schema=db.scalar(text('SELECT current_schema()'))
+        quoted=s.sync.dialect.identifier_preparer.quote_identifier(schema)
+        db.exec_driver_sql(f'GRANT USAGE ON SCHEMA {quoted} TO {caller}')
+        db.exec_driver_sql(f'GRANT SELECT,INSERT,UPDATE ON {quoted}.api_keys TO {caller}')
+        # Prove the hook restores a missing mirror entry without exposing a
+        # general tenant-provisioning table to the key runtime.
+        db.execute(text('DELETE FROM service_tenants WHERE tenant_id=:tenant'),{'tenant':s.tenant})
+    engine=create_engine(make_url(migrated_sync_url).set(username=caller,password=password))
+    try:
+        with engine.begin() as db:
+            db.exec_driver_sql(f'SET LOCAL search_path=pg_catalog,{quoted}')
+            db.execute(text("SELECT set_config('app.current_tenant_id',:tenant,true)"),{'tenant':str(s.tenant)})
+            key=uuid.uuid4()
+            db.execute(text("INSERT INTO api_keys(id,tenant_id,key_prefix,secret_hash,purpose,created_by_sub) VALUES(:id,:tenant,:prefix,'isolated','renter','payer')"),
+                {'id':key,'tenant':s.tenant,'prefix':key.hex[:16]})
+            assert db.scalar(text('SELECT count(*) FROM api_keys WHERE id=:id'),{'id':key})==1
+            assert not db.scalar(text("SELECT has_table_privilege(current_user,:table,'INSERT')"),{'table':schema+'.service_tenants'})
+        with s.sync.begin() as db:
+            assert db.scalar(text('SELECT count(*) FROM service_tenants WHERE tenant_id=:tenant'),{'tenant':s.tenant})==1
+            trigger=db.execute(text("SELECT p.prosecdef,p.proconfig FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid='api_keys'::regclass AND t.tgname='remember_tenant'")).one()
+            assert trigger[0] and 'pg_temp' in trigger[1][0]
+        with pytest.raises(DBAPIError):
+            with engine.begin() as db:db.exec_driver_sql(f'INSERT INTO {quoted}.service_tenants VALUES(gen_random_uuid())')
+    finally:
+        engine.dispose()
+        with root.begin() as db:
+            db.exec_driver_sql(f'REVOKE ALL ON ALL TABLES IN SCHEMA {quoted} FROM {caller}')
+            db.exec_driver_sql(f'REVOKE ALL ON SCHEMA {quoted} FROM {caller}')
+            db.exec_driver_sql(f'DROP ROLE {caller}')
+        root.dispose()
