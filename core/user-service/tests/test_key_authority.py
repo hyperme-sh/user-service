@@ -102,9 +102,9 @@ async def test_network_admin_cannot_bypass_organization_scope_allowlist(key_fact
     async with s.maker() as db,db.begin(),scope(db,s.tenant):
         await db.execute(text("UPDATE authority_tenants SET network_id='s3r.ch' WHERE tenant_id=:tenant"),{'tenant':s.tenant})
     # A legitimate s3r.ch network service grant remains usable on its own door.
-    positive=await query(s,c,subject='other-network-admin',operation=operation,purpose='service',
+    positive=await query(s,c,subject='other-network-admin',operation=operation,purpose=None if operation=='read' else 'service',
         network_id='s3r.ch',scope_kind='network',organization_id=None,scopes=['oracles:attest'])
     assert positive.json()['allowed'] is True
-    refused=await query(s,c,subject='other-network-admin',operation=operation,purpose='service',
+    refused=await query(s,c,subject='other-network-admin',operation=operation,purpose=None if operation=='read' else 'service',
         network_id='s3r.ch',scopes=['oracles:attest'])
     assert refused.json()['allowed'] is False and refused.json()['org_admin'] is False
