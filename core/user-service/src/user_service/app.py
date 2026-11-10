@@ -156,6 +156,8 @@ def create_app(
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
     app.include_router(user_api_router, prefix="/api/v1")
+    from user_service.self_profile import router as self_profile_router
+    app.include_router(self_profile_router, prefix="/api/v1")
     from user_service.authority_routes import router as authority_router
     app.include_router(authority_router,prefix="/api/v1")
     from user_service.scope_adapter import router as scope_adapter_router
