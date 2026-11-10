@@ -87,3 +87,9 @@ async def lookup(body: Query,request: Request,response: Response):
                 body.purpose=='service' and body.scopes==['oracles:attest'] and body.network_id=='s3r.ch'))
     return {**body.model_dump(mode='json'),'allowed':bool(decision),'org_admin':bool(admin and body.scope_kind=='organization'),
             'observed_at':datetime.now(UTC).isoformat()}
+
+
+@router.get('/capabilities',dependencies=[Depends(authenticate)])
+async def capabilities():
+    """Stable protocol metadata, independent of image/revision identities."""
+    return {'api_key_authority_version':1}

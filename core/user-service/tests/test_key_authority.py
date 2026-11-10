@@ -87,3 +87,10 @@ async def test_org_key_cannot_claim_network_or_unknown_scopes(key_facts,subject,
     for scopes in (['oracles:attest'],['unknown:scope']):
         response=await query(s,c,subject=subject,purpose=purpose,scopes=scopes)
         assert response.status_code==200 and response.json()['allowed'] is False
+
+
+async def test_capabilities_require_the_same_purpose_credential(key_facts):
+    _,c=key_facts
+    response=await c.get('/api/v1/internal/key-authority/capabilities',headers={'Authorization':'Bearer '+'d'*64})
+    assert response.status_code==200 and response.json()=={'api_key_authority_version':1}
+    assert (await c.get('/api/v1/internal/key-authority/capabilities')).status_code==401
