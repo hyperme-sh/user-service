@@ -14,8 +14,9 @@ REVISION = '0001_api_key_authority'
 
 
 def install(engine):
-    ddl=files('user_service').joinpath('api_key_schema.sql').read_text()
-    digest=hashlib.sha256(ddl.encode()).hexdigest()
+    resources=[(REVISION,'api_key_schema.sql'),('0002_api_key_tenant_mirror','api_key_tenant_mirror.sql')]
+    statements=[(revision,files('user_service').joinpath(name).read_text()) for revision,name in resources]
+    expected=[(revision,hashlib.sha256(ddl.encode()).hexdigest()) for revision,ddl in statements]
     with engine.begin() as db:
         row=db.execute(text('''SELECT n.nspname,n.nspowner=r.oid AS owner,
             r.rolsuper,r.rolbypassrls,r.rolcreaterole,r.rolcreatedb,r.rolreplication
@@ -31,16 +32,15 @@ def install(engine):
         if db.scalar(text("SELECT to_regclass(current_schema()||'.owner_authority_version')")) is None:
             raise ValueError('Install the declared authority contract first')
         db.exec_driver_sql('CREATE TABLE IF NOT EXISTS api_key_schema_version(revision text PRIMARY KEY,sha256 text NOT NULL)')
-        previous=db.execute(text('SELECT revision,sha256 FROM api_key_schema_version')).all()
-        if previous:
-            if previous!=[(REVISION,digest)]:raise ValueError('API key schema identity differs')
-            return
-        # The authority owner already declares the organization/tenant constraint.
-        # SQL identifiers come exclusively from the verified owner namespace.
+        previous=db.execute(text('SELECT revision,sha256 FROM api_key_schema_version ORDER BY revision')).all()
+        if len(previous)>len(expected) or previous!=expected[:len(previous)]:
+            raise ValueError('API key schema identity differs')
+        # Preserve recorded migration bytes and advance only a known prefix.
         schema=engine.dialect.identifier_preparer.quote_identifier(row['nspname'])
-        db.exec_driver_sql(ddl.replace('__OWNER_SCHEMA__',schema))
-        db.execute(text('INSERT INTO api_key_schema_version VALUES(:revision,:digest)'),
-                   {'revision':REVISION,'digest':digest})
+        for (revision,ddl),(_,digest) in zip(statements[len(previous):],expected[len(previous):]):
+            db.exec_driver_sql(ddl.replace('__OWNER_SCHEMA__',schema))
+            db.execute(text('INSERT INTO api_key_schema_version VALUES(:revision,:digest)'),
+                       {'revision':revision,'digest':digest})
 
 
 if __name__=='__main__':
