@@ -174,3 +174,27 @@ def test_interrupted_journal_publication_leaves_no_invalid_recovery_record(empty
     assert not journal.exists() and list(tmp_path.iterdir()) == []
     assert profile(owner) == before
     assert invoke(owner, journal, 'verify-baseline') == {'profile_state':'baseline', 'changed':False}
+
+
+def test_deactivated_tenant_profile_restored_in_place(empty_authority_owner, tmp_path):
+    owner = empty_authority_owner
+    bootstrap(owner)
+    journal = tmp_path / 'original.json'
+    original = profile(owner)
+    assert invoke(owner, journal, 'prepare-deactivation') == {'profile_state': 'baseline', 'changed': False}
+    assert profile(owner) == original
+    with owner.begin() as db:
+        db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': original['tenant_id']})
+        db.execute(text('UPDATE users SET is_active=false, deleted_at=now() WHERE id=CAST(:id AS uuid)'), {'id': original['id']})
+    assert invoke(owner, journal, 'inspect')['profile_state'] == 'deactivated'
+    with owner.begin() as db:
+        db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': original['tenant_id']})
+        db.execute(text("UPDATE users SET first_name='unexpected' WHERE id=CAST(:id AS uuid)"), {'id': original['id']})
+    with pytest.raises(ValueError, match='Unexpected deactivation state'):
+        invoke(owner, journal, 'restore')
+    with owner.begin() as db:
+        db.execute(text("SELECT set_config('app.current_tenant_id',:t,true)"), {'t': original['tenant_id']})
+        db.execute(text("UPDATE users SET first_name=:name WHERE id=CAST(:id AS uuid)"), {'id': original['id'], 'name': original['first_name']})
+    assert invoke(owner, journal, 'restore') == {'restored': True, 'changed': True}
+    assert profile(owner) == original
+    assert invoke(owner, journal, 'restore') == {'restored': True, 'changed': False}

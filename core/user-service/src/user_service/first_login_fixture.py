@@ -44,6 +44,9 @@ def read_private(path):
         return json.load(stream)
 
 
+ACTIONS = ('prepare', 'prepare-deactivation', 'restore', 'inspect', 'verify-baseline')
+
+
 def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, issuer):
     """Prepare once, or restore idempotently after success or partial failure."""
     manifest, bindings = json.loads(manifest_raw), json.loads(bindings_raw)
@@ -60,7 +63,7 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
     meta = journal.parent.lstat()
     if not stat.S_ISDIR(meta.st_mode) or meta.st_uid != os.geteuid() or meta.st_mode & 0o077:
         raise ValueError('Private operator-owned journal directory required')
-    if action not in ('prepare', 'restore', 'inspect', 'verify-baseline'):
+    if action not in ACTIONS:
         raise ValueError('Unknown lifecycle operation')
     with engine.begin() as db:
         flags = db.execute(text('''SELECT r.rolsuper,r.rolbypassrls,r.rolcreaterole,r.rolcreatedb,
@@ -109,7 +112,7 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
         if snapshot is not None and snapshot.get('binding') != binding:
             raise ValueError('Journal belongs to a different fixture')
         current = rows()
-        if action in ('prepare', 'verify-baseline'):
+        if action in ('prepare', 'prepare-deactivation', 'verify-baseline'):
             if snapshot is not None:
                 raise ValueError('Existing journal requires restoration, never another preparation')
             if (len(current) != 2 or {r['tenant_id'] for r in current} != {None, tenants['active']['id']}
@@ -134,6 +137,38 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
             if action == 'inspect':
                 return {'profile_state': 'baseline', 'changed': False}
             return {'restored': True, 'changed': False}
+        if action == 'prepare-deactivation':
+            snapshot['operation'] = 'tenant-profile-deactivation'
+            write_new(journal, snapshot)
+            return {'profile_state': 'baseline', 'changed': False}
+        if snapshot.get('operation') == 'tenant-profile-deactivation':
+            originals = {row['id']: row for row in snapshot['users']}
+            tenant = tenants['active']['id']
+            if len(current) != 2 or {r['id'] for r in current} != originals.keys():
+                raise ValueError('Original fixture profiles required')
+            profile = next(r for r in current if r['tenant_id'] == tenant)
+            baseline = originals[profile['id']]
+            platform = next(r for r in current if r['tenant_id'] is None)
+            # Only the normal tenant soft-delete and its modification timestamp may differ.
+            expected = dict(baseline, deleted_at=profile['deleted_at'], is_active=False)
+            if 'updated_at' in baseline:
+                expected['updated_at'] = profile['updated_at']
+            scope(None, tenants['active']['network'])
+            mapping = db.scalar(text('SELECT to_jsonb(a) FROM authority_fixture_accounts a WHERE user_id=CAST(:id AS uuid)'), {'id': actor['id']})
+            if platform != originals[platform['id']] or not profile['deleted_at'] or profile != expected or mapping != snapshot['mapping']:
+                raise ValueError('Unexpected deactivation state; original journal retained')
+            if action == 'inspect':
+                return {'profile_state': 'deactivated', 'changed': False}
+            scope(tenant)
+            assignments = 'is_active=true, deleted_at=NULL'
+            params = {'id': profile['id'], 'tenant': tenant}
+            if 'updated_at' in baseline:
+                assignments += ', updated_at=:updated'
+                params['updated'] = baseline['updated_at']
+            db.execute(text('UPDATE users SET ' + assignments + ' WHERE id=CAST(:id AS uuid) AND tenant_id=CAST(:tenant AS uuid)'), params)
+            if rows() != snapshot['users']:
+                raise ValueError('Restored profile differs; rolling back')
+            return {'restored': True, 'changed': True}
         if action in ('restore', 'inspect') and (len(current) not in (0, 2) or any(
                 r['keycloak_sub'] != actor['id'] or r['email'] != actor['email'] or r['role_id'] is not None
                 or not r['is_active'] or r['deleted_at'] or r['sso_provider_id'] != issuer or r['password']
@@ -173,7 +208,7 @@ def fixture(engine, manifest_raw, bindings_raw, journal, action, *, generation, 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('prepare', 'restore', 'inspect', 'verify-baseline'))
+    parser.add_argument('action', choices=ACTIONS)
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--subjects', type=Path, required=True)
     parser.add_argument('--journal', type=Path, required=True)
