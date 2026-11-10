@@ -79,3 +79,11 @@ async def test_read_only_facts_and_member_revoke_permission(key_facts,monkeypatc
     monkeypatch.setattr(key_authority,'active_tenant',readonly)
     assert (await query(s,c,subject='member',operation='manage')).json()['allowed'] is True
     assert (await query(s,c,subject='member',operation='read',purpose=None)).json()['allowed'] is True
+
+
+@pytest.mark.parametrize('subject,purpose',[('payer','renter'),('org-admin','renter'),('org-admin','ir'),('org-admin','service')])
+async def test_org_key_cannot_claim_network_or_unknown_scopes(key_facts,subject,purpose):
+    s,c=key_facts
+    for scopes in (['oracles:attest'],['unknown:scope']):
+        response=await query(s,c,subject=subject,purpose=purpose,scopes=scopes)
+        assert response.status_code==200 and response.json()['allowed'] is False

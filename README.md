@@ -227,3 +227,10 @@ RLS. The private inventory returns only IDs, tenants, purposes and fingerprints;
 it uses each tenant's ordinary RLS context and restores the caller context. It
 has no PUBLIC execute grant and never returns secret hashes. API authorization
 and the original closure-permit guard remain the service owner's responsibility.
+
+The dedicated `/api/v1/internal/key-authority` receiver checks the live authority
+seal and current identity/membership in a read-only transaction. Its purpose
+credential authorizes no directory writes. Organization keys currently require
+empty explicit scope lists; their purpose selects renter, IR or service access.
+The only nonempty supported list is `oracles:attest` for a service key held by the
+current s3r.ch network admin. Arbitrary client-supplied scope names are refused.

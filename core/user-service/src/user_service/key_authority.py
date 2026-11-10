@@ -73,7 +73,7 @@ async def lookup(body: Query,request: Request,response: Response):
         valid=(not body.subject.startswith('apikey:') and await active_tenant(session,body.tenant_id)
                and await tenant_network(session,body.tenant_id)==body.network_id)
         admin=False;decision=False
-        if valid and body.scope_kind=='organization':
+        if valid and body.scope_kind=='organization' and not body.scopes:
             target=dict(subject=body.subject,tenant=body.tenant_id,organization=body.organization_id)
             admin=await allowed(session,action='organization.admin',**target)
             if body.operation=='read' or (body.operation=='manage' and body.purpose=='renter'):
