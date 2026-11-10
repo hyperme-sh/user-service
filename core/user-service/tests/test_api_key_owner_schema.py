@@ -132,7 +132,7 @@ async def test_key_only_writer_needs_no_tenant_mirror_or_directory_grant(authori
         with engine.begin() as db:
             db.exec_driver_sql(f'SET LOCAL search_path=pg_catalog,{quoted}')
             db.execute(text("SELECT set_config('app.current_tenant_id',:tenant,true)"),{'tenant':str(s.tenant)})
-            db.exec_driver_sql('CREATE TEMP TABLE service_tenants(tenant_id uuid)')
+            db.exec_driver_sql('CREATE TEMP TABLE service_tenants(tenant_id uuid) ON COMMIT DROP')
             key=uuid.uuid4()
             db.execute(text("INSERT INTO api_keys(id,tenant_id,key_prefix,secret_hash,purpose,created_by_sub) VALUES(:id,:tenant,:prefix,'isolated','renter','payer')"),
                 {'id':key,'tenant':s.tenant,'prefix':key.hex[:16]})
@@ -148,8 +148,7 @@ async def test_key_only_writer_needs_no_tenant_mirror_or_directory_grant(authori
     finally:
         engine.dispose()
         with root.begin() as db:
-            db.exec_driver_sql(f'REVOKE ALL ON ALL TABLES IN SCHEMA {quoted} FROM {caller}')
-            db.exec_driver_sql(f'REVOKE ALL ON SCHEMA {quoted} FROM {caller}')
+            db.exec_driver_sql(f'DROP OWNED BY {caller}')
             db.exec_driver_sql(f'DROP ROLE {caller}')
         root.dispose()
 
