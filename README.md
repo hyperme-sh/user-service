@@ -234,3 +234,14 @@ credential authorizes no directory writes. Organization keys currently require
 empty explicit scope lists; their purpose selects renter, IR or service access.
 The only nonempty supported list is `oracles:attest` for a service key held by the
 current s3r.ch network admin. Arbitrary client-supplied scope names are refused.
+
+### Existing self profile
+
+`GET /api/v1/me/profile` returns the authenticated subject's existing tenant
+profile using `UserResponse`. The verified tenant must match `X-Tenant-ID`.
+The lookup uses the durable subject binding, never email or an issuer UUID as a
+profile ID. Missing, deleted or inactive profiles return 404; inactive tenants
+and revoked canonical identities are refused. Signed scope generation and current
+bans are rechecked under scoped authority. Responses are `Cache-Control: no-store`.
+This read does not provision a profile, assign a role or change fixture data.
+Network administrators without a tenant profile receive 404.
