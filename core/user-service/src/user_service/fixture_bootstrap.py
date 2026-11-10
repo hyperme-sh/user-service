@@ -200,6 +200,20 @@ def seed(
     networks, tenants, orgs, accounts, subjects = validate(
         manifest, bindings, generation=generation, issuer=issuer
     )
+    oauth = manifest.get("oauth_accounts", [])
+    observed = bindings.get("oauth_subjects", [])
+    if oauth or observed:
+        main = manifest["main_organizations"]
+        if set(main) != set(tenants) or any(orgs[key]["tenant"] != tenant for tenant, key in main.items()):
+            raise ValueError("Main organization must belong to its tenant")
+        expected = [{"account_key": a["key"], "id": a["id"], "email": a["email"], "enabled": True} for a in oauth]
+        if sorted(observed, key=lambda a: a["id"]) != sorted(expected, key=lambda a: a["id"]):
+            raise ValueError("Observed OAuth fixture subjects differ")
+        if bindings.get("manifest_sha256") != manifest_sha256:
+            raise ValueError("OAuth inventory must bind the same manifest")
+        for a in oauth:
+            if a["tenant_role"] not in ("member", "admin") or a["main_organization_role"] not in (None, "member", "admin"):
+                raise ValueError("Unsupported OAuth fixture role")
     schema_sha = hashlib.sha256(
         files("user_service").joinpath("authority_schema.sql").read_bytes()
     ).hexdigest()
@@ -384,6 +398,30 @@ def seed(
                             "group": identifier(generation, "group", tid, group),
                         },
                     )
+        for account in oauth:
+            uid = uuid.UUID(account["id"])
+            identity = {"id": uid, "sub": str(uid), "email": account["email"], "first": account["key"]}
+            scope()
+            db.execute(text("""
+                INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active)
+                VALUES(:id,NULL,:sub,:email,:first,'Fixture','unspecified',true)
+            """), identity)
+            for context, tenant in tenants.items():
+                tid = uuid.UUID(tenant["id"])
+                scope(tid)
+                profile = identifier(generation, "member", tid, uid)
+                role = "admin" if account["tenant_role"] == "admin" else "user"
+                db.execute(text("""
+                    INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,role_id)
+                    VALUES(:id,:tenant,:sub,:email,:first,'Fixture','unspecified',true,:role)
+                """), {**identity, "id": profile, "tenant": tid, "role": roles[context, role]})
+                if account["main_organization_role"] is not None:
+                    organization = orgs[main[context]]
+                    db.execute(text("""
+                        INSERT INTO organization_memberships(tenant_id,organization_id,user_id,role,can_purchase_leases,enabled)
+                        VALUES(:tenant,:org,:id,:role,false,true)
+                    """), {"tenant": tid, "org": uuid.UUID(organization["id"]), "id": profile,
+                           "role": account["main_organization_role"]})
         for key in {h["owner"] for h in manifest["hosts"]}:
             host = next(h for h in manifest["hosts"] if h["owner"] == key)
             tid = uuid.UUID(tenants[accounts[key]["tenant_context"]]["id"])
@@ -415,8 +453,8 @@ def seed(
         "networks": len(networks),
         "tenants": len(tenants),
         "organizations": len(orgs),
-        "identities": len(accounts),
-        "tenant_profiles": len(profiles),
+        "identities": len(accounts) + len(oauth),
+        "tenant_profiles": len(profiles) + len(tenants) * len(oauth),
         "runtime_accepted": False,
     }
 
