@@ -48,7 +48,7 @@ async def test_inactive_tenant_is_denied(http_client, authority):
     assert result.status_code == 403, result.text
 
 
-@pytest.mark.parametrize("header,status", [(None, 400), ("invalid", 400), (str(uuid.uuid4()), 403)])
+@pytest.mark.parametrize("header,status", [(None, 400), ("invalid", 400), (str(uuid.uuid4()), 403)], ids=["missing", "invalid", "foreign"])
 async def test_profile_requires_matching_tenant_header(http_client, authority, header, status):
     headers = dict(authority.headers)
     if header is None:
