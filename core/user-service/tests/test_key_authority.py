@@ -110,3 +110,19 @@ async def test_network_admin_cannot_bypass_organization_scope_allowlist(key_fact
         network_id='s3r.ch',scopes=['oracles:attest'])
     assert refused.status_code==200,refused.text
     assert refused.json()['allowed'] is False and refused.json()['org_admin'] is False
+
+
+@pytest.mark.parametrize('operation',['mint','manage','use'])
+@pytest.mark.parametrize('scopes',[
+    ['storage:objects:read'], ['storage:objects:write'], ['storage:objects:delete'],
+    ['storage:objects:read','storage:objects:write','storage:objects:delete'],
+])
+async def test_storage_service_key_requires_current_s3rch_network_admin(key_facts,operation,scopes):
+    s,c=key_facts
+    selected=dict(operation=operation,purpose='service',network_id='s3r.ch',scope_kind='network',organization_id=None,scopes=scopes)
+    assert (await query(s,c,subject='other-network-admin',**selected)).json()['allowed'] is True
+    assert (await query(s,c,subject='payer',**selected)).json()['allowed'] is False
+    assert (await query(s,c,subject='org-admin',**selected)).json()['allowed'] is False
+    assert (await query(s,c,subject='other-network-admin',**{**selected,'scope_kind':'organization','organization_id':str(s.org)})).json()['allowed'] is False
+    assert (await query(s,c,subject='other-network-admin',**{**selected,'scopes':scopes+['oracles:attest']})).json()['allowed'] is False
+    assert (await query(s,c,subject='other-network-admin',**{**selected,'manifest_sha256':'f'*64})).status_code == 403
