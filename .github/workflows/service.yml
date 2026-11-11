@@ -118,7 +118,7 @@ jobs:
           fi
           docker tag "$local_image" "$image"
           trap 'docker image rm "$image" >/dev/null 2>&1 || true; rm -rf -- "$DOCKER_CONFIG"' EXIT
-          docker push "$image"
+          bash scripts/push-qualified-image.sh "$image"
           repo="ghcr.io/${GITHUB_REPOSITORY,,}/runtime"
           ref=$(docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' | awk -v repo="$repo@" 'index($0,repo)==1')
           [[ "$ref" =~ @sha256:[a-f0-9]{64}$ ]]
@@ -151,7 +151,7 @@ jobs:
           trap 'docker image rm "$channel" >/dev/null 2>&1 || true; rm -rf -- "$DOCKER_CONFIG"' EXIT
           printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker tag "$config" "$channel"
-          docker push "$channel"
+          bash scripts/push-qualified-image.sh "$channel"
           docker pull "$channel"
           test "$(docker image inspect "$channel" --format '{{.Id}}')" = "$config"
           test "$(docker image inspect "$channel" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$GITHUB_SHA"
