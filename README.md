@@ -245,3 +245,19 @@ and revoked canonical identities are refused. Signed scope generation and curren
 bans are rechecked under scoped authority. Responses are `Cache-Control: no-store`.
 This read does not provision a profile, assign a role or change fixture data.
 Network administrators without a tenant profile receive 404.
+
+### s3r.ch tenant storage keys
+
+The current key-owner authority permits the active `s3r.ch` network administrator
+to mint, manage and use service keys carrying a nonempty subset of
+`storage:objects:read`, `storage:objects:write` and `storage:objects:delete`.
+Every decision still checks the current tenant/network mapping, authority
+configuration generation and administrator grant. Losing that grant denies
+subsequent key use. Organization, renter and IR keys cannot acquire these scopes.
+Storage and Oracles scopes cannot be mixed; the existing `oracles:attest` service
+key remains separate. These scopes authorize the tenant's opaque object API,
+not storage configuration or an end user's SociACL object access.
+
+This policy installs no credentials and enables no media consumer. It supplies
+the owner contract needed by `FyberLabs/s3r.ch#300` and
+`hyperme-sh/controlplane-core#36`.

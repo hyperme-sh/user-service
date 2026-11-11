@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 
-from user_service.scoped_authority import active_tenant, allowed, tenant_network
+from user_service.scoped_authority import active_tenant, actor_active, allowed, tenant_network
+from user_service.network_key_policy import network_service_key_allowed
 
 router=APIRouter(prefix='/internal/key-authority')
 
@@ -82,9 +83,10 @@ async def lookup(body: Query,request: Request,response: Response):
                 decision=await allowed(session,action='lease.purchase',**target)
             else:decision=admin
         elif valid and body.scope_kind=='network':
-            admin=await allowed(session,subject=body.subject,action='network.admin',network=body.network_id)
+            admin=(await actor_active(session,body.tenant_id,body.subject)
+                   and await allowed(session,subject=body.subject,action='network.admin',network=body.network_id))
             decision=admin and (body.operation=='read' or (
-                body.purpose=='service' and body.scopes==['oracles:attest'] and body.network_id=='s3r.ch'))
+                network_service_key_allowed(body.network_id, body.purpose, body.scopes)))
     return {**body.model_dump(mode='json'),'allowed':bool(decision),'org_admin':bool(admin and body.scope_kind=='organization'),
             'observed_at':datetime.now(UTC).isoformat()}
 
