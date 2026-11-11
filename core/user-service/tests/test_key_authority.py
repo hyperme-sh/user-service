@@ -119,6 +119,8 @@ async def test_network_admin_cannot_bypass_organization_scope_allowlist(key_fact
 ])
 async def test_storage_service_key_requires_current_s3rch_network_admin(key_facts,operation,scopes):
     s,c=key_facts
+    async with s.maker() as db,db.begin(),scope(db,s.tenant):
+        await db.execute(text("UPDATE authority_tenants SET network_id='s3r.ch' WHERE tenant_id=:tenant"),{'tenant':s.tenant})
     selected=dict(operation=operation,purpose='service',network_id='s3r.ch',scope_kind='network',organization_id=None,scopes=scopes)
     assert (await query(s,c,subject='other-network-admin',**selected)).json()['allowed'] is True
     assert (await query(s,c,subject='payer',**selected)).json()['allowed'] is False
