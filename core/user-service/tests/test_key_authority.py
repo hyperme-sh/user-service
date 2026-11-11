@@ -128,3 +128,17 @@ async def test_storage_service_key_requires_current_s3rch_network_admin(key_fact
     assert (await query(s,c,subject='other-network-admin',**{**selected,'scope_kind':'organization','organization_id':str(s.org)})).json()['allowed'] is False
     assert (await query(s,c,subject='other-network-admin',**{**selected,'scopes':scopes+['oracles:attest']})).json()['allowed'] is False
     assert (await query(s,c,subject='other-network-admin',**{**selected,'manifest_sha256':'f'*64})).status_code == 403
+
+
+@pytest.mark.parametrize('operation',['mint','manage','use'])
+async def test_tenant_ban_revokes_storage_key_authority_with_network_grant_retained(key_facts,operation):
+    s,c=key_facts
+    async with s.maker() as db,db.begin(),scope(db,s.tenant):
+        await db.execute(text("UPDATE authority_tenants SET network_id='s3r.ch' WHERE tenant_id=:tenant"),{'tenant':s.tenant})
+    selected=dict(subject='other-network-admin',operation=operation,purpose='service',network_id='s3r.ch',
+        scope_kind='network',organization_id=None,scopes=['storage:objects:read','storage:objects:write','storage:objects:delete'])
+    assert (await query(s,c,**selected)).json()['allowed'] is True
+    async with s.maker() as db,db.begin(),scope(db,s.tenant):
+        await db.execute(text("INSERT INTO operator_bans(id,tenant_id,subject_kind,subject_id,reason,created_by,created_at) VALUES(:id,:tenant,'user',:user,'test','configured-admin',now())"),
+            {'id':uuid.uuid4(),'tenant':s.tenant,'user':s.identities['other-network-admin']})
+    assert (await query(s,c,**selected)).json()['allowed'] is False
