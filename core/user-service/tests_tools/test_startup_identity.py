@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class StartupIdentityTests(unittest.TestCase):
     def setUp(self):
         self.config = json.loads((Path(__file__).parent/'startup-identity.json').read_text())
-        self.person = {'id':'00000000-0000-4000-8000-000000000110', 'email':self.config['email'],
+        self.person = {'id':'00000000-0000-4000-8000-000000000110', 'email':self.config['owner']['profile']['email'],
             'sso_provider_id':external_key(self.config), 'is_active':True, 'deleted_at':None}
 
     def test_new_person_and_identical_replay(self):
@@ -45,7 +45,7 @@ class StartupIdentityTests(unittest.TestCase):
     def test_vendored_contract_matches_recorded_source_bytes(self):
         source=ROOT/'src/user_service'
         record=json.loads((source/'startup_contract_source.json').read_text())
-        self.assertEqual(record['revision'],'11695cd3211685c5aca3f716d0edbaa78ae306c2')
+        self.assertEqual(record['revision'],'5dd06662cdbf9612e4196f13215697b1e58b3c81')
         self.assertEqual(hashlib.sha256((source/'_startup_contract.py').read_bytes()).hexdigest(),record['sha256'])
 
     def test_startup_endpoint_refuses_ordinary_and_disabled_callers(self):
@@ -61,3 +61,13 @@ class StartupIdentityTests(unittest.TestCase):
         with patch.dict('os.environ',{},clear=True):
             with self.assertRaises(HTTPException) as error: authorize(request,'USER_STARTUP_TOKEN')
             self.assertEqual(error.exception.status_code,503)
+
+
+class ScopeConfigurationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_mixed_tenant_mapping_refused_before_database_access(self):
+        from user_service.startup_identity import prepare_scope
+        from user_service._startup_contract import binding_fingerprint
+        config=json.loads((Path(__file__).parent/'startup-identity.json').read_text())
+        config['binding']['organizations']['fyberlabs']['tenant_id']='00000000-0000-4000-8000-000000009999'
+        config['binding_sha256']=binding_fingerprint(config['binding'])
+        with self.assertRaises(StartupConflict):await prepare_scope(None,config)

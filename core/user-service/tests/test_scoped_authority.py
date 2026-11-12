@@ -697,8 +697,11 @@ async def startup(authority, tmp_path, monkeypatch):
     install_startup(authority.sync)
     install_startup(authority.sync)
     config = json.loads(Path(__file__).with_name('fixtures').joinpath('startup-identity.json').read_text())
-    config.update(tenant_id=str(authority.tenant), network_id='hyperme.sh')
-    path=tmp_path/'startup.json';path.write_text(json.dumps(config))
+    config['owner'].update(tenant_id=str(authority.tenant), network_id='hyperme.sh')
+    for org in config['binding']['organizations'].values():org['tenant_id']=str(authority.tenant)
+    from user_service._startup_contract import binding_fingerprint
+    config['binding_sha256']=binding_fingerprint(config['binding'])
+    path=tmp_path/'startup.json';path.write_text(json.dumps(config));path.chmod(0o600)
     monkeypatch.setenv('STARTUP_IDENTITY_ENABLED','1')
     monkeypatch.setenv('STARTUP_IDENTITY_CONFIG_FILE',str(path))
     return authority, config
@@ -714,7 +717,7 @@ async def test_startup_concurrent_creation_and_broker_replay(startup):
     results = await asyncio.gather(*(run() for _ in range(8)))
     assert all(result == results[0] for result in results)
     result = results[0]
-    assert [o['slug'] for o in result['organizations']] == config['organizations']
+    assert [o['slug'] for o in result['organizations']] == sorted(config['binding']['organizations'])
     assert len({o['id'] for o in result['organizations']}) == 3
     for _ in range(2):
         async with s.maker() as db, db.begin():
@@ -743,7 +746,7 @@ async def test_startup_concurrent_creation_and_broker_replay(startup):
     assert not await check(s,result['person_id'],'tenant.admin',tenant=s.tenant)
     async with s.maker() as db, db.begin(), scope(db,s.tenant):
         assert await db.scalar(text('SELECT count(*) FROM users WHERE sso_provider_id=:key'),
-            {'key':'entra:'+config['entra_tenant_id']+':'+config['entra_account_id']}) == 1
+            {'key':'entra:'+config['binding']['entra']['tenant_id']+':'+config['binding']['entra']['object_id']}) == 1
 
 
 async def test_startup_rollback_then_retry_and_no_email_takeover(startup):
@@ -756,13 +759,13 @@ async def test_startup_rollback_then_retry_and_no_email_takeover(startup):
     async with s.maker() as db, db.begin(), scope(db, s.tenant):
         assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 0
         await db.execute(text("INSERT INTO users(id,tenant_id,email,first_name,last_name,gender,is_active) VALUES(:id,:tenant,:email,'Other','Person','unspecified',true)"),
-            {'id':uuid.uuid4(), 'tenant':s.tenant, 'email':config['email']})
+            {'id':uuid.uuid4(), 'tenant':s.tenant, 'email':config['owner']['profile']['email']})
     with pytest.raises(StartupConflict, match='external_binding'):
         async with s.maker() as db, db.begin():
             await reconcile(db, config)
     async with s.maker() as db, db.begin(), scope(db, s.tenant):
         assert await db.scalar(text('SELECT count(*) FROM startup_organizations')) == 0
-        await db.execute(text('DELETE FROM users WHERE tenant_id=:tenant AND email=:email'), {'tenant':s.tenant,'email':config['email']})
+        await db.execute(text('DELETE FROM users WHERE tenant_id=:tenant AND email=:email'), {'tenant':s.tenant,'email':config['owner']['profile']['email']})
     async with s.maker() as db, db.begin():
         result = await reconcile(db, config)
     assert result['status'] == 'reconciled'

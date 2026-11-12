@@ -30,3 +30,12 @@ The migration and contract are included in the existing wheel/sdist consumers.
 Transaction, concurrency, rollback, conflict and tenant isolation cases are
 part of the owner CI suite; agents do not run them manually. The central
 scheduled batch consumes the same owner suite from main.
+
+
+The deployment envelope embeds Infra's canonical `binding` and its verified
+`binding_sha256`, with separate `owner` metadata for the existing tenant/network,
+profile email and Keycloak issuer/audience. Organizations use the declared IDs
+and role lists. The current User authority supports one owner tenant; a mapping
+containing an organization from another tenant is rejected before database work.
+The existing organization membership table remains authoritative. The additive
+owner relation records explicit ownership without a second role store.

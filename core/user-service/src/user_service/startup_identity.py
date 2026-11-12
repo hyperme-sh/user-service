@@ -10,19 +10,19 @@ class StartupConflict(ValueError):
 
 
 def external_key(config):
-    return 'entra:' + config['entra_tenant_id'] + ':' + config['entra_account_id']
+    return 'entra:' + config['binding']['entra']['tenant_id'] + ':' + config['binding']['entra']['object_id']
 
 
 def person_plan(config, binding, people):
     """Pure conflict rules; email detects conflicts but never selects an identity."""
-    validate(config)
+    config=validate(config)
     if binding and binding['mapping_sha256'] != fingerprint(config):
         raise StartupConflict('Configured startup mapping differs')
     if len(people) > 1: raise StartupConflict('Multiple person bindings conflict')
     person = people[0] if people else None
     if person:
         if (person['sso_provider_id'] != external_key(config) or not person['is_active'] or person['deleted_at'] is not None or
-                person['email'].lower() != config['email'].lower()):
+                person['email'].lower() != config['owner']['profile']['email'].lower()):
             raise StartupConflict('Person ' + str(person['id']) + ' conflicts with configured external_binding')
         if binding and str(binding['user_id']) != str(person['id']):
             raise StartupConflict('Configured person differs from stored mapping')
@@ -36,21 +36,24 @@ async def one(db, sql, parameters):
 
 
 async def prepare_scope(db, config):
-    validate(config)
-    tenant = uuid.UUID(config['tenant_id'])
+    config=validate(config)
+    if any(o['tenant_id'] != config['owner']['tenant_id'] for o in config['binding']['organizations'].values()):
+        raise StartupConflict('Organization scopes must belong to the configured owner tenant')
+    tenant = uuid.UUID(config['owner']['tenant_id'])
     await set_current_tenant_id_guc(db, tenant)
     await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
                      {'key':'startup-user:' + str(tenant)})
     active = await db.scalar(text('SELECT EXISTS(SELECT 1 FROM tenants WHERE id=:tenant AND is_active)'), {'tenant':tenant})
     network = await db.scalar(text('SELECT network_id FROM authority_tenants WHERE tenant_id=:tenant'), {'tenant':tenant})
-    if not active or network != config['network_id']:
+    if not active or network != config['owner']['network_id']:
         raise StartupConflict('Configured tenant/network is unavailable')
     return tenant
 
 
 async def reconcile(db, config):
+    config=validate(config)
     tenant = await prepare_scope(db, config)
-    params = {'tenant':tenant, 'external':external_key(config), 'email':config['email'].lower()}
+    params = {'tenant':tenant, 'external':external_key(config), 'email':config['owner']['profile']['email'].lower()}
     binding = await one(db, 'SELECT * FROM startup_identity_bindings WHERE tenant_id=:tenant FOR UPDATE', params)
     people = (await db.execute(text('''SELECT id,email,sso_provider_id,is_active,deleted_at,keycloak_sub
         FROM users WHERE tenant_id=:tenant AND (lower(email)=:email OR sso_provider_id=:external) FOR UPDATE'''), params)).mappings().all()
@@ -67,35 +70,38 @@ async def reconcile(db, config):
         await db.execute(text('''INSERT INTO startup_identity_bindings
             (tenant_id,user_id,entra_tenant_id,entra_account_id,mapping_sha256,sea_public_key,broker_subject)
             VALUES (:tenant,:user,:entra_tenant,:entra_account,:mapping,:sea,:subject)'''),
-            {**params, 'entra_tenant':uuid.UUID(config['entra_tenant_id']), 'entra_account':uuid.UUID(config['entra_account_id']),
-             'mapping':fingerprint(config), 'sea':config['sea_public_key'], 'subject':subject})
+            {**params, 'entra_tenant':uuid.UUID(config['binding']['entra']['tenant_id']), 'entra_account':uuid.UUID(config['binding']['entra']['object_id']),
+             'mapping':fingerprint(config), 'sea':config['binding']['sea_public_key'], 'subject':subject})
     elif binding['broker_subject'] != subject:
         raise StartupConflict('Stored broker subject differs from person')
     organizations = []
-    for slug in config['organizations']:
+    for slug, declared in sorted(config['binding']['organizations'].items()):
+        roles = declared['roles']
+        params['org'] = uuid.UUID(declared['organization_id'])
+        params['role'] = 'admin' if 'admin' in roles else 'member'
         params['slug'] = slug
         existing = await one(db, '''SELECT o.id,o.legal_name FROM startup_organizations s JOIN organizations o
             ON o.id=s.organization_id AND o.tenant_id=s.tenant_id WHERE s.tenant_id=:tenant AND s.slug=:slug''', params)
         if existing is None:
             if binding is not None: raise StartupConflict('Stored startup organization is missing')
-            conflict = await db.scalar(text('SELECT id FROM organizations WHERE tenant_id=:tenant AND legal_name=:slug'), params)
+            conflict = await db.scalar(text('SELECT id FROM organizations WHERE tenant_id=:tenant AND (legal_name=:slug OR id=:org)'), params)
             if conflict: raise StartupConflict('Organization ' + str(conflict) + ' has no matching startup binding')
-            params['org'] = uuid.uuid4()
             await db.execute(text('INSERT INTO organizations(id,tenant_id,legal_name) VALUES (:org,:tenant,:slug)'), params)
             await db.execute(text('INSERT INTO startup_organizations VALUES (:tenant,:slug,:org)'), params)
-            await db.execute(text("INSERT INTO organization_memberships(tenant_id,organization_id,user_id,role) VALUES (:tenant,:org,:user,'admin')"), params)
-            await db.execute(text('INSERT INTO startup_organization_owners VALUES (:tenant,:org,:user)'), params)
+            await db.execute(text("INSERT INTO organization_memberships(tenant_id,organization_id,user_id,role) VALUES (:tenant,:org,:user,:role)"), params)
+            if 'owner' in roles:
+                await db.execute(text('INSERT INTO startup_organization_owners VALUES (:tenant,:org,:user)'), params)
         else:
-            if existing['legal_name'] != slug: raise StartupConflict('Startup organization label differs')
+            if existing['legal_name'] != slug or str(existing['id']) != declared['organization_id']: raise StartupConflict('Startup organization label differs')
             params['org'] = existing['id']
             member = await one(db, '''SELECT m.role,m.enabled,EXISTS(SELECT 1 FROM startup_organization_owners o
                 WHERE o.tenant_id=m.tenant_id AND o.organization_id=m.organization_id AND o.user_id=m.user_id) AS owner
                 FROM organization_memberships m WHERE m.tenant_id=:tenant AND m.organization_id=:org AND m.user_id=:user''', params)
-            if not member or member['role'] != 'admin' or not member['enabled'] or not member['owner']:
+            if not member or member['role'] != params['role'] or not member['enabled'] or member['owner'] != ('owner' in roles):
                 raise StartupConflict('Startup membership differs from configured owner/admin grants')
-        organizations.append({'slug':slug, 'id':str(params['org']), 'roles':['owner','admin']})
+        organizations.append({'slug':slug, 'id':str(params['org']), 'tenant_id':str(tenant), 'roles':roles})
     return {'schema_version':1, 'mapping_sha256':fingerprint(config), 'person_id':str(params['user']),
-            'tenant_id':str(tenant), 'network_id':config['network_id'], 'organizations':organizations,
+            'tenant_id':str(tenant), 'network_id':config['owner']['network_id'], 'organizations':organizations,
             'broker_subject':subject, 'status':'reconciled'}
 
 
@@ -136,7 +142,7 @@ async def active_startup_person(db, tenant, subject):
         config = load(Path(os.environ.get('STARTUP_IDENTITY_CONFIG_FILE','')))
     except (ValueError,OSError):
         return False
-    if str(tenant) != config['tenant_id']: return False
+    if str(tenant) != config['owner']['tenant_id']: return False
     async with scope(db):
         exists = await db.scalar(text('SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject)'), {'subject':subject})
         if exists: return False
