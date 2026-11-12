@@ -159,7 +159,13 @@ financial or provider acceptance.
 
 Prepare these operator-owned inputs before including the overlay:
 
-- `ACCOUNT_CLOSURE_IMAGE`: the reviewed user-service image digest.
+- `ACCOUNT_CLOSURE_IMAGE`: an explicit tag or moving TEST channel in the approved
+  `ghcr.io/hyperme-sh/user-service`, `ghcr.io/hyperme-sh/user-service/runtime`, or
+  `acrfybercg47.azurecr.io/user-service` repository (for example,
+  `ghcr.io/hyperme-sh/user-service/runtime:test`). The configured reference is
+  preserved; startup does not resolve or pin it to a digest. Missing tags, digest
+  references, credentials and other repositories fail closed. Downloaded package
+  hashes remain part of artifact verification.
 - `ACCOUNT_CLOSURE_PRIVATE_ENV_FILE`: a restricted file based on
   `examples/account-closure.private.env.example`, containing only private
   authority/worker configuration. The worker DSN must use the reviewed role;
@@ -246,3 +252,17 @@ only the current RLS-bound key tenant into the owner tenant mirror through a
 fixed-path, schema-qualified definer function. The key runtime needs no direct
 mirror or User-directory grants. Replay refuses unknown or modified history;
 application startup performs no migration or grants.
+
+### Service-channel coverage
+
+The shared reference vectors are covered by `tests/test_service_channels.py`.
+The existing private TLS harness uses a moving channel with the same closure
+intake and trust refusals; reference contracts also cover explicit version tags. Existing closure
+job tests retain duplicate-request and tenant-scope checks. Infra's registered
+`user-consumers` nightly adapter runs these owner cases against main.
+
+The combined userchannel scenario, including pulling an advanced service channel
+and independently updated peers, belongs to [Infra #922](https://github.com/FyberLabs/infra/issues/922).
+These configuration checks do not claim deployed channel readiness. Shared
+contract prerequisites are [Spanopticon #74](https://github.com/hyperme-sh/spanopticon/pull/74)
+and [shared publisher #20](https://github.com/hyperme-sh/.github/pull/20).

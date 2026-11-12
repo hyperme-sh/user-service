@@ -60,11 +60,10 @@ def qualify(image, admin, service_url, database):
             subprocess.run(['docker','run','--rm','--network','none','--user','0:0','--cap-drop','ALL','--cap-add','CHOWN',
                 '-v',f'{root}:/fixture',image,'/app/.venv/bin/python','-I','-c',
                 "import os; os.chown('/fixture/key.pem',65532,65532)"],check=True,stdout=subprocess.DEVNULL)
-            digest = subprocess.check_output(['docker','image','inspect',image,'--format','{{.Id}}'],text=True).strip()
             private_url = service_url.set(drivername='postgresql+asyncpg', username=role, password=password,
                 host='host.docker.internal' if service_url.host in ('localhost','127.0.0.1') else service_url.host)
             fixture_environment = {
-                'ACCOUNT_CLOSURE_IMAGE': 'ghcr.io/hyperme-sh/user-service@' + digest,
+                'ACCOUNT_CLOSURE_IMAGE': 'ghcr.io/hyperme-sh/user-service:test',
                 'FASTAPI_ENV':'test', 'ACCOUNT_CLOSURE_ENFORCEMENT_ENABLED':'true',
                 'ACCOUNT_CLOSURE_AUTHORITY_ENABLED':'true', 'ACCOUNT_CLOSURE_WORKER_ENABLED':'false',
                 'ACCOUNT_CLOSURE_WORKER_DATABASE_URL':private_url.render_as_string(hide_password=False),

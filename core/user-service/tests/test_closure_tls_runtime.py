@@ -42,7 +42,7 @@ def certificates(tmp_path, monkeypatch):
     monkeypatch.setenv("ACCOUNT_CLOSURE_TLS_CERT_FILE", str(cert_path))
     monkeypatch.setenv("ACCOUNT_CLOSURE_TLS_KEY_FILE", str(key_path))
     monkeypatch.setenv("ACCOUNT_CLOSURE_AUTHORITY_CA_FILE", str(cert_path))
-    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/hyperme-sh/user-service@sha256:" + "a" * 64)
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/hyperme-sh/user-service:test")
     return cert_path, key_path
 
 
@@ -51,7 +51,7 @@ def certificates(tmp_path, monkeypatch):
     "acrfybercg47.azurecr.io/user-service"])
 async def test_real_tls_proxy_private_intake_and_denial_with_trust_failure(private, certificates, monkeypatch, repository):
     _, private_app, subject, lookups, validated = private
-    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + "@sha256:" + "a" * 64)
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + ":test")
     # The private fixture stubs native JWT validation and provider responses.
     # This replaces only its global HTTP factory so forwarding uses real TLS;
     # its already-open provider client remains an owned synthetic provider.
@@ -105,7 +105,7 @@ def test_explicit_trust_keeps_certificate_and_hostname_verification(certificates
     assert context.minimum_version >= ssl.TLSVersion.TLSv1_2
 
 
-@pytest.mark.parametrize("failure", ["missing_key", "world_readable", "symlink", "invalid_cert", "tagged_image"])
+@pytest.mark.parametrize("failure", ["missing_key", "world_readable", "symlink", "invalid_cert", "untagged_image"])
 def test_invalid_tls_or_image_cannot_start_listener(certificates, monkeypatch, failure, tmp_path):
     cert, key = certificates
     if failure == "missing_key":
@@ -119,7 +119,7 @@ def test_invalid_tls_or_image_cannot_start_listener(certificates, monkeypatch, f
     elif failure == "invalid_cert":
         cert.write_text("invalid")
     else:
-        monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/hyperme-sh/user-service:test")
+        monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", "ghcr.io/hyperme-sh/user-service")
     with pytest.raises(WorkerUnavailable):
         closure_runtime.authority_config()
 
@@ -159,16 +159,16 @@ async def test_private_startup_failure_is_sanitized(monkeypatch):
 @pytest.mark.parametrize("repository", ["ghcr.io/hyperme-sh/user-service",
     "ghcr.io/hyperme-sh/user-service/runtime",
     "acrfybercg47.azurecr.io/user-service"])
-def test_private_runtime_accepts_deployment_owner_digest(monkeypatch, repository):
-    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + "@sha256:" + "a" * 64)
-    closure_runtime.check_image()
+def test_private_runtime_accepts_deployment_owner_channel(monkeypatch, repository):
+    monkeypatch.setenv("ACCOUNT_CLOSURE_IMAGE", repository + ":test")
+    assert closure_runtime.check_image() == repository + ":test"
 
 
 @pytest.mark.parametrize("image", ["ghcr.io/fyberlabs/user-service@sha256:" + "a" * 64,
-    "ghcr.io/hyperme-sh/user-service/runtime:test",
+    "ghcr.io/hyperme-sh/user-service/runtime",
     "ghcr.io/hyperme-sh/user-service/runtime/other@sha256:" + "a" * 64,
-    "ghcr.io/hyperme-sh/user-service:test", "ghcr.io/hyperme-sh/other@sha256:" + "a" * 64,
-    "acrfybercg47.azurecr.io/user-service:test",
+    "ghcr.io/hyperme-sh/user-service:test@sha256:" + "a" * 64, "ghcr.io/hyperme-sh/other@sha256:" + "a" * 64,
+    "acrfybercg47.azurecr.io/user-service@sha256:" + "a" * 64,
     "acrfybercg47.azurecr.io/other@sha256:" + "a" * 64,
     "other.azurecr.io/user-service@sha256:" + "a" * 64,
     "acrfybercg47.azurecr.io.evil.invalid/user-service@sha256:" + "a" * 64,
