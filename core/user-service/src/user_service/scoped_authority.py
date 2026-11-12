@@ -98,9 +98,13 @@ async def active_tenant(session, tenant):
 
 async def actor_active(session, tenant, subject):
     """Recheck both identity IDs under the destination tenant's current bans."""
-    if not await identity_active(session, subject) or not await active_tenant(
-        session, tenant
-    ):
+    if not await active_tenant(session, tenant):
+        return False
+    active = await identity_active(session, subject)
+    if not active:
+        from user_service.startup_identity import active_startup_person
+        active = await active_startup_person(session, tenant, subject)
+    if not active:
         return False
     from user_service.infrastructure.operator_store import active_ban
 

@@ -691,13 +691,16 @@ async def test_roleless_session_change_does_not_accept_foreign_assigned_role(aut
 
 
 @pytest.fixture
-async def startup(authority):
+async def startup(authority, tmp_path, monkeypatch):
     import json
     from user_service.startup_migrate import install as install_startup
     install_startup(authority.sync)
     install_startup(authority.sync)
     config = json.loads(Path(__file__).with_name('fixtures').joinpath('startup-identity.json').read_text())
     config.update(tenant_id=str(authority.tenant), network_id='hyperme.sh')
+    path=tmp_path/'startup.json';path.write_text(json.dumps(config))
+    monkeypatch.setenv('STARTUP_IDENTITY_ENABLED','1')
+    monkeypatch.setenv('STARTUP_IDENTITY_CONFIG_FILE',str(path))
     return authority, config
 
 
@@ -723,6 +726,14 @@ async def test_startup_concurrent_creation_and_broker_replay(startup):
         assert await db.scalar(text('SELECT count(*) FROM startup_organization_owners')) == 3
         assert await db.scalar(text('SELECT count(*) FROM organizations WHERE id=:id'), {'id':s.org}) == 1
     assert (await run())['broker_subject'] == result['person_id']
+    for org in result['organizations']:
+        assert await check(s,result['person_id'],'organization.admin',tenant=s.tenant,organization=uuid.UUID(org['id']))
+    assert not await check(s,result['person_id'],'organization.admin',tenant=s.tenant,organization=s.other)
+    assert not await check(s,result['person_id'],'network.admin',network='hyperme.sh')
+    assert not await check(s,result['person_id'],'tenant.admin',tenant=s.tenant)
+    async with s.maker() as db, db.begin(), scope(db,s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM users WHERE sso_provider_id=:key'),
+            {'key':'entra:'+config['entra_tenant_id']+':'+config['entra_account_id']}) == 1
 
 
 async def test_startup_rollback_then_retry_and_no_email_takeover(startup):

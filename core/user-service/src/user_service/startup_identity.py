@@ -118,3 +118,31 @@ async def bind_broker(db, config, subject):
                      {'subject':subject,'tenant':tenant})
     return {'schema_version':1, 'mapping_sha256':fingerprint(config), 'person_id':str(binding['user_id']),
             'broker_subject':subject, 'status':'bound'}
+
+
+async def active_startup_person(db, tenant, subject):
+    """The configured person is one tenant row, not a second platform user.
+
+    A disabled existing platform identity still denies access. This fallback
+    establishes identity only; memberships and bans remain checked by callers.
+    """
+    import os
+    from pathlib import Path
+    from user_service._startup_contract import load
+    from user_service.scoped_authority import scope
+    if os.environ.get('STARTUP_IDENTITY_ENABLED') != '1' or not subject:
+        return False
+    try:
+        config = load(Path(os.environ.get('STARTUP_IDENTITY_CONFIG_FILE','')))
+    except (ValueError,OSError):
+        return False
+    if str(tenant) != config['tenant_id']: return False
+    async with scope(db):
+        exists = await db.scalar(text('SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject)'), {'subject':subject})
+        if exists: return False
+    async with scope(db,tenant):
+        return bool(await db.scalar(text("""SELECT EXISTS(SELECT 1 FROM startup_identity_bindings b
+            JOIN users u ON u.id=b.user_id AND u.tenant_id=b.tenant_id
+            WHERE b.tenant_id=:tenant AND b.mapping_sha256=:mapping AND b.broker_subject=:subject
+            AND u.keycloak_sub=:subject AND u.sso_provider_id=:external AND u.is_active AND u.deleted_at IS NULL)"""),
+            {'tenant':tenant,'mapping':fingerprint(config),'subject':subject,'external':external_key(config)}))
