@@ -21,6 +21,8 @@ def person_plan(config, binding, people):
     if len(people) > 1: raise StartupConflict('Multiple person bindings conflict')
     person = people[0] if people else None
     if person:
+        if person.get('keycloak_sub') and len(person['keycloak_sub'])>250:
+            raise StartupConflict('Existing broker subject exceeds startup policy storage')
         if (person['sso_provider_id'] != external_key(config) or not person['is_active'] or person['deleted_at'] is not None or
                 person['email'].lower() != config['owner']['profile']['email'].lower()):
             raise StartupConflict('Person ' + str(person['id']) + ' conflicts with configured external_binding')

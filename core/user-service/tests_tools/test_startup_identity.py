@@ -25,7 +25,7 @@ class StartupIdentityTests(unittest.TestCase):
         self.assertEqual(person_plan(self.config,binding,[self.person]),self.person)
 
     def test_email_never_selects_or_rebinds_person(self):
-        for key,value in [('sso_provider_id','other'), ('is_active',False), ('deleted_at','retired')]:
+        for key,value in [('sso_provider_id','other'), ('is_active',False), ('deleted_at','retired'), ('keycloak_sub','s'*251)]:
             person=dict(self.person, **{key:value})
             with self.subTest(key=key),self.assertRaises(StartupConflict): person_plan(self.config,None,[person])
             self.assertEqual(person[key],value)
