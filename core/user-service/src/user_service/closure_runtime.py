@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import re
 import ssl
 import stat
 import sys
@@ -14,12 +13,24 @@ import uvicorn
 
 from user_service.closure_daemon import run_command
 from user_service.closure_worker import WorkerUnavailable
+from user_service.service_channels import reference
+
+
+IMAGE_REPOSITORIES = (
+    "ghcr.io/hyperme-sh/user-service",
+    "ghcr.io/hyperme-sh/user-service/runtime",
+    "acrfybercg47.azurecr.io/user-service",
+)
 
 
 def check_image():
-    if not re.fullmatch(r"(?:ghcr\.io/hyperme-sh/user-service(?:/runtime)?|acrfybercg47\.azurecr\.io/user-service)@sha256:[0-9a-f]{64}",
-                        os.environ.get("ACCOUNT_CLOSURE_IMAGE", "")):
-        raise WorkerUnavailable()
+    image = os.environ.get("ACCOUNT_CLOSURE_IMAGE", "")
+    for repository in IMAGE_REPOSITORIES:
+        try:
+            return reference(image, repository)
+        except ValueError:
+            continue
+    raise WorkerUnavailable()
 
 
 def certificate_paths():
