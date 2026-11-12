@@ -688,3 +688,82 @@ async def test_roleless_session_change_does_not_accept_foreign_assigned_role(aut
         async with scope(db, authority.tenant):
             await db.execute(text("UPDATE users SET role_id=:role WHERE keycloak_sub=:sub"), {"role": rid, "sub": claims["sub"]})
         assert await authorize_tenant_switch(AuthMeResponse(sub=claims["sub"]), authority.tenant, db) is None
+
+
+@pytest.fixture
+async def startup(authority):
+    import json
+    from user_service.startup_migrate import install as install_startup
+    install_startup(authority.sync)
+    install_startup(authority.sync)
+    config = json.loads(Path(__file__).with_name('fixtures').joinpath('startup-identity.json').read_text())
+    config.update(tenant_id=str(authority.tenant), network_id='hyperme.sh')
+    return authority, config
+
+
+async def test_startup_concurrent_creation_and_broker_replay(startup):
+    import asyncio
+    from user_service.startup_identity import reconcile, bind_broker
+    s, config = startup
+    async def run():
+        async with s.maker() as db, db.begin():
+            return await reconcile(db, config)
+    results = await asyncio.gather(*(run() for _ in range(8)))
+    assert all(result == results[0] for result in results)
+    result = results[0]
+    assert [o['slug'] for o in result['organizations']] == config['organizations']
+    assert len({o['id'] for o in result['organizations']}) == 3
+    for _ in range(2):
+        async with s.maker() as db, db.begin():
+            bound = await bind_broker(db, config, result['person_id'])
+            assert bound['broker_subject'] == result['person_id']
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 1
+        assert await db.scalar(text('SELECT count(*) FROM startup_organizations')) == 3
+        assert await db.scalar(text('SELECT count(*) FROM startup_organization_owners')) == 3
+        assert await db.scalar(text('SELECT count(*) FROM organizations WHERE id=:id'), {'id':s.org}) == 1
+    assert (await run())['broker_subject'] == result['person_id']
+
+
+async def test_startup_rollback_then_retry_and_no_email_takeover(startup):
+    from user_service.startup_identity import reconcile, StartupConflict
+    s, config = startup
+    with pytest.raises(RuntimeError, match='interrupted'):
+        async with s.maker() as db, db.begin():
+            await reconcile(db, config)
+            raise RuntimeError('interrupted before commit')
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 0
+        await db.execute(text("INSERT INTO users(id,tenant_id,email,first_name,last_name,gender,is_active) VALUES(:id,:tenant,:email,'Other','Person','unspecified',true)"),
+            {'id':uuid.uuid4(), 'tenant':s.tenant, 'email':config['email']})
+    with pytest.raises(StartupConflict, match='external_binding'):
+        async with s.maker() as db, db.begin():
+            await reconcile(db, config)
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM startup_organizations')) == 0
+        await db.execute(text('DELETE FROM users WHERE tenant_id=:tenant AND email=:email'), {'tenant':s.tenant,'email':config['email']})
+    async with s.maker() as db, db.begin():
+        result = await reconcile(db, config)
+    assert result['status'] == 'reconciled'
+
+
+async def test_startup_conflicts_preserve_grants_and_tenant_isolation(startup):
+    from user_service.startup_identity import reconcile, bind_broker, StartupConflict
+    s, config = startup
+    async with s.maker() as db, db.begin():
+        result = await reconcile(db, config)
+    for changed in [dict(config, entra_account_id=str(uuid.uuid4())), dict(config, entra_tenant_id=str(uuid.uuid4()))]:
+        with pytest.raises(StartupConflict, match='mapping differs'):
+            async with s.maker() as db, db.begin():
+                await reconcile(db, changed)
+    with pytest.raises(StartupConflict, match='Broker subject conflicts'):
+        async with s.maker() as db, db.begin():
+            await bind_broker(db, config, 'another-person')
+    async with s.maker() as db, db.begin(), scope(db, s.isolated):
+        assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 0
+        assert await db.scalar(text('SELECT count(*) FROM startup_organization_owners')) == 0
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        await db.execute(text("UPDATE organization_memberships SET enabled=false WHERE user_id=:id"), {'id':uuid.UUID(result['person_id'])})
+    with pytest.raises(StartupConflict, match='membership differs'):
+        async with s.maker() as db, db.begin():
+            await reconcile(db, config)
