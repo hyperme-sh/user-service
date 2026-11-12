@@ -10,8 +10,9 @@ from user_service import key_authority as owner
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["objects", "records"])
 @pytest.mark.parametrize('operation',['read','mint','manage','use'])
-async def test_current_tenant_actor_status_is_rechecked_before_network_grant(monkeypatch,operation):
+async def test_current_tenant_actor_status_is_rechecked_before_network_grant(monkeypatch,operation,family):
     tenant=uuid4()
     class Session:
         async def __aenter__(self): return self
@@ -28,7 +29,7 @@ async def test_current_tenant_actor_status_is_rechecked_before_network_grant(mon
     monkeypatch.setattr(owner,'allowed',grant)
     body=owner.Query(request_id=uuid4(),subject='network-admin',tenant_id=tenant,network_id='s3r.ch',
         scope_kind='network',generation='unit',manifest_sha256='a'*64,operation=operation,
-        purpose=None if operation=='read' else 'service',scopes=[] if operation=='read' else ['storage:objects:read'])
+        purpose=None if operation=='read' else 'service',scopes=[] if operation=='read' else [f'storage:{family}:read'])
     request=Request({'type':'http','method':'POST','path':'/','headers':[(b'x-tenant-id',str(tenant).encode())],
         'app':SimpleNamespace(state=SimpleNamespace(session_maker=lambda:session))})
     assert (await owner.lookup(body,request,Response()))['allowed'] is True
