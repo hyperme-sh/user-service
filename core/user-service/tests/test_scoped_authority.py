@@ -796,3 +796,30 @@ async def test_startup_conflicts_preserve_grants_and_tenant_isolation(startup):
     with pytest.raises(StartupConflict, match='membership differs'):
         async with s.maker() as db, db.begin():
             await reconcile(db, config)
+
+
+async def test_startup_adopts_existing_person_with_active_platform_identity(startup,monkeypatch):
+    from user_service.startup_identity import reconcile,bind_broker,external_key,startup_scope_identity
+    from user_service.scope_adapter import check as scope_check
+    from user_service.scope_api import AuthorityBody
+    from starlette.responses import Response
+    s,config=startup;subject='existing-configured-subject';person,platform=uuid.uuid4(),uuid.uuid4()
+    async with s.maker() as db,db.begin():
+        for tenant,uid,external in ((None,platform,None),(s.tenant,person,external_key(config))):
+            async with scope(db,tenant):
+                await db.execute(text("INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,sso_provider_id) VALUES(:id,:tenant,:sub,:email,'Existing','Person','unspecified',true,:external)"),
+                    {'id':uid,'tenant':tenant,'sub':subject,'email':config['owner']['profile']['email'],'external':external})
+        result=await reconcile(db,config)
+        assert result['person_id']==str(person) and result['broker_subject']==subject
+        await bind_broker(db,config,subject)
+    monkeypatch.setenv('USER_SCOPED_AUTHORITY_REQUIRED','1')
+    request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=s.maker)))
+    body=AuthorityBody(subject=subject,tenant_id=s.tenant,organization_id=uuid.UUID(result['organizations'][0]['id']),capability='member')
+    grant=await scope_check(body,request,Response(),caller='AUTH')
+    assert str(grant['user_id'])==str(person) and grant['generation']=='startup-v1'
+    assert grant['manifest_sha256']==result['mapping_sha256']
+    async with s.maker() as db,db.begin(),scope(db):
+        assert await db.scalar(text('SELECT count(*) FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject'),{'subject':subject})==1
+        await db.execute(text('UPDATE users SET is_active=false WHERE id=:id'),{'id':platform})
+    assert await scope_check(body,request,Response(),caller='AUTH') is None
+    async with s.maker() as db,db.begin():assert await startup_scope_identity(db,s.tenant,subject) is None

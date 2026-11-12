@@ -146,8 +146,8 @@ async def active_startup_person(db, tenant, subject):
         return False
     if str(tenant) != config['owner']['tenant_id']: return False
     async with scope(db):
-        exists = await db.scalar(text('SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject)'), {'subject':subject})
-        if exists: return False
+        platform = (await db.execute(text('SELECT is_active,deleted_at FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject'), {'subject':subject})).mappings().all()
+        if len(platform)>1 or (platform and (not platform[0]['is_active'] or platform[0]['deleted_at'] is not None)): return False
     async with scope(db,tenant):
         return bool(await db.scalar(text("""SELECT EXISTS(SELECT 1 FROM startup_identity_bindings b
             JOIN users u ON u.id=b.user_id AND u.tenant_id=b.tenant_id
