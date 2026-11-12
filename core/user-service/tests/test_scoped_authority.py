@@ -776,7 +776,12 @@ async def test_startup_conflicts_preserve_grants_and_tenant_isolation(startup):
     s, config = startup
     async with s.maker() as db, db.begin():
         result = await reconcile(db, config)
-    for changed in [dict(config, entra_account_id=str(uuid.uuid4())), dict(config, entra_tenant_id=str(uuid.uuid4()))]:
+    import copy
+    from user_service._startup_contract import binding_fingerprint
+    for field in ('object_id','tenant_id'):
+        changed=copy.deepcopy(config);changed['binding']['entra'][field]=str(uuid.uuid4())
+        changed['binding']['entra']['issuer']='https://login.microsoftonline.com/'+changed['binding']['entra']['tenant_id']+'/v2.0'
+        changed['binding_sha256']=binding_fingerprint(changed['binding'])
         with pytest.raises(StartupConflict, match='mapping differs'):
             async with s.maker() as db, db.begin():
                 await reconcile(db, changed)

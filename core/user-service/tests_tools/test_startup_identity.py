@@ -45,7 +45,7 @@ class StartupIdentityTests(unittest.TestCase):
     def test_vendored_contract_matches_recorded_source_bytes(self):
         source=ROOT/'src/user_service'
         record=json.loads((source/'startup_contract_source.json').read_text())
-        self.assertEqual(record['revision'],'5dd06662cdbf9612e4196f13215697b1e58b3c81')
+        self.assertEqual(record['revision'],'f3018df084f3161d679556b9397e297800d29776')
         self.assertEqual(hashlib.sha256((source/'_startup_contract.py').read_bytes()).hexdigest(),record['sha256'])
 
     def test_startup_endpoint_refuses_ordinary_and_disabled_callers(self):
