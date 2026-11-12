@@ -250,12 +250,15 @@ Network administrators without a tenant profile receive 404.
 
 The current key-owner authority permits the active `s3r.ch` network administrator
 to mint, manage and use service keys carrying a nonempty subset of
-`storage:objects:read`, `storage:objects:write` and `storage:objects:delete`.
+`storage:objects:read`, `storage:objects:write` and `storage:objects:delete`,
+or a nonempty subset of `storage:records:read`, `storage:records:write` and
+`storage:records:delete` for named cache records. Object and record scopes cannot
+be combined in one key.
 Every decision still checks the current tenant/network mapping, authority
 configuration generation and administrator grant. Losing that grant denies
 subsequent key use. Organization, renter and IR keys cannot acquire these scopes.
 Storage and Oracles scopes cannot be mixed; the existing `oracles:attest` service
-key remains separate. These scopes authorize the tenant's opaque object API,
+key remains separate. These scopes authorize the tenant's opaque object or named record API,
 not storage configuration or an end user's SociACL object access.
 
 This policy installs no credentials and enables no media consumer. It supplies
