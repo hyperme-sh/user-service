@@ -45,6 +45,10 @@ async def selected_scope(
             text("SELECT generation,manifest_sha256 FROM authority_fixture_generation")
         )
     ).one_or_none()
+    if claims.get('scope_generation') == 'startup-v1':
+        from user_service.startup_identity import startup_scope_identity
+        startup = await startup_scope_identity(session,tenant,me.sub)
+        seal = startup[1:] if startup else None
     network = await tenant_network(session, tenant)
     if (
         seal is None

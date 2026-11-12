@@ -726,6 +726,16 @@ async def test_startup_concurrent_creation_and_broker_replay(startup):
         assert await db.scalar(text('SELECT count(*) FROM startup_organization_owners')) == 3
         assert await db.scalar(text('SELECT count(*) FROM organizations WHERE id=:id'), {'id':s.org}) == 1
     assert (await run())['broker_subject'] == result['person_id']
+    from user_service.scope_adapter import check as scope_check
+    from user_service.scope_api import AuthorityBody
+    from starlette.responses import Response
+    from unittest.mock import patch
+    with patch.dict('os.environ',{'USER_SCOPED_AUTHORITY_REQUIRED':'1'}):
+        grant=await scope_check(AuthorityBody(subject=result['person_id'],tenant_id=s.tenant,
+            organization_id=uuid.UUID(result['organizations'][0]['id']),capability='member'),
+            SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=s.maker))),Response(),caller='AUTH')
+    assert str(grant['user_id'])==result['person_id']
+    assert grant['generation']=='startup-v1' and grant['manifest_sha256']==result['mapping_sha256']
     for org in result['organizations']:
         assert await check(s,result['person_id'],'organization.admin',tenant=s.tenant,organization=uuid.UUID(org['id']))
     assert not await check(s,result['person_id'],'organization.admin',tenant=s.tenant,organization=s.other)

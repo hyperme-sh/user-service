@@ -146,3 +146,12 @@ async def active_startup_person(db, tenant, subject):
             WHERE b.tenant_id=:tenant AND b.mapping_sha256=:mapping AND b.broker_subject=:subject
             AND u.keycloak_sub=:subject AND u.sso_provider_id=:external AND u.is_active AND u.deleted_at IS NULL)"""),
             {'tenant':tenant,'mapping':fingerprint(config),'subject':subject,'external':external_key(config)}))
+
+
+async def startup_scope_identity(db,tenant,subject):
+    if not await active_startup_person(db,tenant,subject):return None
+    from user_service.scoped_authority import scope
+    async with scope(db,tenant):
+        row=await one(db,'SELECT user_id,mapping_sha256 FROM startup_identity_bindings WHERE tenant_id=:tenant AND broker_subject=:subject',
+                      {'tenant':tenant,'subject':subject})
+        return (row['user_id'],'startup-v1',row['mapping_sha256']) if row else None
