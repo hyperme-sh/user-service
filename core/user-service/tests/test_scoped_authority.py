@@ -688,3 +688,138 @@ async def test_roleless_session_change_does_not_accept_foreign_assigned_role(aut
         async with scope(db, authority.tenant):
             await db.execute(text("UPDATE users SET role_id=:role WHERE keycloak_sub=:sub"), {"role": rid, "sub": claims["sub"]})
         assert await authorize_tenant_switch(AuthMeResponse(sub=claims["sub"]), authority.tenant, db) is None
+
+
+@pytest.fixture
+async def startup(authority, tmp_path, monkeypatch):
+    import json
+    from user_service.startup_migrate import install as install_startup
+    install_startup(authority.sync)
+    install_startup(authority.sync)
+    config = json.loads(Path(__file__).with_name('fixtures').joinpath('startup-identity.json').read_text())
+    config['owner'].update(tenant_id=str(authority.tenant), network_id='hyperme.sh')
+    for org in config['binding']['organizations'].values():org['tenant_id']=str(authority.tenant)
+    from user_service._startup_contract import binding_fingerprint
+    config['binding_sha256']=binding_fingerprint(config['binding'])
+    path=tmp_path/'startup.json';path.write_text(json.dumps(config));path.chmod(0o600)
+    monkeypatch.setenv('STARTUP_IDENTITY_ENABLED','1')
+    monkeypatch.setenv('STARTUP_IDENTITY_CONFIG_FILE',str(path))
+    return authority, config
+
+
+async def test_startup_concurrent_creation_and_broker_replay(startup):
+    import asyncio
+    from user_service.startup_identity import reconcile, bind_broker
+    s, config = startup
+    async def run():
+        async with s.maker() as db, db.begin():
+            return await reconcile(db, config)
+    results = await asyncio.gather(*(run() for _ in range(8)))
+    assert all(result == results[0] for result in results)
+    result = results[0]
+    assert [o['slug'] for o in result['organizations']] == sorted(config['binding']['organizations'])
+    assert len({o['id'] for o in result['organizations']}) == 3
+    for _ in range(2):
+        async with s.maker() as db, db.begin():
+            bound = await bind_broker(db, config, result['person_id'])
+            assert bound['broker_subject'] == result['person_id']
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 1
+        assert await db.scalar(text('SELECT count(*) FROM startup_organizations')) == 3
+        assert await db.scalar(text('SELECT count(*) FROM startup_organization_owners')) == 3
+        assert await db.scalar(text('SELECT count(*) FROM organizations WHERE id=:id'), {'id':s.org}) == 1
+    assert (await run())['broker_subject'] == result['person_id']
+    from user_service.scope_adapter import check as scope_check
+    from user_service.scope_api import AuthorityBody
+    from starlette.responses import Response
+    from unittest.mock import patch
+    with patch.dict('os.environ',{'USER_SCOPED_AUTHORITY_REQUIRED':'1'}):
+        grant=await scope_check(AuthorityBody(subject=result['person_id'],tenant_id=s.tenant,
+            organization_id=uuid.UUID(result['organizations'][0]['id']),capability='member'),
+            SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=s.maker))),Response(),caller='AUTH')
+    assert str(grant['user_id'])==result['person_id']
+    assert grant['generation']=='startup-v1' and grant['manifest_sha256']==result['mapping_sha256']
+    for org in result['organizations']:
+        assert await check(s,result['person_id'],'organization.admin',tenant=s.tenant,organization=uuid.UUID(org['id']))
+    assert not await check(s,result['person_id'],'organization.admin',tenant=s.tenant,organization=s.other)
+    assert not await check(s,result['person_id'],'network.admin',network='hyperme.sh')
+    assert not await check(s,result['person_id'],'tenant.admin',tenant=s.tenant)
+    async with s.maker() as db, db.begin(), scope(db,s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM users WHERE sso_provider_id=:key'),
+            {'key':'entra:'+config['binding']['entra']['tenant_id']+':'+config['binding']['entra']['object_id']}) == 1
+
+
+async def test_startup_rollback_then_retry_and_no_email_takeover(startup):
+    from user_service.startup_identity import reconcile, StartupConflict
+    s, config = startup
+    with pytest.raises(RuntimeError, match='interrupted'):
+        async with s.maker() as db, db.begin():
+            await reconcile(db, config)
+            raise RuntimeError('interrupted before commit')
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 0
+        await db.execute(text("INSERT INTO users(id,tenant_id,email,first_name,last_name,gender,is_active) VALUES(:id,:tenant,:email,'Other','Person','unspecified',true)"),
+            {'id':uuid.uuid4(), 'tenant':s.tenant, 'email':config['owner']['profile']['email']})
+    with pytest.raises(StartupConflict, match='external_binding'):
+        async with s.maker() as db, db.begin():
+            await reconcile(db, config)
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        assert await db.scalar(text('SELECT count(*) FROM startup_organizations')) == 0
+        await db.execute(text('DELETE FROM users WHERE tenant_id=:tenant AND email=:email'), {'tenant':s.tenant,'email':config['owner']['profile']['email']})
+    async with s.maker() as db, db.begin():
+        result = await reconcile(db, config)
+    assert result['status'] == 'reconciled'
+
+
+async def test_startup_conflicts_preserve_grants_and_tenant_isolation(startup):
+    from user_service.startup_identity import reconcile, bind_broker, StartupConflict
+    s, config = startup
+    async with s.maker() as db, db.begin():
+        result = await reconcile(db, config)
+    import copy
+    from user_service._startup_contract import binding_fingerprint
+    for field in ('object_id','tenant_id'):
+        changed=copy.deepcopy(config);changed['binding']['entra'][field]=str(uuid.uuid4())
+        changed['binding']['entra']['issuer']='https://login.microsoftonline.com/'+changed['binding']['entra']['tenant_id']+'/v2.0'
+        changed['binding_sha256']=binding_fingerprint(changed['binding'])
+        with pytest.raises(StartupConflict, match='mapping differs'):
+            async with s.maker() as db, db.begin():
+                await reconcile(db, changed)
+    with pytest.raises(StartupConflict, match='Broker subject conflicts'):
+        async with s.maker() as db, db.begin():
+            await bind_broker(db, config, 'another-person')
+    async with s.maker() as db, db.begin(), scope(db, s.isolated):
+        assert await db.scalar(text('SELECT count(*) FROM startup_identity_bindings')) == 0
+        assert await db.scalar(text('SELECT count(*) FROM startup_organization_owners')) == 0
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        await db.execute(text("UPDATE organization_memberships SET enabled=false WHERE user_id=:id"), {'id':uuid.UUID(result['person_id'])})
+    with pytest.raises(StartupConflict, match='membership differs'):
+        async with s.maker() as db, db.begin():
+            await reconcile(db, config)
+
+
+async def test_startup_adopts_existing_person_with_active_platform_identity(startup,monkeypatch):
+    from user_service.startup_identity import reconcile,bind_broker,external_key,startup_scope_identity
+    from user_service.scope_adapter import check as scope_check
+    from user_service.scope_api import AuthorityBody
+    from starlette.responses import Response
+    s,config=startup;subject='existing-configured-subject';person,platform=uuid.uuid4(),uuid.uuid4()
+    async with s.maker() as db,db.begin():
+        for tenant,uid,external in ((None,platform,None),(s.tenant,person,external_key(config))):
+            async with scope(db,tenant):
+                await db.execute(text("INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,sso_provider_id) VALUES(:id,:tenant,:sub,:email,'Existing','Person','unspecified',true,:external)"),
+                    {'id':uid,'tenant':tenant,'sub':subject,'email':config['owner']['profile']['email'],'external':external})
+        result=await reconcile(db,config)
+        assert result['person_id']==str(person) and result['broker_subject']==subject
+        await bind_broker(db,config,subject)
+    monkeypatch.setenv('USER_SCOPED_AUTHORITY_REQUIRED','1')
+    request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=s.maker)))
+    body=AuthorityBody(subject=subject,tenant_id=s.tenant,organization_id=uuid.UUID(result['organizations'][0]['id']),capability='member')
+    grant=await scope_check(body,request,Response(),caller='AUTH')
+    assert str(grant['user_id'])==str(person) and grant['generation']=='startup-v1'
+    assert grant['manifest_sha256']==result['mapping_sha256']
+    async with s.maker() as db,db.begin(),scope(db):
+        assert await db.scalar(text('SELECT count(*) FROM users WHERE tenant_id IS NULL AND keycloak_sub=:subject'),{'subject':subject})==1
+        await db.execute(text('UPDATE users SET is_active=false WHERE id=:id'),{'id':platform})
+    assert await scope_check(body,request,Response(),caller='AUTH') is None
+    async with s.maker() as db,db.begin():assert await startup_scope_identity(db,s.tenant,subject) is None

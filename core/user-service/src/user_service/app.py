@@ -162,6 +162,8 @@ def create_app(
     app.include_router(authority_router,prefix="/api/v1")
     from user_service.scope_adapter import router as scope_adapter_router
     app.include_router(scope_adapter_router,prefix="/api/v1")
+    from user_service.startup_routes import router as startup_router
+    app.include_router(startup_router, prefix='/api/v1')
     from user_service.identity_api import router as identity_router
     app.include_router(identity_router,prefix="/api/v1")
     from user_service.host_authority import router as host_authority_router

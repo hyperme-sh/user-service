@@ -80,6 +80,10 @@ async def check(
                     )
                 )
             ).one_or_none()
+        from user_service.startup_identity import startup_scope_identity
+        startup = await startup_scope_identity(db, body.tenant_id, body.subject)
+        if startup:
+            uid, seal = startup[0], startup[1:]
         if uid is None or seal is None:
             raise HTTPException(503, "Canonical generation is not sealed")
         return dict(
