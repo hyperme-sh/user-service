@@ -3,7 +3,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 unset PYTHONPATH UV_NO_SYNC SKIP_TESTCONTAINERS DEPENDENCY_FIXTURE_MANIFEST
 scratch=$(mktemp -d)
-trap 'rm -rf "$scratch"' EXIT
+cleanup() {
+  result=$?
+  set +e
+  if [[ -n "${TEST_EVIDENCE_DIR:-}" ]]; then
+    mkdir -p "$TEST_EVIDENCE_DIR" || { [[ "$result" != 0 ]] || result=1; }
+    for report in source wheel sdist; do
+      if [[ -f "$scratch/$report.xml" ]]; then
+        cp "$scratch/$report.xml" "$TEST_EVIDENCE_DIR/" || { [[ "$result" != 0 ]] || result=1; }
+      fi
+    done
+  fi
+  rm -rf -- "$scratch" || { [[ "$result" != 0 ]] || result=1; }
+  exit "$result"
+}
+trap cleanup EXIT
 sync_options=()
 run_options=()
 export_options=()
@@ -76,10 +90,7 @@ else
 fi
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/sdist.xml" owner/tests)
 python3 scripts/verify-test-results.py "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml"
-if [[ -n "${TEST_EVIDENCE_DIR:-}" ]]; then
-  mkdir -p "$TEST_EVIDENCE_DIR"
-  cp "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml" "$TEST_EVIDENCE_DIR/"
-fi
+
 
 # Local/container qualification can retain exactly the tested service artifacts.
 if [[ -n "${SERVICE_ARTIFACT_DIR:-}" ]]; then

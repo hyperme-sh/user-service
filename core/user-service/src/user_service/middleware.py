@@ -24,6 +24,16 @@ class UserServiceDbMiddleware(BaseHTTPMiddleware):
         async with maker() as session:
             token = set_db_session(session)
             apply_scope = None
+            sink = getattr(request.app.state, "directory_event_sink", None)
+            def committed(sync_session):
+                if not sync_session.in_nested_transaction():
+                    sink.extend(sync_session.info.pop("directory_events", []))
+            def rolled_back(sync_session):
+                sync_session.info.pop("directory_events", None)
+            if sink is not None:
+                session.info["directory_event_sink"] = sink
+                event.listen(session.sync_session, "after_commit", committed)
+                event.listen(session.sync_session, "after_rollback", rolled_back)
             try:
                 tid = None
                 raw = request.headers.get("X-Tenant-ID")
@@ -57,7 +67,10 @@ class UserServiceDbMiddleware(BaseHTTPMiddleware):
 
                 event.listen(session.sync_session, "after_begin", apply_scope)
                 response = await call_next(request)
-                await session.commit()
+                if response.status_code >= 400:
+                    await session.rollback()
+                else:
+                    await session.commit()
                 return response
             except Exception:
                 await session.rollback()
@@ -67,4 +80,7 @@ class UserServiceDbMiddleware(BaseHTTPMiddleware):
                     session.sync_session, "after_begin", apply_scope
                 ):
                     event.remove(session.sync_session, "after_begin", apply_scope)
+                if sink is not None:
+                    event.remove(session.sync_session, "after_commit", committed)
+                    event.remove(session.sync_session, "after_rollback", rolled_back)
                 reset_db_session(token)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +13,7 @@ from controlplane_api.event_types import (
     USER_CREATED_V1,
 )
 from api.common.portal_controls import GROUP_HOST, GROUP_RENTER, PortalControls, evaluate_portal_controls
-from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
+from user_service.outbox import publish_directory_event
 from api.infrastructure.persistence.db_session import get_db_session
 from auth_service.schemas import AuthMeResponse
 from controlplane_events.payloads import (
@@ -212,9 +213,11 @@ async def create_user(
     repo = SqlUserRepository(session)
     u = await repo.create(tenant_id, body)
     display = f"{u.first_name} {u.last_name}".strip()
-    await get_tenant_event_publisher().publish(
+    await publish_directory_event(
+        session,
         tenant_id=tenant_id,
         event_type=USER_CREATED_V1,
+        operation_id=u.id,
         payload=UserCreatedEvent(
             user_id=u.id,
             email=u.email,
@@ -692,9 +695,11 @@ async def add_user_to_group(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Could not add membership"
         ) from e
-    await get_tenant_event_publisher().publish(
+    await publish_directory_event(
+        session,
         tenant_id=tenant_id,
         event_type=GROUP_MEMBER_ADDED_V1,
+        operation_id=m.id,
         payload=GroupMemberAddedPayload(
             user_id=user_id,
             group_id=group_id,
@@ -727,12 +732,21 @@ async def remove_user_from_group(
     group = await grep.get(tenant_id, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Group not found")
+    # The membership incarnation distinguishes remove/re-add/remove operations.
+    membership_id = (await session.execute(text(
+        "SELECT id FROM user_group_memberships "
+        "WHERE tenant_id=:tenant AND user_id=:user AND group_id=:group FOR UPDATE"
+    ), {"tenant": tenant_id, "user": user_id, "group": group_id})).scalar_one_or_none()
+    if membership_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membership not found")
     ok = await mrepo.remove(tenant_id, user_id, group_id)
     if not ok:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Membership not found")
-    await get_tenant_event_publisher().publish(
+    await publish_directory_event(
+        session,
         tenant_id=tenant_id,
         event_type=GROUP_MEMBER_REMOVED_V1,
+        operation_id=membership_id,
         payload=GroupMemberRemovedPayload(
             user_id=user_id,
             group_id=group_id,
