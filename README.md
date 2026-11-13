@@ -156,7 +156,7 @@ Operator-ban behavior, the closure worker, and the private role plan are describ
 
 ## Release and versioning
 
-`user-service` and `operator-ban-store` are version **0.1.0**. `release-policy.json` and `releases/candidate/release.json` record line `0.1`. Successful validation on `main` can publish an immutable `0.24.0-test.N` bundle through [.github/test-channel.json](.github/test-channel.json); that bundle name is the coordinated test channel and does not change the 0.1.0 package versions. A stable `vMAJOR.MINOR.PATCH` release is a separate tag and an accepted baseline. Channel rules, qualification artifacts, and stable publication are in [docs/releasing.md](docs/releasing.md). Admission steps are in [docs/release-policy.md](docs/release-policy.md).
+`user-service` and `operator-ban-store` are version **0.1.0**. `release-policy.json` and `releases/candidate/release.json` record line `0.1`. Service releases are container images with channel or version tags, as described in [docs/releasing.md](docs/releasing.md). Automatic package prereleases are not published. A stable `vMAJOR.MINOR.PATCH` release, when used, is a separate tag and an accepted baseline. Admission steps are in [docs/release-policy.md](docs/release-policy.md).
 
 ## License
 

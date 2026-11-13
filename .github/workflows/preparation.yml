@@ -59,15 +59,6 @@ jobs:
           path: ${{ env.OWNER_QUALIFICATION_DIR }}/*
           if-no-files-found: error
           retention-days: 30
-      - name: Retain validated owner artifacts
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: prepared-dist
-          path: ${{ env.SERVICE_ARTIFACT_DIR }}/*
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
       - name: Retain native test identities
         continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
