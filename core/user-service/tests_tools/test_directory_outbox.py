@@ -62,7 +62,7 @@ async def test_insert_failure_propagates_to_business_transaction(event_type, pay
 
 
 def test_all_production_publishers_require_the_business_session():
-    root = Path(__file__).resolve().parents[1] / 'core/user-service/src/user_service'
+    root = Path(__file__).resolve().parents[1] / 'src/user_service'
     calls = []
     for path in root.rglob('*.py'):
         tree = ast.parse(path.read_text())
