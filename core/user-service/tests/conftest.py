@@ -57,6 +57,16 @@ def postgres_sync_url(postgres_container: PostgresContainer) -> str:
 def migrated_sync_url(postgres_sync_url: str) -> str:
     from controlplane_db.migrations import upgrade
     upgrade(postgres_sync_url, chains=["platform", "events"])
+    # The current owner baseline has an outbox; the historical test projection
+    # predates it. Provision the same contract in this disposable fixture only.
+    from controlplane_events.outbox import OUTBOX_DDL
+    engine = create_engine(postgres_sync_url)
+    try:
+        with engine.begin() as connection:
+            if connection.execute(text("SELECT to_regclass('service_outbox')")).scalar_one() is None:
+                connection.exec_driver_sql(OUTBOX_DDL)
+    finally:
+        engine.dispose()
     return postgres_sync_url
 
 

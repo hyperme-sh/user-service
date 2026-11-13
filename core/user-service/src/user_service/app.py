@@ -10,11 +10,7 @@ from controlplane_api.exceptions import ForbiddenException, UnauthorizedExceptio
 from controlplane_api.logging import configure_logging
 from controlplane_api.utils import get_logger
 from controlplane_api.config import settings
-from api.infrastructure.messaging.tenant_event_publisher import (
-    install_tenant_event_publisher,
-    set_tenant_event_publisher,
-    shutdown_tenant_event_publisher,
-)
+
 from api.infrastructure.persistence.db_session import configure_session_maker
 from controlplane_api.service_cors import add_optional_service_cors
 from controlplane_api.health import router as health_router
@@ -70,29 +66,8 @@ def create_app(
         app.state.async_engine = engine
         app.state.session_maker = maker
 
-        if test_event_sink is not None:
-
-            class _ListSink:
-                async def publish(
-                    self,
-                    *,
-                    tenant_id,
-                    event_type: str,
-                    payload: dict,
-                    correlation_id: str | None = None,
-                ) -> None:
-                    test_event_sink.append(
-                        {
-                            "tenant_id": tenant_id,
-                            "event_type": event_type,
-                            "payload": payload,
-                            "correlation_id": correlation_id,
-                        }
-                    )
-
-            set_tenant_event_publisher(_ListSink())
-        else:
-            await install_tenant_event_publisher(service_name=svc_name)
+        app.state.directory_event_sink = test_event_sink
+        if test_event_sink is None:
             pay_consumer = build_payment_succeeded_consumer(settings.database_url)
             await pay_consumer.start()
             app.state.event_consumer = pay_consumer
@@ -102,7 +77,6 @@ def create_app(
         event_consumer = getattr(app.state, "event_consumer", None)
         if event_consumer is not None:
             await event_consumer.stop()
-        await shutdown_tenant_event_publisher()
         await engine.dispose()
 
     app = FastAPI(

@@ -264,3 +264,22 @@ not storage configuration or an end user's SociACL object access.
 This policy installs no credentials and enables no media consumer. It supplies
 the owner contract needed by `FyberLabs/s3r.ch#300` and
 `hyperme-sh/controlplane-core#36`.
+
+## Directory event transactions
+
+User creation and membership add/remove insert into this owner's `service_outbox`
+using the same request session as the directory change. No publisher transport is
+selected from Service Bus configuration. The existing authenticated HTTP relay
+owns delivery. Current owner baseline SQL already provisions the outbox.
+
+Event IDs derive from tenant, operation and business row ID. Membership removals
+lock and use that membership's ID, so a later re-add is a distinct operation.
+Repeated publication of the same operation is deduplicated; a changed payload
+under the same ID is refused. The request commits only a successful response;
+error responses roll back. Injected test observations are released after commit.
+
+Unit contracts check session use, deterministic retries and insertion failures.
+The existing Infra `user-consumers` nightly adapter owns thirteen installed SQL
+cases for commit, rollback, refusal, replay, re-add and cross-tenant isolation.
+Fixture setup, readiness and teardown are checked into Infra; those cases are
+not run manually. No new package version, release or production action is added.
