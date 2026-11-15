@@ -266,3 +266,19 @@ and independently updated peers, belongs to [Infra #922](https://github.com/Fybe
 These configuration checks do not claim deployed channel readiness. Shared
 contract prerequisites are [Spanopticon #74](https://github.com/hyperme-sh/spanopticon/pull/74)
 and [shared publisher #20](https://github.com/hyperme-sh/.github/pull/20).
+
+### Retried wallet binding commands
+
+Auth may send `command_id` (UUID) on `bind-wallet`. User commits the wallet
+binding and the command's result together. Repeating that ID with the same
+payload returns the original result; a different payload is rejected. A
+rejected binding is also recorded so a delayed retry cannot change the decision.
+Responses contain `command_id`, `status` (`applied` or `rejected`) and either
+`binding` or `detail`. Existing callers without an ID retain their response shape.
+
+The owner deployment runs `python -m user_service.wallet_command_schema
+--database-url-file PATH` using its schema-owner connection before Auth adopts
+this contract, and grants the existing runtime role access to
+`user_wallet_commands`. No startup migration or new runtime privilege is needed.
+Command results are durable, contain no signatures and must remain for as long
+as Auth can retry a command. Do not remove them as part of nonce expiry cleanup.
