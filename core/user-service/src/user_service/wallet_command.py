@@ -3,6 +3,7 @@ import hashlib
 import json
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from user_service.identity_wallet_bind import upsert_wallet_binding
 
 
@@ -27,6 +28,12 @@ async def apply(session, *, command_id, subject, email, wallet_address):
             binding = await upsert_wallet_binding(session, keycloak_sub=subject,
                                                  email=email, wallet_address=wallet_address)
         result = {'status': 'applied', 'bound_at': str(binding.bound_at)}
+    except IntegrityError as exc:
+        original = exc.orig
+        constraint = getattr(getattr(original, 'diag', None), 'constraint_name', None) or getattr(getattr(original, '__cause__', None), 'constraint_name', None)
+        if constraint != 'uq_user_wallet_bindings_address':
+            raise
+        result = {'status': 'rejected', 'detail': 'Wallet binding was rejected'}
     except SiweError:
         result = {'status': 'rejected', 'detail': 'Wallet binding was rejected'}
     result = json.loads(json.dumps(result, default=str))

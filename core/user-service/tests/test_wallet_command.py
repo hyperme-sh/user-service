@@ -97,3 +97,22 @@ async def test_capability_is_advertised_only_after_schema_installation(table,ver
         yield SimpleNamespace(scalar=AsyncMock(return_value=table))
     request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=session)))
     assert await wallet_command_contract(request)=={'wallet_command_version':version}
+
+
+@pytest.mark.asyncio
+async def test_competing_address_decision_stays_rejected_after_address_is_freed(authority):
+    import asyncio
+    from sqlalchemy import text
+    from user_service.wallet_command_schema import install
+    install(authority.sync)
+    address='0x'+'44'*20
+    commands=[dict(command_id=uuid.uuid4(),subject='address-claim-'+str(i),email=None,wallet_address=address) for i in range(2)]
+    async def deliver(command):
+        async with authority.maker() as db, db.begin():
+            return await wallet_command.apply(db,**command)
+    results=await asyncio.gather(*(deliver(command) for command in commands))
+    assert sorted(result['status'] for result in results)==['applied','rejected']
+    loser=commands[next(i for i,result in enumerate(results) if result['status']=='rejected')]
+    async with authority.maker() as db, db.begin():
+        await db.execute(text('DELETE FROM user_wallet_bindings WHERE wallet_address=:address'),{'address':address})
+    assert (await deliver(loser))['status']=='rejected'
