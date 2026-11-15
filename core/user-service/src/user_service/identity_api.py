@@ -19,6 +19,7 @@ class Command(BaseModel):
     subject: str | None = None
     email: str | None = None
     wallet_address: str | None = None
+    command_id: uuid.UUID | None = None
 
 
 def authenticate(request: Request):
@@ -34,6 +35,8 @@ async def execute(operation: Literal['enroll','tenant-switch','tenant-switch-cur
     from user_service.identity_enrollment import grant_held_roles
     from user_service.identity_tenant_switch import authorize_tenant_switch
     from user_service.identity_wallet_bind import upsert_wallet_binding, get_wallet_binding
+    if command.command_id is not None and operation != 'bind-wallet':
+        raise HTTPException(422, 'Command ID is only supported for wallet binding')
     try:
         async with request.app.state.session_maker() as session:
             async with session.begin():
@@ -87,6 +90,11 @@ async def execute(operation: Literal['enroll','tenant-switch','tenant-switch-cur
                     else:
                         if not command.wallet_address:
                             raise HTTPException(422,'Verified wallet required')
+                        if command.command_id is not None:
+                            from user_service.wallet_command import apply
+                            return await apply(session, command_id=command.command_id,
+                                               subject=command.subject, email=command.email,
+                                               wallet_address=command.wallet_address)
                         result = await upsert_wallet_binding(session,keycloak_sub=command.subject,email=command.email,wallet_address=command.wallet_address)
                 return None if result is None else asdict(result)
     except ValueError as exc:
