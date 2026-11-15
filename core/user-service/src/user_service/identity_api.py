@@ -119,3 +119,12 @@ async def tenant_domain(request: Request, host: str):
         tenant=(await session.execute(select(Tenant.id).where(or_(*conditions),Tenant.is_active.is_(True)))).scalar_one_or_none()
         if tenant is None:raise HTTPException(404,'Tenant hostname unavailable')
         return {'tenant_id':str(tenant)}
+
+
+@router.get('/wallet-command-contract', dependencies=[Depends(authenticate)])
+async def wallet_command_contract(request: Request):
+    from sqlalchemy import text
+    async with request.app.state.session_maker() as session:
+        if await session.scalar(text("SELECT to_regclass('user_wallet_commands')")) is None:
+            return {'wallet_command_version': 0}
+    return {'wallet_command_version': 1}

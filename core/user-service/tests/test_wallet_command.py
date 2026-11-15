@@ -86,3 +86,14 @@ def test_command_id_cannot_be_sent_to_unrelated_operations():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         Command(command_id='not-a-uuid')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('table,version', [(None,0),('user_wallet_commands',1)])
+async def test_capability_is_advertised_only_after_schema_installation(table,version):
+    from user_service.identity_api import wallet_command_contract
+    @asynccontextmanager
+    async def session():
+        yield SimpleNamespace(scalar=AsyncMock(return_value=table))
+    request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_maker=session)))
+    assert await wallet_command_contract(request)=={'wallet_command_version':version}
