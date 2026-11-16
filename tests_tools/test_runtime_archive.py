@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run_qualification(tmp_path, failed=False):
+def run_qualification(tmp_path, failed=False, audit_failed=False):
     binaries = tmp_path / 'bin'
     binaries.mkdir()
     docker = binaries / 'docker'
@@ -22,10 +22,17 @@ if sys.argv[1] == 'save':
     uv.write_text('#!/bin/sh\nexit '+('1' if failed else '0')+'\n')
     docker.chmod(0o755)
     uv.chmod(0o755)
-    output = tmp_path / 'image'
+    checkout = tmp_path / 'checkout'
+    (checkout / 'scripts').mkdir(parents=True)
+    (checkout / 'scripts/check-container.sh').write_bytes((ROOT / 'scripts/check-container.sh').read_bytes())
+    (checkout / 'scripts/audit-container.sh').write_text('exit ' + ('1' if audit_failed else '0') + '\n')
+    git = binaries / 'git'
+    git.write_text('#!/bin/sh\nprintf "%s\\n" ' + 'a' * 40 + '\n')
+    git.chmod(0o755)
+    output = tmp_path / 'image' 
     env = dict(os.environ, PATH=str(binaries)+':'+os.environ['PATH'], TESTED_IMAGE_DIR=str(output))
     env.pop('DEPENDENCY_READ_TOKEN_FILE', None)
-    result = subprocess.run(['bash', 'scripts/check-container.sh'], cwd=ROOT, env=env, capture_output=True)
+    result = subprocess.run(['bash', 'scripts/check-container.sh'], cwd=checkout, env=env, capture_output=True)
     return result, output
 
 
@@ -41,6 +48,12 @@ class RuntimeArchiveTests(unittest.TestCase):
     def test_failed_qualification_does_not_export_runtime(self):
         with tempfile.TemporaryDirectory() as directory:
             result, output = run_qualification(Path(directory), failed=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(output.exists())
+
+    def test_failed_legal_audit_does_not_export_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, output = run_qualification(Path(directory), audit_failed=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(output.exists())
 

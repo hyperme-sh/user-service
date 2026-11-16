@@ -3,7 +3,7 @@ FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822
 WORKDIR /build
 RUN pip install --no-cache-dir uv==0.11.26
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY core/user-service/pyproject.toml core/user-service/uv.lock core/user-service/LICENSE ./
+COPY core/user-service/pyproject.toml core/user-service/uv.lock core/user-service/LICENSE core/user-service/NOTICE ./
 COPY scripts/private-git-credential.py /usr/local/bin/private-git-credential
 RUN chmod 0555 /usr/local/bin/private-git-credential
 COPY core/user-service/src ./src
@@ -16,13 +16,19 @@ RUN --mount=type=secret,id=dependency_read_token \
     uv sync --frozen --no-dev --no-editable
 RUN .venv/bin/python -I -c "import user_service.app, user_service.closure_authority, user_service.closure_daemon"
 
+COPY .github/workflows/third-party-notices/ /opt/legal-supplements/
+COPY scripts/prepare_notices.py /opt/prepare_notices.py
+RUN /build/.venv/bin/python -I /opt/prepare_notices.py /opt/notices /opt/legal-supplements
+
 FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822a58055ec07a60ded4e0b7f AS runtime
 WORKDIR /app
 COPY --from=build /build/.venv /app/.venv
+COPY --from=build /opt/notices /usr/share/doc/user-service/third-party
+COPY core/user-service/LICENSE core/user-service/NOTICE /usr/share/doc/user-service/
 ENV PATH=/app/.venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ARG GIT_SHA=
 ARG BUILT_AT=
-LABEL org.opencontainers.image.revision=${GIT_SHA}
+LABEL org.opencontainers.image.revision=${GIT_SHA} org.opencontainers.image.licenses="Apache-2.0"
 ENV GIT_SHA=${GIT_SHA} BUILT_AT=${BUILT_AT} SERVICE_NAME=user-service
 USER 65532:65532
 CMD ["/app/.venv/bin/python", "-I", "-m", "user_service.main"]
