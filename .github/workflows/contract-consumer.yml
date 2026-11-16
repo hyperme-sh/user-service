@@ -27,6 +27,7 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
-      - run: bash core/user-service/contracts/scripts/check-package.sh --fixtures
+          enable-cache: false
+      - run: bash scripts/anonymous-command.sh env TEST_DATABASE_URL="$TEST_DATABASE_URL" bash core/user-service/contracts/scripts/check-package.sh --fixtures
         env:
           TEST_DATABASE_URL: postgresql+psycopg://postgres:package-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres

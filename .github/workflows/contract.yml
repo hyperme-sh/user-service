@@ -22,18 +22,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    environment: controlplane-libs-read
     steps:
-      - name: Mint repository-scoped dependency token
-        id: dependency-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
-        with:
-          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
-          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
-          owner: hyperme-sh
-          permission-contents: read
-          repositories: |
-            controlplane-db
       - name: Prepare release output
         run: echo "RELEASE_ARTIFACT_DIR=$(mktemp -d "$RUNNER_TEMP/release-dist.XXXXXX")" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -43,19 +32,13 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
+          enable-cache: false
       - name: Validate operator ban contract
         env:
-          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
           TEST_DATABASE_URL: postgresql+psycopg://postgres:package-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
         shell: bash
         run: |
-          set -euo pipefail
-          test -n "$DEPENDENCY_READ_TOKEN" || { echo 'Private dependency read access is required'; exit 1; }
-          header=$(printf 'x-access-token:%s' "$DEPENDENCY_READ_TOKEN" | base64 -w0)
-          echo "::add-mask::$header"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.https://github.com/hyperme-sh/controlplane-db.git.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header"
-          unset DEPENDENCY_READ_TOKEN
-          cd core/user-service/contracts
-          bash scripts/check-package.sh
+          bash scripts/anonymous-command.sh env TEST_DATABASE_URL="$TEST_DATABASE_URL" RELEASE_ARTIFACT_DIR="$RELEASE_ARTIFACT_DIR" bash core/user-service/contracts/scripts/check-package.sh
+      - name: Remove job-local output
+        if: always()
+        run: rm -rf -- "$RELEASE_ARTIFACT_DIR"

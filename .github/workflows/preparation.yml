@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Prepare exact owner artifact output
         run: |
+          echo "QUALIFICATION_VENV=$(mktemp -d "$RUNNER_TEMP/user-venv.XXXXXX")" >> "$GITHUB_ENV"
+          echo "TEST_EVIDENCE_DIR=$(mktemp -d "$RUNNER_TEMP/user-results.XXXXXX")" >> "$GITHUB_ENV"
           output=$(mktemp -d "$RUNNER_TEMP/user-service-dist.XXXXXX")
           echo "SERVICE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
           echo "RELEASE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
@@ -32,15 +34,16 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
+          enable-cache: false
       - name: Qualify source and installed owner artifacts
         env:
           TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
         run: |
-          TEST_EVIDENCE_DIR="$RUNNER_TEMP/user-native-test-results" bash scripts/check-package.sh --fixtures
-          bash core/user-service/contracts/scripts/check-package.sh --fixtures
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$QUALIFICATION_VENV" UV_PYTHON_INSTALL_DIR="$QUALIFICATION_VENV-python" TEST_DATABASE_URL="$TEST_DATABASE_URL" TEST_EVIDENCE_DIR="$TEST_EVIDENCE_DIR" SERVICE_ARTIFACT_DIR="$SERVICE_ARTIFACT_DIR" bash scripts/check-package.sh --fixtures
+          bash scripts/anonymous-command.sh env TEST_DATABASE_URL="$TEST_DATABASE_URL" RELEASE_ARTIFACT_DIR="$RELEASE_ARTIFACT_DIR" bash core/user-service/contracts/scripts/check-package.sh --fixtures
       - name: Bind both validated owner wheels
         run: |
-          uv run --project core/user-service --frozen --no-sync pytest -q tests_tools
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$QUALIFICATION_VENV" UV_PYTHON_INSTALL_DIR="$QUALIFICATION_VENV-python" uv run --project core/user-service --no-sync pytest -q tests_tools
           archive=$(python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR")
           qualified="$OWNER_QUALIFICATION_DIR"
           python3 scripts/owner_artifact.py qualify "$archive" "$qualified" "$GITHUB_SHA"
@@ -48,22 +51,9 @@ jobs:
       - name: Verify local qualification outputs before optional PR retention
         run: |
           test -n "$(find "$SERVICE_ARTIFACT_DIR" -name '*.whl' -type f -size +0c -print -quit)"
-          test -n "$(find "$RUNNER_TEMP/user-native-test-results" -name '*.xml' -type f -size +0c -print -quit)"
+          test -n "$(find "$TEST_EVIDENCE_DIR" -name '*.xml' -type f -size +0c -print -quit)"
       - name: Verify flat tested artifact inventory
         run: python3 scripts/owner_artifact.py verify-delivery "$SERVICE_ARTIFACT_DIR"
-      - name: Retain current owner qualification evidence
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: owner-qualification
-          path: ${{ env.OWNER_QUALIFICATION_DIR }}/*
-          if-no-files-found: error
-          retention-days: 30
-      - name: Retain native test identities
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: native-test-results
-          path: ${{ runner.temp }}/user-native-test-results/*.xml
-          if-no-files-found: error
-          retention-days: 30
+      - name: Remove job-local qualification output
+        if: always()
+        run: rm -rf -- "$QUALIFICATION_VENV" "$QUALIFICATION_VENV-python" "$SERVICE_ARTIFACT_DIR" "$(dirname "$OWNER_QUALIFICATION_DIR")" "$TEST_EVIDENCE_DIR"

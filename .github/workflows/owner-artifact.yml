@@ -15,4 +15,5 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
-      - run: uv run --no-project --with pytest==9.2.0 pytest -q tests_tools
+          enable-cache: false
+      - run: bash scripts/anonymous-command.sh uv run --no-project --with pytest==9.2.0 pytest -q tests_tools

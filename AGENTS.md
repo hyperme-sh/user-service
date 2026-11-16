@@ -39,8 +39,9 @@ The user is the sole developer. Never add or enable GitHub required reviewers, b
 
 The preparation-only PR lane may run native package consumers on disposable
 hosted Ubuntu/PostgreSQL with verified dependency-wheel fixtures and no private
-credentials. Preserve mandatory Docker tests and no-skips assertions. Retain
-Actions artifacts only; do not tag, publish releases or merge preparation PRs.
+credentials. Preserve mandatory Docker tests and no-skips assertions. Use job-local outputs and GHCR containers, without Actions uploads. Authorized
+preparation PRs may merge after green CI and clean reviews. Preserve version
+release authorization requirements.
 
 ## Private CI runner policy
 
