@@ -136,3 +136,9 @@ jobs:
       - name: Remove job-local qualification output
         if: always()
         run: rm -rf -- "$QUALIFICATION_VENV" "$QUALIFICATION_VENV-python" "$SERVICE_ARTIFACT_DIR" "$(dirname "$OWNER_QUALIFICATION_DIR")" "$TEST_EVIDENCE_DIR"
+  retained-images:
+    needs: service
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/historical-images.yml
