@@ -140,6 +140,8 @@ def create_app(
     app.include_router(startup_router, prefix='/api/v1')
     from user_service.identity_api import router as identity_router
     app.include_router(identity_router,prefix="/api/v1")
+    from user_service.ban_digest import router as ban_digest_router
+    app.include_router(ban_digest_router, prefix="/api/v1")
     from user_service.host_authority import router as host_authority_router
     app.include_router(host_authority_router,prefix="/api/v1")
     from user_service.key_authority import router as key_authority_router

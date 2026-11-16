@@ -1,0 +1,23 @@
+name: Private ban digest contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: '0.11.26'
+          python-version: '3.13'
+      - run: >-
+          uv run --isolated --no-project --with pytest==9.2.0 --with fastapi==0.135.2
+          --with httpx==0.28.1 --with sqlalchemy==2.1.8 --with pydantic==2.14.2
+          python -m pytest -q tests_contracts/test_ban_digest.py
