@@ -41,3 +41,16 @@ async def test_native_contexts_finish_before_owner_completion(empty_authority_ow
             active[0]=False
             assert (await client.get('/api/v1/authority/contexts',headers=headers)).status_code==409
     finally:await engine.dispose()
+
+
+async def test_native_organization_read_refuses_foreign_tenant_before_database():
+    import pytest
+    from jwt import InvalidTokenError
+    from user_service.interfaces.api.routes import list_organizations
+    subject='11111111-1111-4111-8111-111111111111'
+    tenant='22222222-2222-4222-8222-222222222222'
+    binding=dict(version=1,owner='user',run='123-1-flags-portal-browser',generation='c'*64,operation=str(uuid.uuid4()),
+        scope=dict(subject=subject,tenant=tenant,organization=str(uuid.uuid4())))
+    with nightly.admitted_run(binding):
+        with pytest.raises(InvalidTokenError):
+            await list_organizations(tenant_id=uuid.uuid4(),me=AuthMeResponse(sub=subject),session=None,limit=50,offset=0,q=None)

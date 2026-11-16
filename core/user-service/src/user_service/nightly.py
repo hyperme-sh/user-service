@@ -22,4 +22,4 @@ def install(app):
     if raw is None:return
     require(len(raw.encode())<=65536)
     app.add_middleware(RunMiddleware,authority=Authority(json.loads(raw),'user'),
-        paths={('GET','/api/v1/authority/contexts')},control_path='/api/v1/user/internal/nightly-run')
+        paths={('GET','/api/v1/authority/contexts'),('GET','/api/v1/organizations')},control_path='/api/v1/user/internal/nightly-run')

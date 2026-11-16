@@ -556,6 +556,19 @@ async def list_organizations(
         description="Case-insensitive search on legal name",
     ),
 ):
+    from controlplane_identity.nightly import current_binding, require as require_run
+    binding = current_binding()
+    if binding is not None:
+        require_run(me.sub == binding['scope']['subject'] and str(tenant_id) == binding['scope']['tenant']
+                    and bool(binding['scope']['organization']))
+        # Resolve the single declared organization through normal current membership.
+        from user_service.scoped_authority import require as require_authority
+        organization = uuid.UUID(binding['scope']['organization'])
+        await require_authority(session, subject=me.sub, action='organization.read', tenant=tenant_id, organization=organization)
+        row = await SqlOrganizationRepository(session).get(tenant_id, organization)
+        matches = row is not None and (not q or q.lower() in row.legal_name.lower())
+        return OrganizationListPage(items=[OrganizationResponse.model_validate(row)] if matches and offset == 0 else [],
+                                    total=int(matches), limit=limit, offset=offset)
     from user_service.authority_routes import enabled
     if enabled():
         from user_service.scoped_authority import actor_active,tenant_admin,scope
