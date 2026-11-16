@@ -1,10 +1,11 @@
 """Independent original-run admission for the native tenant-context read."""
 import json
 import os
-from fastapi import Depends, HTTPException
+import uuid
+from fastapi import Depends, HTTPException, Request
 from jwt import InvalidTokenError
-from auth_service.deps import bearer_access_token, get_access_token_claims
-from controlplane_identity.nightly import require_original_run, require
+from auth_service.deps import bearer_access_token, get_access_token_claims, get_current_tenant
+from controlplane_identity.nightly import require_original_run, require, current_binding
 from controlplane_identity.nightly_http import Authority, RunMiddleware
 
 
@@ -16,8 +17,21 @@ async def verified_claims(token=Depends(bearer_access_token)):
     return claims
 
 
+async def discovery_tenant(request:Request,claims=Depends(get_access_token_claims)):
+    from auth_service import deps as native_auth
+    try:
+        require_original_run(claims)
+        binding=current_binding()
+        if binding is not None and request.method=='GET' and request.url.path=='/api/v1/organizations':
+            require(request.headers.get('X-Tenant-ID')==binding['scope']['tenant'])
+            return uuid.UUID(binding['scope']['tenant'])
+    except (ValueError,InvalidTokenError):raise HTTPException(403,'Original tenant required') from None
+    return await native_auth.get_current_tenant(claims)
+
+
 def install(app):
     app.dependency_overrides[get_access_token_claims]=verified_claims
+    app.dependency_overrides[get_current_tenant]=discovery_tenant
     raw=os.environ.get('USER_NIGHTLY_RUN_CONFIG')
     if raw is None:return
     require(len(raw.encode())<=65536)

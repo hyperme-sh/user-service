@@ -54,3 +54,38 @@ async def test_native_organization_read_refuses_foreign_tenant_before_database()
     with nightly.admitted_run(binding):
         with pytest.raises(InvalidTokenError):
             await list_organizations(tenant_id=uuid.uuid4(),me=AuthMeResponse(sub=subject),session=None,limit=50,offset=0,q=None)
+
+
+async def test_native_organization_discovery_accepts_original_provider_claims_and_checks_membership(empty_authority_owner,monkeypatch):
+    from user_service.app import create_app
+    from auth_service import deps as native_auth
+    bootstrap(empty_authority_owner)
+    monkeypatch.setenv('USER_SCOPED_AUTHORITY_REQUIRED','1')
+    monkeypatch.setattr(nightly,'_subjects',frozenset())
+    subject=next(a['id'] for a in MANIFEST['accounts'] if a['key']=='primary-member')
+    tenant=next(t['id'] for t in MANIFEST['tenants'] if t['key']=='active')
+    organization=next(o['id'] for o in MANIFEST['organizations'] if o['key']=='primary')
+    scope=dict(suite='portal-device-transfer',subject=subject,tenant=tenant,organization=organization,realm='controlplane',issuer='https://auth.test.hyperme.sh/realms/controlplane',clients=['controlplane-frontend'],origins=['https://portal.test.hyperme.sh'],identities={'sea':[]})
+    binding=dict(version=1,owner='user',run='123-1-portal-device-transfer',generation='c'*64,scope=scope,operation=str(uuid.uuid4()))
+    config=dict(version=1,owner='user',origin='https://api.test.hyperme.sh',authOrigin='https://api.test.hyperme.sh',ownerKey='a'*64,controllerKey='b'*64,scopes={scope['suite']:scope})
+    calls=[]
+    def registry(request):
+        command=json.loads(request.content);calls.append(command['action'])
+        if command['action']=='admit':return httpx.Response(200,json=binding)
+        return httpx.Response(200,json={k:binding[k] for k in ('version','owner','run','generation','operation')}|{'completed':True})
+    engine=create_async_engine(empty_authority_owner.url.set(drivername='postgresql+asyncpg'))
+    app=create_app(test_event_sink=[]);app.state.session_maker=async_sessionmaker(engine)
+    # Only the verified provider claims and remote registry are substituted.
+    claims={'sub':subject,'azp':'controlplane-frontend','nightly_run':{k:binding[k] for k in ('run','generation')}}
+    app.dependency_overrides[native_auth.get_access_token_claims]=lambda:claims
+    app.add_middleware(RunMiddleware,authority=Authority(config,'user',httpx.MockTransport(registry)),paths={('GET','/api/v1/organizations')},control_path='/api/v1/user/internal/nightly-run')
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app),base_url=config['origin']) as client:
+            headers={'X-Nightly-Run-Grant':'d'*64,'X-Tenant-ID':tenant}
+            response=await client.get('/api/v1/organizations',headers=headers)
+            assert response.status_code==200,response.text
+            assert [o['id'] for o in response.json()['items']]==[organization]
+            assert calls==['admit','complete']
+            assert (await client.get('/api/v1/organizations',headers=headers|{'X-Tenant-ID':str(uuid.uuid4())})).status_code==409
+            assert calls==['admit','complete','admit']
+    finally:await engine.dispose()
