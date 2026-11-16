@@ -65,12 +65,17 @@ uv run --project core/user-service --frozen "${run_options[@]}" pytest -q core/u
 uv build core/user-service --out-dir "$scratch/dist"
 python3 scripts/verify_wheel.py "$scratch/dist"
 uv export --project core/user-service --frozen "${export_options[@]}" --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
+python3 scripts/export_selected_overrides.py core/user-service/pyproject.toml "$scratch/overrides.txt"
+install_options=(--constraint "$scratch/requirements.txt")
+if [[ -s "$scratch/overrides.txt" ]]; then
+  install_options+=(--overrides "$scratch/overrides.txt")
+fi
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
 if (( ${#fixture_wheels[@]} )); then
   bash core/user-service/scripts/install-qualified.sh "$scratch/venv/bin/python" "$scratch"/dist/*.whl
 else
-  uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" "$scratch"/dist/*.whl
+  uv pip install --python "$scratch/venv/bin/python" "${install_options[@]}" "$scratch"/dist/*.whl
 fi
 mkdir -p "$scratch/owner"
 cp -R core/user-service/tests core/user-service/scripts "$scratch/owner/"
@@ -86,7 +91,7 @@ python3 scripts/verify_wheel.py "$scratch/rebuilt"
 if (( ${#fixture_wheels[@]} )); then
   uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 else
-  uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" --reinstall-package user-service "$scratch"/rebuilt/*.whl
+  uv pip install --python "$scratch/venv/bin/python" "${install_options[@]}" --reinstall-package user-service "$scratch"/rebuilt/*.whl
 fi
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function --junitxml="$scratch/sdist.xml" owner/tests)
 python3 scripts/verify-test-results.py "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml"
