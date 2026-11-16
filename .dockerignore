@@ -9,3 +9,11 @@
 !core/user-service/src/**
 **/__pycache__
 **/*.pyc
+
+!core/user-service/LICENSE
+!core/user-service/NOTICE
+!.github/
+!.github/workflows/
+!.github/workflows/third-party-notices/
+!.github/workflows/third-party-notices/**
+!scripts/prepare_notices.py

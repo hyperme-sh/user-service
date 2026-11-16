@@ -19,6 +19,9 @@ with zipfile.ZipFile(wheel) as archive:
     assert metadata['License-Expression'] == 'Apache-2.0', 'Missing SPDX license'
     license_name, = (name for name in names if name.endswith('.dist-info/licenses/LICENSE'))
     assert archive.read(license_name) == (root / 'LICENSE').read_bytes(), 'License text differs'
+    notice_name, = (name for name in names if name.endswith('.dist-info/licenses/NOTICE'))
+    assert archive.read(notice_name) == (root / 'core/user-service/NOTICE').read_bytes(), 'Notice text differs'
+    assert set(metadata.get_all('License-File', [])) == {'LICENSE', 'NOTICE'}
     runtime = {name for name in names if '.dist-info/' not in name}
     assert len(names) == len(set(names)) and runtime == set(expected), 'Wheel inventory differs'
     for name, data in expected.items():
