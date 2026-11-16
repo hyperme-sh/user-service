@@ -257,6 +257,10 @@ async def contexts(
     request: Request, response: Response, me: AuthMeResponse = Depends(get_current_user)
 ):
     from user_service.scoped_authority import actor_active
+    from controlplane_identity.nightly import current_binding, require
+    binding = current_binding()
+    if binding is not None:
+        require(me.sub == binding['scope']['subject'])
 
     if os.environ.get("USER_SCOPED_AUTHORITY_REQUIRED") != "1":
         raise HTTPException(503, "Canonical authority is not active")
@@ -271,6 +275,8 @@ async def contexts(
         ).all()
         result = []
         for tenant, name in candidates:
+            if binding is not None and str(tenant) != binding['scope']['tenant']:
+                continue
             if not await actor_active(db, tenant, me.sub):
                 continue
             network = await tenant_network(db, tenant)
