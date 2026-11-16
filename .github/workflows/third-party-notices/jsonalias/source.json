@@ -1,0 +1,16 @@
+{
+  "archive_sha256": "0dece9b199f6aa9a6a2dcfa81d233f5673a9227b66ab16425c39eebf4b45bb94",
+  "distribution": "jsonalias",
+  "files": {
+    "LICENSE": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1"
+  },
+  "licensed_version": "0.1.2",
+  "relationship": "Later MIT release contains identical runtime bytes; installed inventory and hashes must match",
+  "runtime_sha256": {
+    "jsonalias/__init__.py": "35a9a4b543e6f08ad0f8f7f91d0ed53cbd7e0f7925a4aeab5cf52b2e6cfa6db1",
+    "jsonalias/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "runtime_wheel_sha256": "a56d2888e6397812c606156504e861e8ec00e188005af149f003c787db3d3f18",
+  "url": "https://files.pythonhosted.org/packages/cd/b7/490d6c62692be5f458c133196586ae4be6dd03604b246a7360654f1237f9/jsonalias-0.1.2-py3-none-any.whl",
+  "version": "0.1.1"
+}
