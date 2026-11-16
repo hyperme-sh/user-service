@@ -105,3 +105,29 @@ def test_historical_configuration_is_recorded_without_skipping_layers(tmp_path):
     assert (tmp_path / 'historical/image-config.json').is_file()
     with pytest.raises(ValueError, match='configuration'):
         module.unpack_image(image, tmp_path / 'current')
+
+
+def test_inventory_sends_standard_authorization_headers(monkeypatch, tmp_path):
+    import io
+    import urllib.parse
+    requests = []
+    class Response(io.BytesIO):
+        headers = {}
+    class Opener:
+        def open(self, request, timeout):
+            requests.append(request)
+            url = urllib.parse.urlsplit(request.full_url)
+            if url.path == '/token':
+                assert request.get_header('Authorization').startswith('Basic ')
+                return Response(b'{"token":"registry-test-token"}')
+            if url.netloc == 'api.github.com':
+                assert request.get_header('Authorization') == 'Bearer github-test-token'
+                return Response(b'[]')
+            assert request.get_header('Authorization') == 'Bearer registry-test-token'
+            return Response(b'{"tags":[]}')
+    monkeypatch.setenv('REGISTRY_USER', 'fixture')
+    monkeypatch.setenv('REGISTRY_TOKEN', 'fixture-token')
+    monkeypatch.setenv('GITHUB_TOKEN', 'github-test-token')
+    monkeypatch.setattr(registry.urllib.request, 'build_opener', lambda *args: Opener())
+    registry.main(tmp_path / 'output')
+    assert len(requests) == 3

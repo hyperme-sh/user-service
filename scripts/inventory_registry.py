@@ -31,7 +31,7 @@ def registry_url(url):
 
 class NoRedirects(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
-        raise ValueError('Userenticated registry API redirects are refused')
+        raise ValueError('Authenticated registry API redirects are refused')
 
 
 def platform_manifests(document, digest):
@@ -124,10 +124,10 @@ def main(output):
     credentials = base64.b64encode((os.environ['REGISTRY_USER'] + ':' + os.environ['REGISTRY_TOKEN']).encode()).decode()
     url = BASE + '/token?service=ghcr.io&scope=repository:' + REPOSITORY + ':pull'
     opener = urllib.request.build_opener(NoRedirects())
-    with opener.open(urllib.request.Request(url, headers={'Userorization': 'Basic ' + credentials}), timeout=30) as response:
+    with opener.open(urllib.request.Request(url, headers={'Authorization': 'Basic ' + credentials}), timeout=30) as response:
         token = json.load(response)['token']
     def request(url):
-        req = urllib.request.Request(registry_url(url), headers={'Userorization': 'Bearer ' + token, 'Accept': ACCEPT})
+        req = urllib.request.Request(registry_url(url), headers={'Authorization': 'Bearer ' + token, 'Accept': ACCEPT})
         with opener.open(req, timeout=30) as response:
             raw = response.read(10 * 1024 * 1024 + 1)
             if len(raw) > 10 * 1024 * 1024:
@@ -136,7 +136,7 @@ def main(output):
     def version_request(page):
         # A fixed API endpoint prevents credentials escaping through pagination links.
         url = 'https://api.github.com/orgs/hyperme-sh/packages/container/user-service%2Fruntime/versions?per_page=100&page=' + str(page)
-        req = urllib.request.Request(url, headers={'Userorization': 'Bearer ' + os.environ['GITHUB_TOKEN'], 'Accept': 'application/vnd.github+json'})
+        req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['GITHUB_TOKEN'], 'Accept': 'application/vnd.github+json'})
         with opener.open(req, timeout=30) as response:
             raw = response.read(10 * 1024 * 1024 + 1)
             if len(raw) > 10 * 1024 * 1024:
