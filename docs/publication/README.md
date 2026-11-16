@@ -11,5 +11,15 @@ are downloaded or bundled; no registry settings are changed.
 Reachable history includes fetched branches, tags and archived wheel members,
 without executing old code. Findings are a review queue, not publication
 clearance. Deleted refs, remote LFS and external archives are outside scope.
-Historical-content disposition and retained-image review follow separately.
+The historical ledger binds 697 archived dependency findings to exact blob and
+member hashes: 389 payment-schema entries and 308 hosted implementation/metadata
+entries. They remain retained and uncleared for publication.
+
+CI inventories tagged and untagged GHCR versions and inspects every retained
+Linux amd64 layer without executing older images. Inventory failures fail the
+review rather than count as absence. PRs run the review, and the main workflow
+calls it again after publication so the new version is included. Image jobs run
+in parallel with read-only package access. Deleted versions, other registries
+and non-amd64 platforms remain outside this review. No old image is deleted,
+republished or assigned a new visibility.
 Integration/e2e remains nightly; existing CI checks continue unchanged.
