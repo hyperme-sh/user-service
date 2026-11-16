@@ -37,3 +37,18 @@ def test_anonymous_command_propagates_failure():
     result = subprocess.run(['bash', str(ROOT / 'scripts/anonymous-command.sh'),
                              sys.executable, '-c', 'raise SystemExit(23)'])
     assert result.returncode == 23
+
+
+def test_ci_never_reintroduces_private_dependency_authentication():
+    for name in ('service', 'preparation', 'contract', 'contract-consumer', 'owner-artifact'):
+        workflow = (ROOT / '.github/workflows' / (name + '.yml')).read_text()
+        assert 'create-github-app-token' not in workflow
+        assert 'DEPENDENCY_READ_TOKEN:' not in workflow
+        assert 'upload-artifact' not in workflow
+        assert 'enable-cache: false' in workflow
+        assert 'bash scripts/anonymous-command.sh' in workflow
+    for name in ('service', 'preparation'):
+        workflow = (ROOT / '.github/workflows' / (name + '.yml')).read_text()
+        assert 'UV_PROJECT_ENVIRONMENT="$QUALIFICATION_VENV"' in workflow
+        assert 'UV_PYTHON_INSTALL_DIR="$QUALIFICATION_VENV-python"' in workflow
+        assert 'rm -rf -- "$QUALIFICATION_VENV" "$QUALIFICATION_VENV-python"' in workflow
