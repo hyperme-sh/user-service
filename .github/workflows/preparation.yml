@@ -54,12 +54,19 @@ jobs:
           test -n "$(find "$TEST_EVIDENCE_DIR" -name '*.xml' -type f -size +0c -print -quit)"
       - name: Verify flat tested artifact inventory
         run: python3 scripts/owner_artifact.py verify-delivery "$SERVICE_ARTIFACT_DIR"
+      - name: Remove job-local qualification output
+        if: always()
+        run: rm -rf -- "$QUALIFICATION_VENV" "$QUALIFICATION_VENV-python" "$SERVICE_ARTIFACT_DIR" "$(dirname "$OWNER_QUALIFICATION_DIR")" "$TEST_EVIDENCE_DIR"
+  runtime-legal:
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Inspect prepared runtime layers and legal texts
         run: |
           image="user-service:legal-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
           bash scripts/anonymous-command.sh docker build --build-arg GIT_SHA="$GITHUB_SHA" -f core/user-service/Dockerfile -t "$image" .
           bash scripts/anonymous-command.sh bash scripts/audit-container.sh "$image"
-      - name: Remove job-local qualification output
-        if: always()
-        run: rm -rf -- "$QUALIFICATION_VENV" "$QUALIFICATION_VENV-python" "$SERVICE_ARTIFACT_DIR" "$(dirname "$OWNER_QUALIFICATION_DIR")" "$TEST_EVIDENCE_DIR"
