@@ -125,10 +125,10 @@ def test_pr_and_main_retention_separate_qualification_from_delivery():
         workflow = (root / '.github/workflows' / (name + '.yml')).read_text()
         assert 'qualified="$OWNER_QUALIFICATION_DIR"' in workflow
         assert 'qualified="$SERVICE_ARTIFACT_DIR/qualification"' not in workflow
-        assert 'name: owner-qualification' in workflow
-        assert 'path: ${{ env.OWNER_QUALIFICATION_DIR }}/*' in workflow
+        assert 'Remove job-local qualification output' in workflow
+        assert 'upload-artifact' not in workflow
         assert 'verify-delivery "$SERVICE_ARTIFACT_DIR"' in workflow
         assert '- name: Retain validated owner artifacts' not in workflow
         assert 'name: tested-dist' not in workflow
         assert 'name: prepared-dist' not in workflow
-        assert workflow.index('verify-delivery "$SERVICE_ARTIFACT_DIR"') < workflow.index('name: owner-qualification')
+        assert workflow.index('verify-delivery "$SERVICE_ARTIFACT_DIR"') < workflow.index('Remove job-local qualification output')

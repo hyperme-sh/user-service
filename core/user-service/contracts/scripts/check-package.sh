@@ -21,7 +21,7 @@ esac
 if (( $# > 1 )); then echo 'Unexpected arguments' >&2; exit 2; fi
 uv sync --frozen --python 3.13 "${sync_options[@]}"
 if (( ${#fixture_wheels[@]} )); then
-  uv pip install --python .venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
+  uv pip install --python "${UV_PROJECT_ENVIRONMENT:-$PWD/.venv}/bin/python" --no-deps --reinstall "${fixture_wheels[@]}"
 fi
 uv run --frozen "${run_options[@]}" pytest
 scratch=$(mktemp -d)

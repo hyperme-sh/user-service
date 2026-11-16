@@ -26,29 +26,11 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
-    environment: controlplane-libs-read
     steps:
-      - name: Mint repository-scoped dependency token
-        id: dependency-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
-        with:
-          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
-          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
-          owner: hyperme-sh
-          permission-contents: read
-          repositories: |
-            auth-service
-            controlplane-api
-            controlplane-core
-            controlplane-db
-            controlplane-events
-            controlplane-identity
-            controlplane-models
-            controlplane-tenancy
-            controlplane-tests
-            user-service
       - name: Prepare exact owner artifact output
         run: |
+          echo "QUALIFICATION_VENV=$(mktemp -d "$RUNNER_TEMP/user-venv.XXXXXX")" >> "$GITHUB_ENV"
+          echo "TEST_EVIDENCE_DIR=$(mktemp -d "$RUNNER_TEMP/user-results.XXXXXX")" >> "$GITHUB_ENV"
           output=$(mktemp -d "$RUNNER_TEMP/user-service-dist.XXXXXX")
           echo "SERVICE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
           echo "RELEASE_ARTIFACT_DIR=$output" >> "$GITHUB_ENV"
@@ -61,32 +43,22 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
+          enable-cache: false
       - name: Validate installed service and standalone container
         env:
-          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
           TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
         shell: bash
         run: |
-          set -euo pipefail
-          test -n "$DEPENDENCY_READ_TOKEN" || { echo 'Private dependency read access is required'; exit 1; }
-          chmod 0555 scripts/private-git-credential.py
-          export GIT_CONFIG_GLOBAL=/dev/null
-          export GIT_CONFIG_COUNT=3
-          export GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
-          export GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1="$PWD/scripts/private-git-credential.py"
-          export GIT_CONFIG_KEY_2=credential.useHttpPath GIT_CONFIG_VALUE_2=true
-          TEST_EVIDENCE_DIR="$RUNNER_TEMP/user-native-test-results" bash scripts/check-package.sh
-          bash core/user-service/contracts/scripts/check-package.sh
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$QUALIFICATION_VENV" UV_PYTHON_INSTALL_DIR="$QUALIFICATION_VENV-python" TEST_DATABASE_URL="$TEST_DATABASE_URL" TEST_EVIDENCE_DIR="$TEST_EVIDENCE_DIR" SERVICE_ARTIFACT_DIR="$SERVICE_ARTIFACT_DIR" bash scripts/check-package.sh
+          bash scripts/anonymous-command.sh env TEST_DATABASE_URL="$TEST_DATABASE_URL" RELEASE_ARTIFACT_DIR="$RELEASE_ARTIFACT_DIR" bash core/user-service/contracts/scripts/check-package.sh
       - name: Qualify public container without dependency credentials
         env:
           TEST_DATABASE_URL: postgresql+psycopg://postgres:service-test-only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres
         run: |
-          unset DEPENDENCY_READ_TOKEN DEPENDENCY_READ_TOKEN_FILE
-          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-          QUALIFIED_IMAGE_REF="user-service:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" bash scripts/check-container.sh
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$QUALIFICATION_VENV" UV_PYTHON_INSTALL_DIR="$QUALIFICATION_VENV-python" TEST_DATABASE_URL="$TEST_DATABASE_URL" QUALIFIED_IMAGE_REF="user-service:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" bash scripts/check-container.sh
       - name: Bind both validated owner wheels
         run: |
-          uv run --project core/user-service --frozen pytest -q tests_tools
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$QUALIFICATION_VENV" UV_PYTHON_INSTALL_DIR="$QUALIFICATION_VENV-python" uv run --project core/user-service --no-sync pytest -q tests_tools
           archive=$(python3 scripts/owner_artifact.py build "$SERVICE_ARTIFACT_DIR")
           qualified="$OWNER_QUALIFICATION_DIR"
           python3 scripts/owner_artifact.py qualify "$archive" "$qualified" "$GITHUB_SHA"
@@ -158,20 +130,9 @@ jobs:
           echo "$channel tracks qualified main $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify flat tested artifact inventory
         run: python3 scripts/owner_artifact.py verify-delivery "$SERVICE_ARTIFACT_DIR"
-      - name: Retain current owner qualification evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: owner-qualification
-          path: ${{ env.OWNER_QUALIFICATION_DIR }}/*
-          if-no-files-found: error
-          retention-days: 30
-      - name: Retain native test identities
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: native-test-results
-          path: ${{ runner.temp }}/user-native-test-results/*.xml
-          if-no-files-found: error
-          retention-days: 30
       - name: Clean up qualification alias
         if: always()
         run: docker image rm "user-service:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >/dev/null 2>&1 || true
+      - name: Remove job-local qualification output
+        if: always()
+        run: rm -rf -- "$QUALIFICATION_VENV" "$QUALIFICATION_VENV-python" "$SERVICE_ARTIFACT_DIR" "$(dirname "$OWNER_QUALIFICATION_DIR")" "$TEST_EVIDENCE_DIR"

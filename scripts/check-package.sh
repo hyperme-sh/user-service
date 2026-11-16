@@ -55,9 +55,9 @@ esac
 if (( $# > 1 )); then echo 'Unexpected arguments' >&2; exit 2; fi
 uv sync --project core/user-service --frozen --python 3.13 "${sync_options[@]}"
 if (( ${#fixture_wheels[@]} )); then
-  uv pip install --no-config --python core/user-service/.venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
+  uv pip install --no-config --python "${UV_PROJECT_ENVIRONMENT:-$PWD/core/user-service/.venv}/bin/python" --no-deps --reinstall "${fixture_wheels[@]}"
 fi
-core/user-service/.venv/bin/python core/user-service/scripts/verify_preparation_environment.py "$PWD/core/user-service"
+"${UV_PROJECT_ENVIRONMENT:-$PWD/core/user-service/.venv}/bin/python" core/user-service/scripts/verify_preparation_environment.py "$PWD/core/user-service"
 # Do not accept an unavailable Docker daemon as successful native qualification.
 docker info >/dev/null
 uv run --project core/user-service --frozen "${run_options[@]}" pytest core/user-service/tests --junitxml="$scratch/source.xml"
