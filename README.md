@@ -283,3 +283,19 @@ The existing Infra `user-consumers` nightly adapter owns thirteen installed SQL
 cases for commit, rollback, refusal, replay, re-add and cross-tenant isolation.
 Fixture setup, readiness and teardown are checked into Infra; those cases are
 not run manually. No new package version, release or production action is added.
+
+`USER_NIGHTLY_RUN_CONFIG` enables independent owner `user` admission solely for
+`GET /api/v1/authority/contexts`, using the shared identity configuration and
+separate owner/controller keys. The controller command endpoint is
+`POST /api/v1/user/internal/nightly-run`. The native subject must match, visible
+tenants are restricted to the declared fixture tenant, and actual current
+membership checks still apply. The native database transaction returns before
+completion is acknowledged. Other User paths do not gain browser mutation
+permission. Missing configuration leaves the adapter off and original-run tokens
+are refused without admission, including direct Auth introspection consumers.
+
+Standalone wheel consumers use the qualified graph bundled in the source archive:
+`bash core/user-service/scripts/install-qualified.sh /path/to/venv/bin/python /path/to/user_service.whl`
+from a repository checkout (or `scripts/install-qualified.sh` from the package
+archive). It verifies private wheel digests and resolves the application with
+explicit audited dependency overrides. CI uses this same external-wheel installer.

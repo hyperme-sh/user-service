@@ -50,7 +50,7 @@ async def legacy_scope_guard(request: Request):
         authorization = request.headers.get("Authorization", "")
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() == "bearer" and token:
-            from auth_service.deps import get_access_token_claims
+            from user_service.nightly import verified_claims as get_access_token_claims
             from auth_service.schemas import AuthMeResponse
             from api.infrastructure.persistence.db_session import get_db_session
             from user_service.authority_routes import selected_scope
