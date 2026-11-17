@@ -30,7 +30,10 @@ Account closure, password reset, and the lifecycle reader split into a public pr
 
 ## Practical use
 
-Runtime dependencies are public packages pinned to exact commits in `core/user-service/pyproject.toml` and `uv.lock`: `controlplane-api`, `auth-service`, `controlplane-core`, `controlplane-db`, `controlplane-identity`, `controlplane-tenancy`, `controlplane-events`, and `spanopticon-models`, plus FastAPI `>=0.135.0`, HTTPX `>=0.28.1`, Pydantic `>=2.12.0`, PyJWT `>=2.10.1`, SQLAlchemy `>=2.0.43`, Uvicorn `>=0.37.0`, and Starlette `>=0.48.0`. Install Python 3.13 or newer and uv 0.11.26.
+Runtime dependencies are public packages pinned to exact commits in `core/user-service/pyproject.toml` and `uv.lock`: `controlplane-api`, `auth-service`, `controlplane-core`, `controlplane-db`, `controlplane-identity`, `controlplane-tenancy`, `controlplane-events`, and `spanopticon-models`, plus FastAPI `>=0.135.0`, HTTPX `>=0.28.1`, Pydantic `>=2.12.0`, PyJWT `>=2.10.1`, SQLAlchemy `>=2.0.43`, Uvicorn `>=0.37.0`, and Starlette `>=0.48.0`. Install Python 3.13 or newer and uv 0.11.26. The service image builds and runs on Alpine
+with the frozen dependency lock. Image qualification checks the installed
+PostgreSQL driver, system CA store, owner imports and the absence of the former
+Streamlit and analytics dependencies.
 
 Apply the `platform` and `events` migration chains from `controlplane-db` to a PostgreSQL database, then start the API from a checkout:
 
