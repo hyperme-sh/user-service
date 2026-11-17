@@ -70,3 +70,5 @@ jobs:
           trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
           bash scripts/anonymous-command.sh docker build --build-arg GIT_SHA="$GITHUB_SHA" -f core/user-service/Dockerfile -t "$image" .
           bash scripts/anonymous-command.sh bash scripts/audit-container.sh "$image"
+          bash scripts/anonymous-command.sh docker run --rm -i --network none --read-only "$image" /app/.venv/bin/python -I - < scripts/check-alpine-runtime.py
+          docker image inspect "$image" --format 'Qualified User runtime {{.Os}}/{{.Architecture}} ({{.Size}} bytes)'
