@@ -23,6 +23,19 @@ def test_exact_source_fixtures_match_pins(root):
     assert module.verify(root)
 
 
+@pytest.mark.parametrize("package", ["controlplane-api", "controlplane-core"])
+def test_auths_older_pin_requires_explicit_override(root, package):
+    project = root / "pyproject.toml"
+    requirements, overrides = project.read_text().split("override-dependencies = [", 1)
+    entries = overrides.splitlines(keepends=True)
+    selected = [entry for entry in entries if entry.strip().startswith(f'"{package} @ ')]
+    assert len(selected) == 1
+    entries.remove(selected[0])
+    project.write_text(requirements + "override-dependencies = [" + "".join(entries))
+    with pytest.raises(ValueError, match="Declared dependency differs from locked dependency"):
+        module.verify(root)
+
+
 def test_tampered_artifact_fails(root):
     wheel = module.verify(root)[0]
     wheel.write_bytes(wheel.read_bytes() + b'tampered')
