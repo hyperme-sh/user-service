@@ -67,8 +67,11 @@ def test_tampered_transitive_pin_rejected_even_with_updated_fixture_digest(root)
     wheel = p.parent/record['wheel']
     with zipfile.ZipFile(wheel) as z: files = {n:z.read(n) for n in z.namelist()}
     metadata, = [n for n in files if n.endswith('.dist-info/METADATA')]
-    api = next(r for r in manifest['dependencies'] if r['distribution']=='controlplane-api')
-    files[metadata] = files[metadata].replace(api['dependency_revision'].encode(), b'a'*40)
+    # API's older declared pin is intentionally overridden. DB's pin must match.
+    db = next(r for r in manifest['dependencies'] if r['distribution']=='controlplane-db')
+    revision = db['dependency_revision'].encode()
+    assert revision in files[metadata]
+    files[metadata] = files[metadata].replace(revision, b'a'*40)
     with zipfile.ZipFile(wheel,'w') as z:
         for n,b in files.items(): z.writestr(n,b)
     record['sha256'] = hashlib.sha256(wheel.read_bytes()).hexdigest()
