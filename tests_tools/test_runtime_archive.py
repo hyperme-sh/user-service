@@ -25,6 +25,7 @@ if sys.argv[1] == 'save':
     checkout = tmp_path / 'checkout'
     (checkout / 'scripts').mkdir(parents=True)
     (checkout / 'scripts/check-container.sh').write_bytes((ROOT / 'scripts/check-container.sh').read_bytes())
+    (checkout / 'scripts/check-alpine-runtime.py').write_bytes((ROOT / 'scripts/check-alpine-runtime.py').read_bytes())
     (checkout / 'scripts/audit-container.sh').write_text('exit ' + ('1' if audit_failed else '0') + '\n')
     git = binaries / 'git'
     git.write_text('#!/bin/sh\nprintf "%s\\n" ' + 'a' * 40 + '\n')
