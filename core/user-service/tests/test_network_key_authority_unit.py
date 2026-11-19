@@ -1,7 +1,7 @@
 """Owner-check unit tests with database and current-authority doubles."""
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import Request, Response
 import pytest
@@ -11,10 +11,11 @@ from user_service import key_authority as owner
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scopes", [["storage:objects:read"], ["storage:records:read"],
-    ["storage:replays:consume"], ["storage:objects:read", "storage:objects:write", "storage:media:read", "storage:media:write"]])
+    ["storage:media:observe"], ["storage:replays:consume"], ["storage:objects:read", "storage:objects:write", "storage:media:read", "storage:media:write"]])
 @pytest.mark.parametrize('operation',['read','mint','manage','use'])
-async def test_current_tenant_actor_status_is_rechecked_before_network_grant(monkeypatch,operation,scopes):
-    tenant=uuid4()
+@pytest.mark.parametrize('canonical_test', [True, False])
+async def test_current_tenant_actor_status_is_rechecked_before_network_grant(monkeypatch,operation,scopes,canonical_test):
+    tenant=UUID(owner.S3RCH_TEST_TENANT['id']) if canonical_test else uuid4()
     class Session:
         async def __aenter__(self): return self
         async def __aexit__(self,*args): pass
@@ -33,7 +34,8 @@ async def test_current_tenant_actor_status_is_rechecked_before_network_grant(mon
         purpose=None if operation=='read' else 'service',scopes=[] if operation=='read' else scopes)
     request=Request({'type':'http','method':'POST','path':'/','headers':[(b'x-tenant-id',str(tenant).encode())],
         'app':SimpleNamespace(state=SimpleNamespace(session_maker=lambda:session))})
-    assert (await owner.lookup(body,request,Response()))['allowed'] is True
+    is_observer = operation != 'read' and scopes == ['storage:media:observe']
+    assert (await owner.lookup(body,request,Response()))['allowed'] is (canonical_test or not is_observer)
     active.assert_awaited_once_with(session,tenant,'network-admin')
     active.return_value=False
     assert (await owner.lookup(body,request,Response()))['allowed'] is False
