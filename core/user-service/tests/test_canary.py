@@ -73,3 +73,11 @@ def test_failed_preflight_never_mutates_identity():
         return handler(request)
     with pytest.raises(Unavailable):run(denied)
     assert not any(path.endswith('/bind-wallet') for path in calls)
+
+
+@pytest.mark.parametrize('blocked',[0,None,'false',[]])
+def test_reader_requires_literal_boolean_false(blocked):
+    def invalid(request):
+        if request.url.path.endswith('/check'):return httpx.Response(200,json={'blocked':blocked})
+        return handler(request)
+    with pytest.raises(Unavailable):run(invalid)

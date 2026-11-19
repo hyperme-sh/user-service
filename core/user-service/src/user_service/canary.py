@@ -78,7 +78,7 @@ async def probe(binding, *, url, identity_token, reader_token, previous=None, tr
             other=await request('identity/session-member',{'subject':binding.subject,'tenant_id':str(binding.other_tenant)},identity_token)
             if other is not None:raise Unavailable('Undeclared tenant membership accepted')
             status=await request('account-lifecycle/check',{'subject':binding.subject,'tenant_id':str(binding.tenant)},reader_token,True)
-            if status!={'blocked':False}:raise Unavailable('Declared identity is not active')
+            if not isinstance(status,dict) or set(status)!={'blocked'} or status['blocked'] is not False:raise Unavailable('Declared identity is not active')
             existing=await request('identity/get-wallet',{'subject':binding.subject},identity_token)
             if existing is not None and (not isinstance(existing,dict) or existing.get('keycloak_sub')!=binding.subject
                     or str(existing.get('wallet_address','')).lower()!=binding.wallet.lower()):
