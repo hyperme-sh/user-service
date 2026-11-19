@@ -10,6 +10,7 @@ _STORAGE_FAMILIES = tuple(
 _REPLAY_PROFILE = frozenset({'storage:replays:consume'})
 _MEDIA_PROFILE = frozenset({'storage:objects:read', 'storage:objects:write',
                             'storage:media:read', 'storage:media:write'})
+_TEST_ALLOCATED_PAYLOAD = frozenset({'storage:media:payload:read', 'storage:media:payload:write'})
 
 
 def network_service_key_allowed(
@@ -19,15 +20,16 @@ def network_service_key_allowed(
 
     Storage keys can carry a least-privilege subset. They cannot combine storage
     families with each other, attestation or unknown permissions. Replay and
-    media consumers use their exact declared profiles. Allocation issuer,
-    observer and ACL media keys are limited to the canonical s3r.ch TEST tenant. None grants
-    organization authority.
+    media consumers use their exact declared profiles. Allocation issuance,
+    retirement, observation, allocated payload and ACL media are limited to the canonical
+    s3r.ch TEST tenant. None grants organization authority.
     """
     if network != "s3r.ch" or purpose != "service" or not scopes:
         return False
     if scopes == ["oracles:attest"]:
         return True
-    if (scopes in (['storage:media:observe'], ['storage:allocations:issue'])
+    if (scopes in (['storage:media:observe'], ['storage:allocations:issue'], ['storage:media:retire'])
+            or (len(scopes) == 2 and frozenset(scopes) == _TEST_ALLOCATED_PAYLOAD)
             or (len(scopes) == 2 and set(scopes) == {'acl:media:read', 'acl:media:write'})):
         return canonical_s3rch_test
     if len(scopes) == len(set(scopes)) and frozenset(scopes) in (_REPLAY_PROFILE, _MEDIA_PROFILE):
