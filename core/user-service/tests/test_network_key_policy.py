@@ -51,3 +51,28 @@ def test_storage_families_cannot_cross_authority(network, purpose, family):
 ])
 def test_records_cannot_mix_permission_families(scopes):
     assert not network_service_key_allowed("s3r.ch", "service", scopes)
+
+
+PROFILES = [
+    ['storage:replays:consume'],
+    ['storage:objects:read', 'storage:objects:write', 'storage:media:read', 'storage:media:write'],
+]
+
+
+@pytest.mark.parametrize('profile', PROFILES)
+def test_declared_replay_and_media_profiles_are_exact_and_order_independent(profile):
+    for ordering in permutations(profile):
+        assert network_service_key_allowed('s3r.ch', 'service', list(ordering))
+    for extra in ('oracles:attest', 'storage:records:read', 'storage:media:observe', 'storage:objects:delete', profile[0]):
+        assert not network_service_key_allowed('s3r.ch', 'service', [*profile, extra])
+    for network, purpose in [('hyperme.sh','service'), ('s3r.ch.attacker','service'), ('s3r.ch','renter'), ('s3r.ch','ir')]:
+        assert not network_service_key_allowed(network, purpose, profile)
+
+
+@pytest.mark.parametrize('scopes', [
+    ['storage:replays:read'], ['storage:replays:*'], ['storage:media:write'],
+    ['storage:objects:read', 'storage:media:write'],
+    ['storage:replays:consume', 'storage:objects:read'],
+])
+def test_profiles_do_not_create_general_media_or_replay_permission_families(scopes):
+    assert not network_service_key_allowed('s3r.ch', 'service', scopes)
