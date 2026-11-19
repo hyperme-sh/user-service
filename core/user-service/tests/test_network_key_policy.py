@@ -78,14 +78,14 @@ def test_profiles_do_not_create_general_media_or_replay_permission_families(scop
     assert not network_service_key_allowed('s3r.ch', 'service', scopes)
 
 
-@pytest.mark.parametrize('scope', ['storage:media:observe', 'storage:allocations:issue'])
+@pytest.mark.parametrize('scope', ['storage:media:observe', 'storage:allocations:issue', 'storage:media:retire'])
 def test_test_media_credentials_require_exact_scope_and_canonical_authority(scope):
     scopes = [scope]
     assert network_service_key_allowed('s3r.ch', 'service', scopes, canonical_s3rch_test=True)
     assert not network_service_key_allowed('s3r.ch', 'service', scopes)
     assert not network_service_key_allowed('s3r.ch', 'renter', scopes, canonical_s3rch_test=True)
     assert not network_service_key_allowed('hyperme.sh', 'service', scopes, canonical_s3rch_test=True)
-    for extra in (scope, 'storage:media:write', 'storage:records:read'):
+    for extra in (scope, 'storage:media:write', 'storage:records:read', 'storage:allocations:issue'):
         assert not network_service_key_allowed('s3r.ch', 'service', [scope, extra], canonical_s3rch_test=True)
     assert not network_service_key_allowed('s3r.ch', 'service',
         ['storage:media:observe', 'storage:allocations:issue'], canonical_s3rch_test=True)
