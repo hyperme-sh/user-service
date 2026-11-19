@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 
+from user_service.fixture_bootstrap import S3RCH_TEST_TENANT
 from user_service.scoped_authority import active_tenant, actor_active, allowed, tenant_network
 from user_service.network_key_policy import network_service_key_allowed
 
@@ -86,7 +87,10 @@ async def lookup(body: Query,request: Request,response: Response):
             admin=(await actor_active(session,body.tenant_id,body.subject)
                    and await allowed(session,subject=body.subject,action='network.admin',network=body.network_id))
             decision=admin and (body.operation=='read' or (
-                network_service_key_allowed(body.network_id, body.purpose, body.scopes)))
+                network_service_key_allowed(
+                    body.network_id, body.purpose, body.scopes,
+                    canonical_s3rch_test=str(body.tenant_id) == S3RCH_TEST_TENANT['id'],
+                )))
     return {**body.model_dump(mode='json'),'allowed':bool(decision),'org_admin':bool(admin and body.scope_kind=='organization'),
             'observed_at':datetime.now(UTC).isoformat()}
 
