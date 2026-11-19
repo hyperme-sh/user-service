@@ -11,7 +11,8 @@ from user_service import key_authority as owner
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scopes", [["storage:objects:read"], ["storage:records:read"],
-    ["storage:media:observe"], ["storage:allocations:issue"], ["storage:media:retire"], ["acl:media:read", "acl:media:write"],
+    ["storage:media:observe"], ["storage:allocations:issue"], ["storage:media:retire"],
+    ["storage:media:payload:read", "storage:media:payload:write"], ["acl:media:read", "acl:media:write"],
     ["storage:replays:consume"], ["storage:objects:read", "storage:objects:write", "storage:media:read", "storage:media:write"]])
 @pytest.mark.parametrize('operation',['read','mint','manage','use'])
 @pytest.mark.parametrize('canonical_test', [True, False])
@@ -36,7 +37,8 @@ async def test_current_tenant_actor_status_is_rechecked_before_network_grant(mon
     request=Request({'type':'http','method':'POST','path':'/','headers':[(b'x-tenant-id',str(tenant).encode())],
         'app':SimpleNamespace(state=SimpleNamespace(session_maker=lambda:session))})
     test_only = operation != 'read' and scopes in (
-        ['storage:media:observe'], ['storage:allocations:issue'], ['storage:media:retire'], ['acl:media:read', 'acl:media:write'],
+        ['storage:media:observe'], ['storage:allocations:issue'], ['storage:media:retire'],
+        ['storage:media:payload:read', 'storage:media:payload:write'], ['acl:media:read', 'acl:media:write'],
     )
     assert (await owner.lookup(body,request,Response()))['allowed'] is (canonical_test or not test_only)
     active.assert_awaited_once_with(session,tenant,'network-admin')
