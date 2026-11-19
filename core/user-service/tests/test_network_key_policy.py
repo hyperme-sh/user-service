@@ -111,3 +111,15 @@ def test_acl_media_requires_both_permissions_and_canonical_test():
         assert not network_service_key_allowed('hyperme.sh', 'service', scopes, canonical_s3rch_test=True)
     for scopes in ([media[0]], [media[1]], [media[0], media[0]], [*media, 'storage:media:observe']):
         assert not network_service_key_allowed('s3r.ch', 'service', scopes, canonical_s3rch_test=True)
+
+
+def test_vault_key_requires_exact_pair_and_canonical_test():
+    scopes = ['storage:vault:read', 'storage:vault:write']
+    for pair in (scopes, scopes[::-1]):
+        assert network_service_key_allowed('s3r.ch', 'service', pair, canonical_s3rch_test=True)
+        assert not network_service_key_allowed('s3r.ch', 'service', pair)
+        assert not network_service_key_allowed('s3r.ch', 'renter', pair, canonical_s3rch_test=True)
+        assert not network_service_key_allowed('hyperme.sh', 'service', pair, canonical_s3rch_test=True)
+    for invalid in ([scopes[0]], [scopes[1]], [scopes[0], scopes[0]],
+                    scopes + ['storage:records:write'], scopes + ['storage:vault:delete']):
+        assert not network_service_key_allowed('s3r.ch', 'service', invalid, canonical_s3rch_test=True)
