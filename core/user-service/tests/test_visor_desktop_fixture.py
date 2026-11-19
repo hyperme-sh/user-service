@@ -68,12 +68,23 @@ def test_additive_owner_transaction_and_retry(empty_authority_owner, monkeypatch
     bootstrap(engine, data=before, bindings=old_bindings)
     # Disposable PostgreSQL uses a generated database, schema and role.
     monkeypatch.setattr(owner, "require_owner", lambda db: None)
-    with engine.begin() as db:
-        users_before = db.execute(text("SELECT id, keycloak_sub FROM users ORDER BY id")).all()
+    tenant = str(plan(before, after, old_bindings, new_bindings)["tenant"])
+
+    def snapshot():
+        with engine.begin() as db:
+            users = text("SELECT id, keycloak_sub FROM users WHERE tenant_id IS NULL")
+            platform = db.execute(users).all()
+            db.execute(text("SELECT set_config('app.current_tenant_id',:tenant,true)"),
+                       {"tenant": tenant})
+            profiles = db.execute(text("""
+                SELECT id, keycloak_sub FROM users WHERE tenant_id=CAST(:tenant AS uuid)
+            """), {"tenant": tenant}).all()
+        return {*platform, *profiles}
+
+    users_before = snapshot()
     applied = owner.apply(engine, before, after, old_bindings, new_bindings)
     assert applied["changed"] is True
     assert owner.apply(engine, before, after, old_bindings, new_bindings) == {**applied, "changed": False}
-    with engine.begin() as db:
-        users_after = db.execute(text("SELECT id, keycloak_sub FROM users ORDER BY id")).all()
-        assert [row for row in users_after if row.keycloak_sub != RENTER["id"]] == users_before
-        assert len(users_after) == len(users_before) + 2
+    users_after = snapshot()
+    assert {row for row in users_after if row.keycloak_sub != RENTER["id"]} == users_before
+    assert len(users_after) == len(users_before) + 2
