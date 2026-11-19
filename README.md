@@ -304,3 +304,18 @@ Standalone wheel consumers use the qualified graph bundled in the source archive
 from a repository checkout (or `scripts/install-qualified.sh` from the package
 archive). It verifies private wheel digests and resolves the application with
 explicit audited dependency overrides. CI uses this same external-wheel installer.
+
+## Inactive User canary
+
+`user_service.canary.Binding` declares one synthetic subject, member, two distinct
+tenants, wallet and original command ID. It is disabled by default. `probe` checks
+active-account status and exact membership/refusal before issuing a durable
+wallet-binding command. An existing different wallet refuses the probe. Repeated
+commands and later restart/rollback observations must preserve the original
+committed result; retain that result privately. No profile or role provisioning,
+financial operation, deployment activation or cleanup is performed by the probe.
+
+The HTTP client uses separate identity/reader credentials, bounded responses and
+an overall deadline, refusing redirects and remote cleartext. Scheduled fixtures
+and reader-version comparisons belong to Infra's `user-consumers` lane. Installing
+this package does not enable a canary or production billing.
