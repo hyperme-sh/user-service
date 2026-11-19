@@ -89,3 +89,13 @@ def test_test_media_credentials_require_exact_scope_and_canonical_authority(scop
         assert not network_service_key_allowed('s3r.ch', 'service', [scope, extra], canonical_s3rch_test=True)
     assert not network_service_key_allowed('s3r.ch', 'service',
         ['storage:media:observe', 'storage:allocations:issue'], canonical_s3rch_test=True)
+
+def test_acl_media_requires_both_permissions_and_canonical_test():
+    media = ['acl:media:read', 'acl:media:write']
+    for scopes in (media, list(reversed(media))):
+        assert network_service_key_allowed('s3r.ch', 'service', scopes, canonical_s3rch_test=True)
+        assert not network_service_key_allowed('s3r.ch', 'service', scopes)
+        assert not network_service_key_allowed('s3r.ch', 'renter', scopes, canonical_s3rch_test=True)
+        assert not network_service_key_allowed('hyperme.sh', 'service', scopes, canonical_s3rch_test=True)
+    for scopes in ([media[0]], [media[1]], [media[0], media[0]], [*media, 'storage:media:observe']):
+        assert not network_service_key_allowed('s3r.ch', 'service', scopes, canonical_s3rch_test=True)
