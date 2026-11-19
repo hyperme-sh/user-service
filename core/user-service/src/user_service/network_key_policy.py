@@ -19,14 +19,15 @@ def network_service_key_allowed(
 
     Storage keys can carry a least-privilege subset. They cannot combine storage
     families with each other, attestation or unknown permissions. Replay and
-    media consumers use their exact declared profiles. Observer keys are limited
-    to the canonical s3r.ch TEST tenant. None grants organization authority.
+    media consumers use their exact declared profiles. Allocation issuer and
+    observer keys are limited to the canonical s3r.ch TEST tenant. None grants
+    organization authority.
     """
     if network != "s3r.ch" or purpose != "service" or not scopes:
         return False
     if scopes == ["oracles:attest"]:
         return True
-    if scopes == ['storage:media:observe']:
+    if scopes in (['storage:media:observe'], ['storage:allocations:issue']):
         return canonical_s3rch_test
     if len(scopes) == len(set(scopes)) and frozenset(scopes) in (_REPLAY_PROFILE, _MEDIA_PROFILE):
         return True
