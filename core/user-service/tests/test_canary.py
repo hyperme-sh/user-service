@@ -81,3 +81,13 @@ def test_reader_requires_literal_boolean_false(blocked):
         if request.url.path.endswith('/check'):return httpx.Response(200,json={'blocked':blocked})
         return handler(request)
     with pytest.raises(Unavailable):run(invalid)
+
+
+@pytest.mark.parametrize('field,value',[('command_id',str(UUID(int=99))),('keycloak_sub','other'),('wallet_address','0x'+'22'*20)])
+def test_changed_original_is_refused_before_any_http(field,value):
+    original=result()
+    (original if field=='command_id' else original['binding'])[field]=value
+    calls=[]
+    def observed(request):calls.append(request);return handler(request)
+    with pytest.raises(Unavailable):run(observed,previous=original)
+    assert not calls

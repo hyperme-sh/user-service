@@ -55,6 +55,16 @@ async def probe(binding, *, url, identity_token, reader_token, previous=None, tr
     """
     if binding.enabled is not True:
         raise Unavailable('User canary binding disabled')
+    def qualify(value):
+        if not isinstance(value,dict) or value.get('status')!='applied' or value.get('command_id')!=str(binding.command):
+            raise Unavailable('Original wallet command unavailable')
+        fact=value.get('binding')
+        if not isinstance(fact,dict) or fact.get('keycloak_sub')!=binding.subject or str(fact.get('wallet_address','')).lower()!=binding.wallet.lower():
+            raise Unavailable('Wallet identity differs')
+        try:
+            if datetime.fromisoformat(fact['bound_at']).utcoffset() is None:raise ValueError()
+        except (KeyError,TypeError,ValueError):raise Unavailable('Original binding timestamp unavailable') from None
+    if previous is not None:qualify(previous)
     url=endpoint(url)
     identity_token=credential(identity_token);reader_token=credential(reader_token)
     if identity_token==reader_token:raise ValueError('Reader and identity credentials must differ')
@@ -85,18 +95,8 @@ async def probe(binding, *, url, identity_token, reader_token, previous=None, tr
                 raise Unavailable('Declared identity already has another wallet')
             payload=dict(command_id=str(binding.command),subject=binding.subject,wallet_address=binding.wallet)
             first=await request('identity/bind-wallet',payload,identity_token)
-            def qualify(value):
-                if not isinstance(value,dict) or value.get('status')!='applied' or value.get('command_id')!=str(binding.command):
-                    raise Unavailable('Original wallet command unavailable')
-                fact=value.get('binding')
-                if not isinstance(fact,dict) or fact.get('keycloak_sub')!=binding.subject or str(fact.get('wallet_address','')).lower()!=binding.wallet.lower():
-                    raise Unavailable('Wallet identity differs')
-                try:
-                    if datetime.fromisoformat(fact['bound_at']).utcoffset() is None:raise ValueError()
-                except (KeyError,TypeError,ValueError):raise Unavailable('Original binding timestamp unavailable') from None
             qualify(first)
             if previous is not None:
-                qualify(previous)
                 if previous!=first:raise Unavailable('Original committed command changed')
             if await request('identity/bind-wallet',payload,identity_token)!=first:
                 raise Unavailable('Repeat command changed its result')
