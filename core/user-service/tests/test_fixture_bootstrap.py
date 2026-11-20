@@ -149,6 +149,45 @@ def test_seed_is_fresh_only_and_cannot_repair_existing_roles(empty_authority_own
         assert db.scalar(text("SELECT count(*) FROM authority_fixture_generation")) == 1
 
 
+def test_github_owner_adopts_only_the_observed_roleless_member(empty_authority_owner, monkeypatch):
+    from user_service import startup_github_fixture as fixture
+
+    engine = empty_authority_owner
+    baseline = bootstrap(engine)
+    tenants = {row["key"]: row["id"] for row in MANIFEST["tenants"]}
+    activation = {"tenant_id": tenants["active"], **{
+        key: baseline[key] for key in ("manifest_sha256", "subjects_sha256")
+    }}
+    subject = str(uuid.uuid4())
+    observed = {
+        "issuer": ISSUER, "provider": "github", "subject": subject, "email": "fixture@github.com",
+        "upstream_subject": "1234", "enabled": True,
+    }
+    with pytest.raises(ValueError, match="TEST User schema owner"):
+        fixture.provision(engine, activation, observed)
+    monkeypatch.setattr(fixture, "require_test_owner", lambda db: None)
+    with pytest.raises(ValueError, match="staged TEST GitHub"):
+        fixture.provision(engine, activation, dict(observed, provider="microsoft"))
+    with pytest.raises(ValueError, match="generation differs"):
+        fixture.provision(engine, dict(activation, subjects_sha256="0" * 64), observed)
+    result = fixture.provision(engine, activation, observed)
+    assert result == {
+        "person_id": subject,
+        "member_id": str(identifier(MANIFEST["generation"], "member", tenants["active"], subject)),
+        "status": "provisioned",
+    }
+    assert fixture.provision(engine, activation, observed) == result
+    for tenant in (tenants["active"], tenants["isolation"]):
+        with engine.begin() as db:
+            fixture.scope(db, tenant)
+            rows = db.execute(text("""
+                SELECT id::text, role_id FROM users WHERE keycloak_sub=:subject
+            """), {"subject": subject}).all()
+            assert rows == ([(result["member_id"], None)] if tenant == tenants["active"] else [])
+    with pytest.raises(ValueError, match="Existing TEST GitHub profile differs"):
+        fixture.provision(engine, activation, dict(observed, subject=str(uuid.uuid4())))
+
+
 @pytest.mark.parametrize("boundary", ["issuer", "subject", "enabled", "inventory"])
 def test_wrong_provider_inventory_does_not_create_any_fixtures(
     empty_authority_owner, boundary
