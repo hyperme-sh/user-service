@@ -123,3 +123,14 @@ def test_vault_key_requires_exact_pair_and_canonical_test():
     for invalid in ([scopes[0]], [scopes[1]], [scopes[0], scopes[0]],
                     scopes + ['storage:records:write'], scopes + ['storage:vault:delete']):
         assert not network_service_key_allowed('s3r.ch', 'service', invalid, canonical_s3rch_test=True)
+
+
+def test_vault_acl_key_is_separate_and_canonical_test_only():
+    scopes = ['acl:vault:statements:read']
+    assert network_service_key_allowed('s3r.ch', 'service', scopes, canonical_s3rch_test=True)
+    assert not network_service_key_allowed('s3r.ch', 'service', scopes)
+    assert not network_service_key_allowed('s3r.ch', 'renter', scopes, canonical_s3rch_test=True)
+    assert not network_service_key_allowed('hyperme.sh', 'service', scopes, canonical_s3rch_test=True)
+    for invalid in (scopes * 2, scopes + ['storage:vault:read'],
+                    ['acl:statements:read'], ['acl:vault:statements:write']):
+        assert not network_service_key_allowed('s3r.ch', 'service', invalid, canonical_s3rch_test=True)
