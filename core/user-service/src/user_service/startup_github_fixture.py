@@ -1,4 +1,4 @@
-"""Install the declared, unprivileged GitHub member in the sealed TEST database."""
+"""Install the declared, unprivileged broker member in the sealed TEST database."""
 
 import argparse
 import json
@@ -17,16 +17,23 @@ ISSUER = "https://auth.test.hyperme.sh/realms/controlplane"
 GENERATION = "test-reset-v1"
 
 
-def declaration(activation, observation):
+def declaration(activation, observation, *, synthetic=False):
+    expected = "startup-nightly" if synthetic else "github"
+    if synthetic:
+        upstream = uuid.UUID(observation["upstream_subject"])
+        identity_matches = (str(upstream) == observation["upstream_subject"]
+                            and observation["subject"] != observation["upstream_subject"]
+                            and observation["email"] == "brokered-startup-nightly-linked-member@startup-nightly.invalid")
+    else:
+        identity_matches = (re.fullmatch(r"[a-z0-9][a-z0-9-]{0,38}@github\.com", observation["email"])
+                            and re.fullmatch(r"[1-9][0-9]*", observation["upstream_subject"]))
     if (set(activation) != {"manifest_sha256", "subjects_sha256", "tenant_id"}
             or any(not re.fullmatch(r"[a-f0-9]{64}", activation[key])
                    for key in ("manifest_sha256", "subjects_sha256"))
             or set(observation) != {"issuer", "provider", "subject", "email", "upstream_subject", "enabled"}
-            or observation["issuer"] != ISSUER or observation["provider"] != "github"
-            or observation["enabled"] is not True
-            or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,38}@github\.com", observation["email"])
-            or not re.fullmatch(r"[1-9][0-9]*", observation["upstream_subject"])):
-        raise ValueError("Exact staged TEST GitHub observation required")
+            or observation["issuer"] != ISSUER or observation["provider"] != expected
+            or observation["enabled"] is not True or not identity_matches):
+        raise ValueError("Exact staged TEST " + ("synthetic" if synthetic else "GitHub") + " observation required")
     subject = uuid.UUID(observation["subject"])
     tenant = uuid.UUID(activation["tenant_id"])
     if str(subject) != observation["subject"] or str(tenant) != activation["tenant_id"]:
@@ -34,8 +41,8 @@ def declaration(activation, observation):
     return subject, tenant
 
 
-def provision(engine, activation, observation):
-    subject, tenant = declaration(activation, observation)
+def provision(engine, activation, observation, *, synthetic=False):
+    subject, tenant = declaration(activation, observation, synthetic=synthetic)
     profile = identifier(GENERATION, "member", tenant, subject)
     with engine.begin() as db:
         require_test_owner(db)
@@ -120,13 +127,15 @@ def install_person(db, tenant, user, subject, email):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--synthetic", action="store_true")
     args = parser.parse_args()
-    if os.environ.get("USER_TEST_GITHUB_MEMBER_ENABLED") != "1":
+    activation_flag = "USER_TEST_NIGHTLY_MEMBER_ENABLED" if args.synthetic else "USER_TEST_GITHUB_MEMBER_ENABLED"
+    if os.environ.get(activation_flag) != "1":
         raise ValueError("Explicit TEST fixture deployment required")
     value = json.loads(args.input.read_bytes())
     engine = create_engine(os.environ["USER_FIXTURE_DATABASE_URL"])
     try:
-        print(json.dumps(provision(engine, value["activation"], value["broker"])))
+        print(json.dumps(provision(engine, value["activation"], value["broker"], synthetic=args.synthetic)))
     finally:
         engine.dispose()
 
@@ -135,4 +144,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        raise SystemExit("User-owned TEST GitHub member provisioning refused") from None
+        raise SystemExit("User-owned TEST broker member provisioning refused") from None
