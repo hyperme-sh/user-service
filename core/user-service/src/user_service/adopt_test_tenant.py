@@ -34,7 +34,7 @@ def adopt(engine, previous_bytes, candidate_bytes):
     return {"generation": generation, "tenant_id": str(tenant), "manifest_sha256": after}
 
 
-def _install(db, generation, before, after, tenant):
+def _install(db, generation, before, after, tenant, *, addition=S3RCH_TEST_TENANT):
     db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(current_schema(),0))"))
     installed = db.execute(text("""
         SELECT manifest_sha256 FROM authority_fixture_generation
@@ -42,14 +42,15 @@ def _install(db, generation, before, after, tenant):
     """), {"generation": generation}).scalar_one()
     if installed not in (before, after):
         raise ValueError("Installed generation differs from both manifests")
+    network = addition["network"]
     db.execute(text("""
-        SELECT set_config('app.current_network_id','s3r.ch',true),
+        SELECT set_config('app.current_network_id',:network,true),
                set_config('app.current_tenant_id',:tenant,true)
-    """), {"tenant": str(tenant)})
-    if db.scalar(text("SELECT id FROM authority_networks WHERE id='s3r.ch'")) != "s3r.ch":
-        raise ValueError("Configured s3r.ch network missing")
+    """), {"tenant": str(tenant), "network": network})
+    if db.scalar(text("SELECT id FROM authority_networks WHERE id=:network"), {"network": network}) != network:
+        raise ValueError("Configured TEST network missing")
     if installed == before:
-        insert_tenant(db, generation, S3RCH_TEST_TENANT, tenant)
+        insert_tenant(db, generation, addition, tenant)
         db.execute(text("""
             UPDATE authority_fixture_generation SET manifest_sha256=:after
             WHERE generation=:generation AND manifest_sha256=:before
@@ -58,8 +59,8 @@ def _install(db, generation, before, after, tenant):
         SELECT t.name,t.is_active,a.network_id FROM tenants t
         JOIN authority_tenants a ON a.tenant_id=t.id WHERE t.id=:tenant
     """), {"tenant": tenant}).one()
-    if tuple(observed) != ("s3r.ch TEST", True, "s3r.ch"):
-        raise ValueError("Installed s3r.ch tenant binding differs")
+    if tuple(observed) != (addition["name"], addition["active"], network):
+        raise ValueError("Installed TEST tenant binding differs")
 
 
 if __name__ == "__main__":
