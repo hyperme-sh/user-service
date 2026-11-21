@@ -149,7 +149,8 @@ def test_seed_is_fresh_only_and_cannot_repair_existing_roles(empty_authority_own
         assert db.scalar(text("SELECT count(*) FROM authority_fixture_generation")) == 1
 
 
-def test_github_owner_adopts_only_the_observed_roleless_member(empty_authority_owner, monkeypatch):
+@pytest.mark.parametrize("synthetic", [False, True])
+def test_owner_adopts_only_the_observed_roleless_member(empty_authority_owner, monkeypatch, synthetic):
     from user_service import startup_github_fixture as fixture
 
     engine = empty_authority_owner
@@ -163,20 +164,23 @@ def test_github_owner_adopts_only_the_observed_roleless_member(empty_authority_o
         "issuer": ISSUER, "provider": "github", "subject": subject, "email": "fixture@github.com",
         "upstream_subject": "1234", "enabled": True,
     }
+    if synthetic:
+        observed.update(provider="startup-nightly", upstream_subject=str(uuid.uuid4()),
+                        email="brokered-startup-nightly-linked-member@startup-nightly.invalid")
     with pytest.raises(ValueError, match="TEST User schema owner"):
-        fixture.provision(engine, activation, observed)
+        fixture.provision(engine, activation, observed, synthetic=synthetic)
     monkeypatch.setattr(fixture, "require_test_owner", lambda db: None)
-    with pytest.raises(ValueError, match="staged TEST GitHub"):
-        fixture.provision(engine, activation, dict(observed, provider="microsoft"))
+    with pytest.raises(ValueError, match="staged TEST"):
+        fixture.provision(engine, activation, dict(observed, provider="microsoft"), synthetic=synthetic)
     with pytest.raises(ValueError, match="generation differs"):
-        fixture.provision(engine, dict(activation, subjects_sha256="0" * 64), observed)
-    result = fixture.provision(engine, activation, observed)
+        fixture.provision(engine, dict(activation, subjects_sha256="0" * 64), observed, synthetic=synthetic)
+    result = fixture.provision(engine, activation, observed, synthetic=synthetic)
     assert result == {
         "person_id": subject,
         "member_id": str(identifier(MANIFEST["generation"], "member", tenants["active"], subject)),
         "status": "provisioned",
     }
-    assert fixture.provision(engine, activation, observed) == result
+    assert fixture.provision(engine, activation, observed, synthetic=synthetic) == result
     for tenant in (tenants["active"], tenants["isolation"]):
         with engine.begin() as db:
             fixture.scope(db, tenant)
@@ -185,7 +189,28 @@ def test_github_owner_adopts_only_the_observed_roleless_member(empty_authority_o
             """), {"subject": subject}).all()
             assert rows == ([(result["member_id"], None)] if tenant == tenants["active"] else [])
     with pytest.raises(ValueError, match="Existing TEST GitHub profile differs"):
-        fixture.provision(engine, activation, dict(observed, subject=str(uuid.uuid4())))
+        fixture.provision(engine, activation, dict(observed, subject=str(uuid.uuid4())), synthetic=synthetic)
+
+
+def test_synthetic_member_requires_its_own_provider_and_distinct_subject():
+    from user_service import startup_github_fixture as fixture
+
+    subject, upstream, tenant = (str(uuid.uuid4()) for _ in range(3))
+    activation = {"tenant_id": tenant, "manifest_sha256": "a" * 64, "subjects_sha256": "b" * 64}
+    observed = {
+        "issuer": ISSUER, "provider": "startup-nightly", "subject": subject,
+        "email": "brokered-startup-nightly-linked-member@startup-nightly.invalid",
+        "upstream_subject": upstream, "enabled": True,
+    }
+    assert fixture.declaration(activation, observed, synthetic=True) == (uuid.UUID(subject), uuid.UUID(tenant))
+    with pytest.raises(ValueError):
+        fixture.declaration(activation, observed)
+    for update in (
+        {"provider": "github"}, {"email": "unrelated@startup-nightly.invalid"},
+        {"upstream_subject": subject}, {"issuer": "https://auth.hyperme.sh/realms/controlplane"},
+    ):
+        with pytest.raises(ValueError):
+            fixture.declaration(activation, observed | update, synthetic=True)
 
 
 @pytest.mark.parametrize("boundary", ["issuer", "subject", "enabled", "inventory"])
