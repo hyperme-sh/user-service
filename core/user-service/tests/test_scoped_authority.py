@@ -749,6 +749,43 @@ async def test_startup_concurrent_creation_and_broker_replay(startup):
             {'key':'entra:'+config['binding']['entra']['tenant_id']+':'+config['binding']['entra']['object_id']}) == 1
 
 
+async def test_test_oidc_startup_extends_the_sealed_schema_and_pins_the_subject(startup, monkeypatch):
+    from user_service._startup_contract import binding_fingerprint
+    from user_service.startup_github_fixture import require_test_owner
+    from user_service.startup_identity import bind_broker, reconcile, StartupConflict
+    from user_service.startup_migrate import install
+
+    s, config = startup
+    with pytest.raises(ValueError, match='TEST User schema owner'):
+        with s.sync.connect() as db:
+            require_test_owner(db)
+    monkeypatch.setattr('user_service.startup_github_fixture.require_test_owner', lambda db: None)
+    install(s.sync, synthetic=True)
+    install(s.sync)
+    install(s.sync, synthetic=True)
+
+    upstream, canonical = str(uuid.uuid4()), str(uuid.uuid4())
+    config['binding'].pop('entra')
+    config['binding'].update(version=2, oidc={
+        'issuer': 'https://auth.test.hyperme.sh/realms/startup-nightly', 'broker': 'startup-nightly',
+        'subject': upstream, 'broker_subject': canonical,
+    }, keycloak_admin={'realm': 'controlplane', 'enabled': False})
+    config['binding_sha256'] = binding_fingerprint(config['binding'])
+    config['owner'].update(profile={'email': 'owner@startup-nightly.invalid'},
+                           broker={'issuer': 'https://auth.test.hyperme.sh/realms/controlplane',
+                                   'audience': 'startup-client'})
+    async with s.maker() as db, db.begin():
+        result = await reconcile(db, config)
+        assert result['person_id'] == canonical
+        with pytest.raises(StartupConflict, match='Broker subject conflicts'):
+            await bind_broker(db, config, upstream)
+        assert (await bind_broker(db, config, canonical))['broker_subject'] == canonical
+    async with s.maker() as db, db.begin(), scope(db, s.tenant):
+        row = (await db.execute(text("""SELECT entra_tenant_id,entra_account_id,oidc_upstream_subject
+            FROM startup_identity_bindings WHERE tenant_id=:tenant"""), {'tenant': s.tenant})).one()
+        assert tuple(row) == (None, None, uuid.UUID(upstream))
+
+
 async def test_startup_rollback_then_retry_and_no_email_takeover(startup):
     from user_service.startup_identity import reconcile, StartupConflict
     s, config = startup

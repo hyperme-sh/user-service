@@ -10,7 +10,10 @@ class StartupConflict(ValueError):
 
 
 def external_key(config):
-    return 'entra:' + config['binding']['entra']['tenant_id'] + ':' + config['binding']['entra']['object_id']
+    binding = config['binding']
+    if 'oidc' in binding:
+        return 'oidc:startup-nightly:' + binding['oidc']['subject']
+    return 'entra:' + binding['entra']['tenant_id'] + ':' + binding['entra']['object_id']
 
 
 def person_plan(config, binding, people):
@@ -26,6 +29,10 @@ def person_plan(config, binding, people):
         if (person['sso_provider_id'] != external_key(config) or not person['is_active'] or person['deleted_at'] is not None or
                 person['email'].lower() != config['owner']['profile']['email'].lower()):
             raise StartupConflict('Person ' + str(person['id']) + ' conflicts with configured external_binding')
+        oidc = config['binding'].get('oidc')
+        if oidc is not None and (str(person['id']) != oidc['broker_subject']
+                                 or person.get('keycloak_sub') not in (None, oidc['broker_subject'])):
+            raise StartupConflict('Person differs from the synthetic broker subject')
         if binding and str(binding['user_id']) != str(person['id']):
             raise StartupConflict('Configured person differs from stored mapping')
     elif binding:
@@ -60,8 +67,9 @@ async def reconcile(db, config):
     people = (await db.execute(text('''SELECT id,email,sso_provider_id,is_active,deleted_at,keycloak_sub
         FROM users WHERE tenant_id=:tenant AND (lower(email)=:email OR sso_provider_id=:external) FOR UPDATE'''), params)).mappings().all()
     person = person_plan(config, binding, people)
+    oidc = config['binding'].get('oidc')
     if person is None:
-        params['user'] = uuid.uuid4()
+        params['user'] = uuid.UUID(oidc['broker_subject']) if oidc else uuid.uuid4()
         await db.execute(text('''INSERT INTO users (id,tenant_id,first_name,last_name,email,gender,is_active,sso_provider_id)
             VALUES (:user,:tenant,'Configured','Operator',:email,'unspecified',true,:external)'''), params)
         subject = None
@@ -69,11 +77,20 @@ async def reconcile(db, config):
         params['user'] = person['id']
         subject = person['keycloak_sub']
     if binding is None:
-        await db.execute(text('''INSERT INTO startup_identity_bindings
-            (tenant_id,user_id,entra_tenant_id,entra_account_id,mapping_sha256,sea_public_key,broker_subject)
-            VALUES (:tenant,:user,:entra_tenant,:entra_account,:mapping,:sea,:subject)'''),
-            {**params, 'entra_tenant':uuid.UUID(config['binding']['entra']['tenant_id']), 'entra_account':uuid.UUID(config['binding']['entra']['object_id']),
-             'mapping':fingerprint(config), 'sea':config['binding']['sea_public_key'], 'subject':subject})
+        values = {**params, 'mapping': fingerprint(config), 'sea': config['binding']['sea_public_key'],
+                  'subject': subject}
+        if oidc:
+            await db.execute(text("""INSERT INTO startup_identity_bindings
+                (tenant_id,user_id,oidc_upstream_subject,mapping_sha256,sea_public_key,broker_subject)
+                VALUES (:tenant,:user,:upstream,:mapping,:sea,:subject)"""),
+                {**values, 'upstream': uuid.UUID(oidc['subject'])})
+        else:
+            entra = config['binding']['entra']
+            await db.execute(text("""INSERT INTO startup_identity_bindings
+                (tenant_id,user_id,entra_tenant_id,entra_account_id,mapping_sha256,sea_public_key,broker_subject)
+                VALUES (:tenant,:user,:entra_tenant,:entra_account,:mapping,:sea,:subject)"""),
+                {**values, 'entra_tenant': uuid.UUID(entra['tenant_id']),
+                 'entra_account': uuid.UUID(entra['object_id'])})
     elif binding['broker_subject'] != subject:
         raise StartupConflict('Stored broker subject differs from person')
     organizations = []
