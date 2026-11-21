@@ -33,6 +33,36 @@ def test_plan_refuses_any_account_grant_or_tenant_drift():
         with pytest.raises(ValueError):m.plan(DATA,json.dumps(candidate).encode())
 
 
+def test_synthetic_startup_tenant_uses_the_existing_journal_and_preserves_both_predecessors(empty_authority_owner):
+    service_owner = empty_authority_owner
+    bootstrap(service_owner)
+    apply(service_owner)
+    previous = json.loads(DESIRED)
+    active = next(tenant for tenant in previous["tenants"] if tenant["key"] == "active")
+    synthetic = {
+        "key": "startup-nightly", "id": str(uuid.uuid5(uuid.UUID(active["id"]), "startup-nightly-tenant")),
+        "network": "hyperme.sh", "name": "Startup Nightly TEST", "active": True,
+    }
+    desired = {**previous, "tenants": [*previous["tenants"], synthetic]}
+    encoded = json.dumps(desired).encode()
+    assert m.plan(DESIRED, encoded)["addition"] == synthetic
+    with pytest.raises(ValueError):
+        m.plan(DESIRED, json.dumps({**previous, "tenants": [*previous["tenants"], {**synthetic, "id": active["id"]}]}).encode())
+    operation = str(uuid.uuid5(uuid.NAMESPACE_URL, "synthetic-startup-tenant-contract"))
+    args = {"operation_id": operation, "source_sha": SOURCE}
+    with service_owner.begin() as db:
+        predecessor = m.protected(db, previous)
+    result = m.transition(service_owner, DESIRED, encoded, **args)
+    assert m.transition(service_owner, DESIRED, encoded, **args) == result
+    assert result["protected_sha256"] == predecessor
+    with service_owner.begin() as db:
+        m.topology(db, desired)
+        assert m.protected(db, previous) == predecessor
+    assert m.transition(service_owner, DESIRED, encoded, action="rollback", **args)["state"] == "rolled-back"
+    with service_owner.begin() as db:
+        m.topology(db, previous)
+
+
 def test_atomic_extension_and_post_commit_retry_are_noop(empty_authority_owner):
     owner=empty_authority_owner;bootstrap(owner);before=generation(owner)
     with owner.begin() as db:fingerprint=m.protected(db,MANIFEST)

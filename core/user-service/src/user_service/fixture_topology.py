@@ -22,13 +22,27 @@ def plan(previous, desired):
     before, after = json.loads(previous), json.loads(desired)
     if (before.get("schema_version") != 1 or before.get("environment") != "test"
             or before.get("generation") != "test-reset-v1"
-            or {k:v for k,v in before.items() if k != "tenants"} != {k:v for k,v in after.items() if k != "tenants"}
-            or len(before["tenants"]) != 2 or {t["key"] for t in before["tenants"]} != {"active", "isolation"}
-            or len(after["tenants"]) != 3
-            or sorted(after["tenants"], key=lambda t:t["key"]) != sorted([*before["tenants"], ADDITION], key=lambda t:t["key"])):
-        raise ValueError("Only the declared s3r.ch tenant addition is supported")
+            or {k: v for k, v in before.items() if k != "tenants"} != {k: v for k, v in after.items() if k != "tenants"}):
+        raise ValueError("Only a declared additive TEST topology is supported")
+    tenants = {tenant["key"]: tenant for tenant in before["tenants"]}
+    if len(tenants) == len(before["tenants"]) == 2 and set(tenants) == {"active", "isolation"}:
+        addition = ADDITION
+    elif len(tenants) == len(before["tenants"]) == 3 and set(tenants) == {"active", "isolation", "s3rch"}:
+        serving = tenants["active"]
+        if tenants["s3rch"] != ADDITION or not serving["active"] or serving["network"] != "hyperme.sh":
+            raise ValueError("Established TEST owner topology differs")
+        addition = {
+            "key": "startup-nightly", "network": "hyperme.sh", "name": "Startup Nightly TEST", "active": True,
+            "id": str(uuid.uuid5(uuid.UUID(serving["id"]), "startup-nightly-tenant")),
+        }
+    else:
+        raise ValueError("Unsupported predecessor TEST topology")
+    if (addition["id"] in {tenant["id"] for tenant in tenants.values()}
+            or sorted(after["tenants"], key=lambda row: row["key"])
+            != sorted([*before["tenants"], addition], key=lambda row: row["key"])):
+        raise ValueError("Only the exact declared TEST tenant addition is supported")
     return {"generation": before["generation"], "predecessor_sha256": sha(previous),
-            "successor_sha256": sha(desired), "addition": ADDITION}
+            "successor_sha256": sha(desired), "addition": addition}
 
 
 def scope(db, tenant=None, network=None):
@@ -64,20 +78,21 @@ def protected(db, manifest):
     return sha(json.dumps(sorted(values),separators=(",",":")).encode())
 
 
-def inserted_metadata(db):
+def inserted_metadata(db, tenant):
     """All columns, including defaults/timestamps; rollback cannot erase edits."""
-    scope(db, ADDITION["id"])
+    scope(db, tenant)
     result = {}
     for table, key in (("tenants", "id"), ("authority_tenants", "tenant_id"),
                        ("roles", "tenant_id"), ("groups", "tenant_id"), ("service_tenants", "tenant_id")):
         rows = db.execute(text(f"SELECT row_to_json(t)::text FROM {table} t WHERE {key}=:id"),
-                          {"id": uuid.UUID(ADDITION["id"])}).scalars().all()
+                          {"id": tenant}).scalars().all()
         result[table] = sorted((json.loads(row) for row in rows), key=lambda row: json.dumps(row, sort_keys=True))
     return sha(json.dumps(result,sort_keys=True,separators=(",", ":")).encode())
 
 
 def transition(engine, previous, desired, *, operation_id, source_sha, action="apply"):
     proposal = plan(previous, desired)
+    tenant = uuid.UUID(proposal["addition"]["id"])
     operation_id = str(uuid.UUID(operation_id))
     if re.fullmatch("[a-f0-9]{40}", source_sha) is None or action not in ("apply", "rollback"):
         raise ValueError("Exact owner source and supported action required")
@@ -120,15 +135,15 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 raise ValueError("Expected predecessor generation; no reseed or repair")
             topology(db, before)
             fingerprint = protected(db, before)
-            if db.scalar(text("SELECT EXISTS(SELECT 1 FROM service_tenants WHERE tenant_id=:id)"),{"id":uuid.UUID(ADDITION["id"])}):
+            if db.scalar(text("SELECT EXISTS(SELECT 1 FROM service_tenants WHERE tenant_id=:id)"),{"id":tenant}):
                 raise ValueError("Undeclared tenant already has owner state")
-            _install(db, proposal["generation"], sha(previous), sha(desired), uuid.UUID(ADDITION["id"]))
+            _install(db, proposal["generation"], sha(previous), sha(desired), tenant, addition=proposal["addition"])
             topology(db, after)
             if protected(db, before) != fingerprint:
                 raise ValueError("Existing identities or grants changed")
             receipt = {**proposal,"operation_id":operation_id,"source_sha":source_sha,
                        "predecessor_source_sha":generation["source_sha"],"subjects_sha256":generation["subjects_sha256"],
-                       "protected_sha256":fingerprint,"inserted_metadata_sha256":inserted_metadata(db),"state":"applied","runtime_accepted":False}
+                       "protected_sha256":fingerprint,"inserted_metadata_sha256":inserted_metadata(db, tenant),"state":"applied","runtime_accepted":False}
             db.execute(text("INSERT INTO authority_fixture_transitions VALUES(:id,:before,:after,:source,'applied',CAST(:receipt AS jsonb))"),
                        {"id":operation_id,"before":sha(previous),"after":sha(desired),"source":source_sha,"receipt":json.dumps(receipt)})
             target_sha, target_source = sha(desired), generation["source_sha"]
@@ -136,7 +151,7 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
             if not journal or journal["state"] != "applied" or generation["manifest_sha256"] != sha(desired) or generation["source_sha"] != journal["receipt"]["predecessor_source_sha"]:
                 raise ValueError("Exact applied transition required for rollback")
             topology(db, after)
-            scope(db, ADDITION["id"])
+            scope(db, tenant)
             # Refuse once any owner table has tenant data. Never erase new business
             # state to make a rollback succeed, including tables added later.
             inspector = inspect(db)
@@ -149,15 +164,15 @@ def transition(engine, previous, desired, *, operation_id, source_sha, action="a
                 db.execute(text(f"LOCK TABLE {quote(table)} IN SHARE ROW EXCLUSIVE MODE"))
             for table in tables:
                 if table in ("tenants", "authority_tenants", "roles", "groups", "service_tenants"):continue
-                if db.scalar(text(f"SELECT EXISTS(SELECT 1 FROM {quote(table)} WHERE tenant_id=:id)"),{"id":uuid.UUID(ADDITION["id"])}):
+                if db.scalar(text(f"SELECT EXISTS(SELECT 1 FROM {quote(table)} WHERE tenant_id=:id)"),{"id":tenant}):
                     raise ValueError("New tenant is in use; rollback refused: "+table)
-            if inserted_metadata(db) != journal["receipt"].get("inserted_metadata_sha256"):
+            if inserted_metadata(db, tenant) != journal["receipt"].get("inserted_metadata_sha256"):
                 raise ValueError("New tenant metadata changed; rollback refused")
-            db.execute(text("DELETE FROM groups WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
-            db.execute(text("DELETE FROM roles WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
-            db.execute(text("DELETE FROM authority_tenants WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
-            db.execute(text("DELETE FROM service_tenants WHERE tenant_id=:id"),{"id":uuid.UUID(ADDITION["id"])})
-            db.execute(text("DELETE FROM tenants WHERE id=:id"),{"id":uuid.UUID(ADDITION["id"])})
+            db.execute(text("DELETE FROM groups WHERE tenant_id=:id"),{"id":tenant})
+            db.execute(text("DELETE FROM roles WHERE tenant_id=:id"),{"id":tenant})
+            db.execute(text("DELETE FROM authority_tenants WHERE tenant_id=:id"),{"id":tenant})
+            db.execute(text("DELETE FROM service_tenants WHERE tenant_id=:id"),{"id":tenant})
+            db.execute(text("DELETE FROM tenants WHERE id=:id"),{"id":tenant})
             topology(db, before)
             receipt = {**journal["receipt"],"state":"rolled-back"}
             db.execute(text("UPDATE authority_fixture_transitions SET state='rolled-back',receipt=CAST(:receipt AS jsonb) WHERE operation_id=:id"),{"id":operation_id,"receipt":json.dumps(receipt)})
