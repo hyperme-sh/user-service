@@ -60,11 +60,23 @@ jobs:
           ' "$runtime" >/dev/null
           echo "digest=$(jq -er .digest "$runtime")" >> "$GITHUB_OUTPUT"
 
-      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign in to Azure with the environment's federated identity
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${AZURE_CLIENT_ID:?}" "${AZURE_TENANT_ID:?}" "${AZURE_SUBSCRIPTION_ID:?}"
+          token=$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api%3A%2F%2FAzureADTokenExchange" | jq -er '.value | strings | select(length > 0)')
+          printf '::add-mask::%s\n' "$token"
+          az login --service-principal --username "$AZURE_CLIENT_ID" --tenant "$AZURE_TENANT_ID" \
+            --federated-token "$token" --output none
+          unset token
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 
       - name: Copy the qualified image without rebuilding and protect the tag
         env:
