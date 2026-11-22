@@ -68,7 +68,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          : "\${AZURE_CLIENT_ID:?}" "\${AZURE_TENANT_ID:?}" "\${AZURE_SUBSCRIPTION_ID:?}"
+          : "${AZURE_CLIENT_ID:?}" "${AZURE_TENANT_ID:?}" "${AZURE_SUBSCRIPTION_ID:?}"
           token=$(curl --fail --silent --show-error \
             --header "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api%3A%2F%2FAzureADTokenExchange" | jq -er '.value | strings | select(length > 0)')
