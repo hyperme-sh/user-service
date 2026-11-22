@@ -71,3 +71,36 @@ class ScopeConfigurationTests(unittest.IsolatedAsyncioTestCase):
         config['binding']['organizations']['fyberlabs']['tenant_id']='00000000-0000-4000-8000-000000009999'
         config['binding_sha256']=binding_fingerprint(config['binding'])
         with self.assertRaises(StartupConflict):await prepare_scope(None,config)
+
+    async def test_first_fyberlabs_owner_gets_only_its_matching_host_binding(self):
+        from unittest.mock import AsyncMock, MagicMock
+        from uuid import UUID
+
+        from user_service._startup_contract import binding_fingerprint
+        from user_service.startup_identity import reconcile
+
+        config = json.loads((Path(__file__).parent / 'startup-identity.json').read_text())
+        binding = config['binding']
+        owner = binding['organizations']['fyberlabs']
+        binding['organizations'] = {'fyberlabs': {**owner, 'roles': ['owner']}}
+        binding['platform_admin'] = {'spanopticon': False, 'hyperme.sh': False}
+        binding['keycloak_admin'] = {'realm': 'controlplane', 'enabled': False}
+        config['owner']['broker'] = {'issuer': 'https://auth.hyperme.sh/realms/controlplane',
+                                     'audience': 'controlplane-frontend'}
+        config['owner']['network_id'] = 'hyperme.sh'
+        config['binding_sha256'] = binding_fingerprint(binding)
+        tenant = UUID(config['owner']['tenant_id'])
+        db = MagicMock()
+        db.execute = AsyncMock()
+        db.execute.return_value = MagicMock()
+        db.execute.return_value.mappings.return_value.all.return_value = []
+        db.scalar = AsyncMock(return_value=None)
+        with patch('user_service.startup_identity.prepare_scope', return_value=tenant), \
+                patch('user_service.startup_identity.one', side_effect=[None, None, None]):
+            result = await reconcile(db, config)
+        inserts = [call.args for call in db.execute.await_args_list
+                   if 'INSERT INTO authority_host_owners' in str(call.args[0])]
+        self.assertEqual(len(inserts), 1)
+        self.assertEqual(str(inserts[0][1]['org']), owner['organization_id'])
+        self.assertEqual(str(inserts[0][1]['user']), result['person_id'])
+        self.assertEqual([org['slug'] for org in result['organizations']], ['fyberlabs'])

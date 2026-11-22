@@ -96,9 +96,9 @@ async def lookup(body: Query, request: Request, response: Response):
                     host=await get_active_tenant_role_member(session,body.tenant_id,keycloak_sub=body.subject,role='host')
                     from user_service.authority_routes import enabled
                     if enabled():
-                        from user_service.scoped_authority import identity_active,active_tenant
+                        from user_service.scoped_authority import actor_active
                         from user_service.identity_host_setup import authorize_host_setup
-                        if not await identity_active(session,body.subject) or not await active_tenant(session,body.tenant_id):
+                        if not await actor_active(session,body.tenant_id,body.subject):
                             return result
                         host=await authorize_host_setup(body.subject,body.tenant_id,session)
                     result.member=Member(id=row.id,email=row.email or '',is_active=bool(row.is_active),

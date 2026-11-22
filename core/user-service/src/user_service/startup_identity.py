@@ -118,6 +118,16 @@ async def reconcile(db, config):
                 FROM organization_memberships m WHERE m.tenant_id=:tenant AND m.organization_id=:org AND m.user_id=:user''', params)
             if not member or member['role'] != params['role'] or not member['enabled'] or member['owner'] != ('owner' in roles):
                 raise StartupConflict('Startup membership differs from configured owner/admin grants')
+        if set(config['binding']['organizations']) == {'fyberlabs'}:
+            host_owner = await one(db, '''SELECT organization_id FROM authority_host_owners
+                WHERE tenant_id=:tenant AND user_id=:user FOR UPDATE''', params)
+            if host_owner and host_owner['organization_id'] != params['org']:
+                raise StartupConflict('Configured FyberLabs host organization conflicts')
+            if host_owner is None:
+                if binding is not None:
+                    raise StartupConflict('Stored FyberLabs host organization is missing')
+                await db.execute(text('''INSERT INTO authority_host_owners (tenant_id,organization_id,user_id)
+                    VALUES (:tenant,:org,:user)'''), params)
         organizations.append({'slug':slug, 'id':str(params['org']), 'tenant_id':str(tenant), 'roles':roles})
     return {'schema_version':1, 'mapping_sha256':fingerprint(config), 'person_id':str(params['user']),
             'tenant_id':str(tenant), 'network_id':config['owner']['network_id'], 'organizations':organizations,
