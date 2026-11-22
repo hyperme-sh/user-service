@@ -112,11 +112,11 @@ def install_person(db, tenant, user, subject, email, *, fixture_name="GitHub"):
     """), params).all()
     if rows:
         if len(rows) != 1:
-            raise ValueError("Conflicting TEST profile")
+            raise ValueError(f"Conflicting TEST {fixture_name} profile")
         row = rows[0]
         if (row.keycloak_sub != str(subject) or row.email.lower() != email or not row.is_active
                 or row.deleted_at or row.role_id or row.password or row.sso_provider_id != ISSUER):
-            raise ValueError("Existing TEST profile differs")
+            raise ValueError(f"Existing TEST {fixture_name} profile differs")
         return row.id
     return db.scalar(text("""
         INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,sso_provider_id)
