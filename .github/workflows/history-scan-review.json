@@ -1278,5 +1278,117 @@
     "classification": "Ed25519PrivateKey type annotation with no assigned value",
     "source_object": "3a27b291c936385f922db75e5201bf78a6263b3e",
     "source_path": "api/infrastructure/security/media_allocation_settings.py"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 14,
+    "end": 14,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 15,
+    "end": 15,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 16,
+    "end": 16,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 51,
+    "end": 51,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 75,
+    "end": 75,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 78,
+    "end": 78,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "65c3d523c2398ef94525008f93e2c93d98c52ae0.txt",
+    "sha256": "6d941b2791ca7692dc6f947234d57facc16893d71a45f4c5be99cfc08606277a",
+    "rule": "generic-api-key",
+    "start": 82,
+    "end": 82,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 14,
+    "end": 14,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 15,
+    "end": 15,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 16,
+    "end": 16,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 51,
+    "end": 51,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 75,
+    "end": 75,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 78,
+    "end": 78,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "fe67d81bf94f11868e7add94aa7a9dd5bbe71fdd.txt",
+    "sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+    "rule": "generic-api-key",
+    "start": 83,
+    "end": 83,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
   }
 ]
