@@ -21,6 +21,7 @@ NETWORK = "s3r.ch"
 TENANT = UUID("afee9b29-1706-5590-bbbf-e58df8945ac0")
 ORG = UUID("1a875746-2c03-5675-aa71-ac9130dbd7f8")
 SUBJECT = UUID("7595d138-db52-51ba-93de-2bf919e3d337")
+ACCOUNT = "s3rch-forum-host-owner"
 EMAIL = "s3rch-forum-host-owner@test.s3r.ch"
 
 
@@ -42,7 +43,7 @@ def provision(engine, activation, observed):
     validate(activation, observed)
     profile = identifier(GENERATION, "member", TENANT, SUBJECT)
     group = identifier(GENERATION, "group", TENANT, "host")
-    args = {"tenant": TENANT, "org": ORG, "network": NETWORK, "subject": SUBJECT,
+    args = {"tenant": TENANT, "org": ORG, "network": NETWORK, "subject": SUBJECT, "account": ACCOUNT,
             "profile": profile, "group": group,
             "membership": identifier(GENERATION, "group-member", TENANT, profile, "host")}
     with engine.begin() as db:
@@ -72,6 +73,18 @@ def provision(engine, activation, observed):
         if (install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Forum Host") != SUBJECT
                 or install_person(db, TENANT, profile, SUBJECT, EMAIL, fixture_name="Forum Host") != profile):
             raise ValueError("Unexpected existing TEST owner profile")
+        scope(db, network=NETWORK)
+        declared = db.execute(text("""
+            SELECT user_id,account_key,tenant_context FROM authority_fixture_accounts
+             WHERE user_id=:subject OR account_key=:account FOR UPDATE
+        """), args).one_or_none()
+        if declared is None:
+            db.execute(text("""
+                INSERT INTO authority_fixture_accounts(user_id,account_key,network_id,tenant_context)
+                VALUES(:subject,:account,:network,:tenant)
+            """), args)
+        elif tuple(declared) != (SUBJECT, ACCOUNT, TENANT):
+            raise ValueError("Existing TEST subject declaration differs")
         scope(db, TENANT)
         if db.scalar(text("""
             SELECT EXISTS(SELECT 1 FROM operator_bans WHERE tenant_id=:tenant AND subject_kind='user'
