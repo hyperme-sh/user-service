@@ -99,9 +99,10 @@ def require_test_owner(db):
         raise ValueError("Nonprivileged TEST User schema owner required")
 
 
-def install_person(db, tenant, user, subject, email):
+def install_person(db, tenant, user, subject, email, *, fixture_name="GitHub"):
     scope(db, tenant)
-    params = {"tenant": tenant, "user": user, "subject": str(subject), "email": email, "issuer": ISSUER}
+    params = {"tenant": tenant, "user": user, "subject": str(subject), "email": email,
+              "issuer": ISSUER, "fixture_name": fixture_name}
     rows = db.execute(text("""
         SELECT id,keycloak_sub,email,is_active,deleted_at,role_id,password,sso_provider_id
           FROM users
@@ -111,15 +112,15 @@ def install_person(db, tenant, user, subject, email):
     """), params).all()
     if rows:
         if len(rows) != 1:
-            raise ValueError("Conflicting TEST GitHub profile")
+            raise ValueError("Conflicting TEST profile")
         row = rows[0]
         if (row.keycloak_sub != str(subject) or row.email.lower() != email or not row.is_active
                 or row.deleted_at or row.role_id or row.password or row.sso_provider_id != ISSUER):
-            raise ValueError("Existing TEST GitHub profile differs")
+            raise ValueError("Existing TEST profile differs")
         return row.id
     return db.scalar(text("""
         INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,sso_provider_id)
-        VALUES(:user,:tenant,:subject,:email,'TEST','GitHub','unspecified',true,:issuer)
+        VALUES(:user,:tenant,:subject,:email,'TEST',:fixture_name,'unspecified',true,:issuer)
         RETURNING id
     """), params)
 
