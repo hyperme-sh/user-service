@@ -30,3 +30,9 @@ def test_refuses_other_org_or_unsealed_configuration():
     for change in ({"organization": str(TENANT)}, {"manifest_sha256": "missing"}):
         with pytest.raises(ValueError):
             validate(ACTIVATION | change, OBSERVATION)
+
+
+def test_disabling_requires_the_same_actually_disabled_provider_identity():
+    validate(ACTIVATION, OBSERVATION | {"enabled": False}, enabled=False)
+    with pytest.raises(ValueError):
+        validate(ACTIVATION, OBSERVATION, enabled=False)

@@ -99,7 +99,7 @@ def require_test_owner(db):
         raise ValueError("Nonprivileged TEST User schema owner required")
 
 
-def install_person(db, tenant, user, subject, email, *, fixture_name="GitHub"):
+def install_person(db, tenant, user, subject, email, *, fixture_name="GitHub", create=True):
     scope(db, tenant)
     params = {"tenant": tenant, "user": user, "subject": str(subject), "email": email,
               "issuer": ISSUER, "fixture_name": fixture_name}
@@ -118,6 +118,8 @@ def install_person(db, tenant, user, subject, email, *, fixture_name="GitHub"):
                 or row.deleted_at or row.role_id or row.password or row.sso_provider_id != ISSUER):
             raise ValueError(f"Existing TEST {fixture_name} profile differs")
         return row.id
+    if not create:
+        return None
     return db.scalar(text("""
         INSERT INTO users(id,tenant_id,keycloak_sub,email,first_name,last_name,gender,is_active,sso_provider_id)
         VALUES(:user,:tenant,:subject,:email,'TEST',:fixture_name,'unspecified',true,:issuer)

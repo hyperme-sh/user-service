@@ -25,7 +25,7 @@ ACCOUNT = "s3rch-forum-host-owner"
 EMAIL = "s3rch-forum-host-owner@test.s3r.ch"
 
 
-def validate(activation, observed):
+def validate(activation, observed, *, enabled=True):
     fields = {"manifest_sha256", "subjects_sha256", "tenant", "organization"}
     if (
         set(activation) != fields
@@ -33,14 +33,14 @@ def validate(activation, observed):
         or any(not re.fullmatch(r"[a-f0-9]{64}", activation[key])
                for key in ("manifest_sha256", "subjects_sha256"))
         or observed != {"issuer": ISSUER, "subject": str(SUBJECT), "email": EMAIL,
-                        "tenant": str(TENANT), "enabled": True}
-        or observed["enabled"] is not True
+                        "tenant": str(TENANT), "enabled": enabled}
+        or observed["enabled"] is not enabled
     ):
         raise ValueError("Canonical s3r.ch TEST host owner observation required")
 
 
-def provision(engine, activation, observed):
-    validate(activation, observed)
+def provision(engine, activation, observed, *, enabled=True):
+    validate(activation, observed, enabled=enabled)
     profile = identifier(GENERATION, "member", TENANT, SUBJECT)
     group = identifier(GENERATION, "group", TENANT, "host")
     args = {"tenant": TENANT, "org": ORG, "network": NETWORK, "subject": SUBJECT, "account": ACCOUNT,
@@ -70,23 +70,26 @@ def provision(engine, activation, observed):
                    args).scalar_one()
         if db.scalar(text("SELECT EXISTS(SELECT 1 FROM authority_network_admins WHERE user_id=:subject)"), args):
             raise ValueError("Conflicting TEST network authority")
-        if (install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Forum Host") != SUBJECT
-                or install_person(db, TENANT, profile, SUBJECT, EMAIL, fixture_name="Forum Host") != profile):
+        person = install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Forum Host", create=enabled)
+        member = install_person(db, TENANT, profile, SUBJECT, EMAIL, fixture_name="Forum Host", create=enabled)
+        if not enabled and person is None and member is None:
+            return result("disabled", profile)
+        if (person, member) != (SUBJECT, profile):
             raise ValueError("Unexpected existing TEST owner profile")
         scope(db, network=NETWORK)
         declared = db.execute(text("""
             SELECT user_id,account_key,tenant_context FROM authority_fixture_accounts
              WHERE user_id=:subject OR account_key=:account FOR UPDATE
         """), args).one_or_none()
-        if declared is None:
+        if declared is None and enabled:
             db.execute(text("""
                 INSERT INTO authority_fixture_accounts(user_id,account_key,network_id,tenant_context)
                 VALUES(:subject,:account,:network,:tenant)
             """), args)
-        elif tuple(declared) != (SUBJECT, ACCOUNT, TENANT):
+        elif declared is None or tuple(declared) != (SUBJECT, ACCOUNT, TENANT):
             raise ValueError("Existing TEST subject declaration differs")
         scope(db, TENANT)
-        if db.scalar(text("""
+        if enabled and db.scalar(text("""
             SELECT EXISTS(SELECT 1 FROM operator_bans WHERE tenant_id=:tenant AND subject_kind='user'
                           AND subject_id IN (:subject,:profile) AND lifted_at IS NULL)
         """), args):
@@ -102,11 +105,29 @@ def provision(engine, activation, observed):
             SELECT organization_id FROM authority_host_owners WHERE tenant_id=:tenant AND user_id=:profile FOR UPDATE
         """), args).scalar_one_or_none()
         if reserved is not None:
-            if reserved != ORG or memberships != [(ORG, "member", False, True)] or groups != [(args["membership"], group)]:
+            if (reserved != ORG or len(memberships) != 1 or tuple(memberships[0])[:3] != (ORG, "member", False)
+                    or groups not in ([], [(args["membership"], group)])):
                 raise ValueError("Existing TEST Host owner grants differ")
+            db.execute(text("""
+                UPDATE organization_memberships SET enabled=:enabled
+                WHERE tenant_id=:tenant AND organization_id=:org AND user_id=:profile
+                  AND enabled IS DISTINCT FROM :enabled
+            """), args | {"enabled": enabled})
+            if enabled and not groups:
+                db.execute(text("""
+                    INSERT INTO user_group_memberships(id,tenant_id,user_id,group_id)
+                    VALUES(:membership,:tenant,:profile,:group)
+                """), args)
+            if not enabled and groups:
+                db.execute(text("""
+                    DELETE FROM user_group_memberships WHERE id=:membership AND tenant_id=:tenant
+                      AND user_id=:profile AND group_id=:group
+                """), args)
         else:
             if memberships or groups:
                 raise ValueError("Existing TEST profile already has separate grants")
+            if not enabled:
+                return result("disabled", profile)
             db.execute(text("""
                 INSERT INTO organization_memberships(tenant_id,organization_id,user_id,role,can_purchase_leases,enabled)
                 VALUES(:tenant,:org,:profile,'member',false,true)
@@ -119,18 +140,23 @@ def provision(engine, activation, observed):
                 INSERT INTO authority_host_owners(tenant_id,organization_id,user_id)
                 VALUES(:tenant,:org,:profile)
             """), args)
-    return {"state": "existing" if reserved else "provisioned", "tenant": str(TENANT),
+    return result(("existing" if reserved else "provisioned") if enabled else "disabled", profile)
+
+
+def result(state, profile):
+    return {"state": state, "tenant": str(TENANT),
             "organization": str(ORG), "user_id": str(profile), "subject": str(SUBJECT)}
 
 
 if __name__ == "__main__":
     try:
         payload = json.loads(sys.stdin.buffer.read(4097))
-        if set(payload) != {"activation", "observation"} or os.environ.get("USER_TEST_FORUM_HOST_OWNER_ENABLED") != "1":
+        if (set(payload) != {"activation", "observation", "enabled"} or type(payload["enabled"]) is not bool
+                or os.environ.get("USER_TEST_FORUM_HOST_OWNER_ENABLED") != "1"):
             raise ValueError("Explicit TEST owner inputs required")
         engine = create_engine(os.environ["USER_FIXTURE_DATABASE_URL"])
         try:
-            print(json.dumps(provision(engine, payload["activation"], payload["observation"])))
+            print(json.dumps(provision(engine, payload["activation"], payload["observation"], enabled=payload["enabled"])))
         finally:
             engine.dispose()
     except Exception:
