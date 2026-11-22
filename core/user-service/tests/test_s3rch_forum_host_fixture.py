@@ -1,6 +1,10 @@
+from unittest.mock import Mock
+
 import pytest
 
-from user_service.s3rch_forum_host_fixture import EMAIL, ISSUER, ORG, SUBJECT, TENANT, validate
+from user_service.s3rch_forum_host_fixture import (
+    EMAIL, ISSUER, ORG, ORG_NAME, SUBJECT, TENANT, ensure_organization, validate,
+)
 
 
 ACTIVATION = {"manifest_sha256": "a" * 64, "subjects_sha256": "b" * 64,
@@ -36,3 +40,17 @@ def test_disabling_requires_the_same_actually_disabled_provider_identity():
     validate(ACTIVATION, OBSERVATION | {"enabled": False}, enabled=False)
     with pytest.raises(ValueError):
         validate(ACTIVATION, OBSERVATION, enabled=False)
+
+
+@pytest.mark.parametrize("existing,enabled,creates", [
+    (None, True, True), (ORG, True, False), (None, False, False), (ORG, False, False),
+])
+def test_primary_organization_is_added_only_when_enabling_a_missing_fixture(existing, enabled, creates):
+    db = Mock()
+    db.execute.return_value.scalar_one_or_none.return_value = existing
+    ensure_organization(db, enabled=enabled)
+    assert db.execute.call_count == 1 + creates
+    if creates:
+        query, values = db.execute.call_args.args
+        assert "INSERT INTO organizations" in str(query)
+        assert values == {"tenant": TENANT, "org": ORG, "name": ORG_NAME}
