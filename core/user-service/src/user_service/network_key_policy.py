@@ -13,9 +13,18 @@ _MEDIA_PROFILE = frozenset({'storage:objects:read', 'storage:objects:write',
 _TEST_VAULT_PROFILE = frozenset({'storage:vault:read', 'storage:vault:write'})
 _TEST_ALLOCATED_PAYLOAD = frozenset({'storage:media:payload:read', 'storage:media:payload:write'})
 
+_PORTAL_TEST_MEDIA_PROFILES = (
+    frozenset({'storage:allocations:issue'}),
+    frozenset({'storage:media:retire'}),
+    frozenset({'storage:media:payload:read'}),
+    frozenset({'storage:media:payload:write'}),
+    _TEST_ALLOCATED_PAYLOAD,
+)
+
 
 def network_service_key_allowed(
     network: str, purpose: str | None, scopes: list[str], *, canonical_s3rch_test: bool = False,
+    canonical_portal_test: bool = False,
 ) -> bool:
     """Call only after current tenant/network/admin and generation checks.
 
@@ -23,10 +32,16 @@ def network_service_key_allowed(
     families with each other, attestation or unknown permissions. Replay and
     media consumers use their exact declared profiles. Allocation issuance,
     retirement, observation, allocated payload, ACL media, and vault records
-    and snapshots are limited to the canonical s3r.ch TEST tenant. None grants
-    organization authority.
+    and snapshots have explicit TEST profiles. Portal TEST uses only its
+    allocation, retirement and payload profiles. None grants organization authority.
     """
-    if network != "s3r.ch" or purpose != "service" or not scopes:
+    if purpose != "service" or not scopes:
+        return False
+    if network == "hyperme.sh":
+        profile = frozenset(scopes)
+        return (canonical_portal_test and len(scopes) == len(profile)
+                and profile in _PORTAL_TEST_MEDIA_PROFILES)
+    if network != "s3r.ch":
         return False
     if scopes == ["oracles:attest"]:
         return True
