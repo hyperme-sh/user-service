@@ -5,14 +5,14 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from user_service import visor_desktop_fixture as owner
 
 from user_service.visor_desktop_fixture import GENERATION, ISSUER, RENTER, plan
 
 
-def inputs():
+def inputs(member=RENTER):
     before = json.loads((Path(__file__).parent / "data/canonical-test-fixtures.json").read_bytes())
     old_raw = json.dumps(before).encode()
     subjects = {
@@ -23,17 +23,17 @@ def inputs():
                      for a in before["accounts"]],
     }
     after = copy.deepcopy(before)
-    after["accounts"].append(copy.deepcopy(RENTER))
+    after["accounts"].append(copy.deepcopy(member))
     return old_raw, subjects, after
 
 
-def plan_inputs(old_raw, subjects, after, *, override=None):
+def plan_inputs(old_raw, subjects, after, *, override=None, member=RENTER):
     new_raw = json.dumps(after).encode()
     next_bindings = {
         **subjects,
         "manifest_sha256": hashlib.sha256(new_raw).hexdigest(),
-        "subjects": [*subjects["subjects"], {"account_key": RENTER["key"],
-                     "id": RENTER["id"], "email": RENTER["email"], "enabled": True}],
+        "subjects": [*subjects["subjects"], {"account_key": member["key"],
+                     "id": member["id"], "email": member["email"], "enabled": True}],
     }
     if override is not None:
         next_bindings["subjects"][-1]["id"] = override
@@ -59,16 +59,17 @@ def test_rejects_foreign_provider_binding_and_existing_fixture_changes():
         compile_plan(old_raw, subjects, after)
 
 
-
-def test_additive_owner_transaction_and_retry(empty_authority_owner, monkeypatch):
+@pytest.mark.parametrize("member", [RENTER, owner.PORTAL_MEMBER])
+def test_additive_owner_transaction_and_retry(empty_authority_owner, monkeypatch, member):
     from test_fixture_bootstrap import bootstrap
 
     engine = empty_authority_owner
-    before, after, old_bindings, new_bindings = plan_inputs(*inputs())
+    before, after, old_bindings, new_bindings = plan_inputs(*inputs(member), member=member)
+    fixture = member["key"]
     bootstrap(engine, data=before, bindings=old_bindings)
     # Disposable PostgreSQL uses a generated database, schema and role.
     monkeypatch.setattr(owner, "require_owner", lambda db: None)
-    tenant = str(plan(before, after, old_bindings, new_bindings)["tenant"])
+    tenant = str(plan(before, after, old_bindings, new_bindings, fixture=fixture)["tenant"])
 
     def snapshot():
         with engine.begin() as db:
@@ -82,9 +83,33 @@ def test_additive_owner_transaction_and_retry(empty_authority_owner, monkeypatch
         return {*platform, *profiles}
 
     users_before = snapshot()
-    applied = owner.apply(engine, before, after, old_bindings, new_bindings)
+
+    def interrupt_before_membership(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO organization_memberships"):
+            raise RuntimeError("interrupted before membership was written")
+
+    event.listen(engine, "before_cursor_execute", interrupt_before_membership)
+    try:
+        with pytest.raises(RuntimeError, match="interrupted before membership"):
+            owner.apply(engine, before, after, old_bindings, new_bindings, fixture=fixture)
+    finally:
+        event.remove(engine, "before_cursor_execute", interrupt_before_membership)
+    assert snapshot() == users_before
+
+    applied = owner.apply(engine, before, after, old_bindings, new_bindings, fixture=fixture)
     assert applied["changed"] is True
-    assert owner.apply(engine, before, after, old_bindings, new_bindings) == {**applied, "changed": False}
+    assert owner.apply(engine, before, after, old_bindings, new_bindings, fixture=fixture) == {**applied, "changed": False}
     users_after = snapshot()
-    assert {row for row in users_after if row.keycloak_sub != RENTER["id"]} == users_before
+    assert {row for row in users_after if row.keycloak_sub != member["id"]} == users_before
     assert len(users_after) == len(users_before) + 2
+
+
+def test_portal_member_refuses_billing_and_mismatched_provider_subject():
+    member = owner.PORTAL_MEMBER
+    before, subjects, after = inputs(member)
+    options = {"fixture": member["key"]}
+    with pytest.raises(ValueError):
+        plan(*plan_inputs(before, subjects, after, member=member, override=RENTER["id"]), **options)
+    after["accounts"][-1]["can_purchase_leases"] = True
+    with pytest.raises(ValueError):
+        plan(*plan_inputs(before, subjects, after, member=member), **options)
