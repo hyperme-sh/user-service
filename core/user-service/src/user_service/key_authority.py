@@ -18,6 +18,10 @@ from user_service.network_key_policy import network_service_key_allowed
 
 router=APIRouter(prefix='/internal/key-authority')
 
+# Exact Infra-declared owner and tenant from the sealed test-reset-v1 roster.
+PORTAL_TEST_TENANT=uuid.UUID('8f8e8d8c-7b6a-4a59-8c3d-2e1f0a9b8c7d')
+PORTAL_TEST_NETWORK_OWNER='4d2bcb10-9115-5ffc-8c73-f4c6c5ac410b'
+
 
 class Query(BaseModel):
     model_config=ConfigDict(extra='forbid')
@@ -90,6 +94,11 @@ async def lookup(body: Query,request: Request,response: Response):
                 network_service_key_allowed(
                     body.network_id, body.purpose, body.scopes,
                     canonical_s3rch_test=str(body.tenant_id) == S3RCH_TEST_TENANT['id'],
+                    canonical_portal_test=(
+                        body.tenant_id == PORTAL_TEST_TENANT
+                        and body.subject == PORTAL_TEST_NETWORK_OWNER
+                        and body.generation == 'test-reset-v1'
+                    ),
                 )))
     return {**body.model_dump(mode='json'),'allowed':bool(decision),'org_admin':bool(admin and body.scope_kind=='organization'),
             'observed_at':datetime.now(UTC).isoformat()}

@@ -45,3 +45,60 @@ async def test_current_tenant_actor_status_is_rechecked_before_network_grant(mon
     active.return_value=False
     assert (await owner.lookup(body,request,Response()))['allowed'] is False
     assert active.await_count==2 and grant.await_count==1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', [
+    '', 'network', 'tenant', 'fixture-member', 'other-admin', 'generation',
+    'stale-seal', 'purpose', 'mixed', 'duplicate', 'inactive-owner', 'missing-grant',
+])
+async def test_portal_media_key_authority_is_exact(monkeypatch, change):
+    from fastapi import HTTPException
+
+    tenant = uuid4() if change == 'tenant' else owner.PORTAL_TEST_TENANT
+    network = 'tennesseewindage' if change == 'network' else 'hyperme.sh'
+    subject = {
+        'fixture-member': 'c92fc0dd-c922-5c71-88da-bd91b38d14a4',
+        'other-admin': str(uuid4()),
+    }.get(change, owner.PORTAL_TEST_NETWORK_OWNER)
+    generation = 'other' if change == 'generation' else 'test-reset-v1'
+    scopes = ['storage:media:payload:read']
+    if change == 'mixed':
+        scopes.append('storage:media:retire')
+    elif change == 'duplicate':
+        scopes *= 2
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        def begin(self):
+            return self
+
+        async def execute(self, *_):
+            seal = 'b' * 64 if change == 'stale-seal' else 'a' * 64
+            return SimpleNamespace(one_or_none=lambda: (generation, seal))
+
+    monkeypatch.setattr(owner, 'active_tenant', AsyncMock(return_value=True))
+    monkeypatch.setattr(owner, 'tenant_network', AsyncMock(return_value=network))
+    monkeypatch.setattr(owner, 'actor_active', AsyncMock(return_value=change != 'inactive-owner'))
+    monkeypatch.setattr(owner, 'allowed', AsyncMock(return_value=change != 'missing-grant'))
+    query = owner.Query(
+        request_id=uuid4(), subject=subject, tenant_id=tenant, network_id=network,
+        scope_kind='network', generation=generation, manifest_sha256='a' * 64,
+        operation='mint', purpose='ir' if change == 'purpose' else 'service', scopes=scopes,
+    )
+    request = Request({
+        'type': 'http', 'method': 'POST', 'path': '/',
+        'headers': [(b'x-tenant-id', str(tenant).encode())],
+        'app': SimpleNamespace(state=SimpleNamespace(session_maker=Session)),
+    })
+    if change == 'stale-seal':
+        with pytest.raises(HTTPException) as refused:
+            await owner.lookup(query, request, Response())
+        assert refused.value.status_code == 403
+    else:
+        assert (await owner.lookup(query, request, Response()))['allowed'] is (change == '')

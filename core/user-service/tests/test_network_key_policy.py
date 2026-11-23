@@ -134,3 +134,19 @@ def test_vault_acl_key_is_separate_and_canonical_test_only():
     for invalid in (scopes * 2, scopes + ['storage:vault:read'],
                     ['acl:statements:read'], ['acl:vault:statements:write']):
         assert not network_service_key_allowed('s3r.ch', 'service', invalid, canonical_s3rch_test=True)
+
+
+def test_portal_test_allows_only_its_storage_profiles():
+    allowed = [
+        ['storage:allocations:issue'], ['storage:media:retire'],
+        ['storage:media:payload:read'], ['storage:media:payload:write'],
+        ['storage:media:payload:read', 'storage:media:payload:write'],
+    ]
+    for scopes in allowed:
+        assert network_service_key_allowed('hyperme.sh', 'service', scopes, canonical_portal_test=True)
+        assert not network_service_key_allowed('hyperme.sh', 'service', scopes)
+    for scopes in [
+        ['storage:media:observe'], ['oracles:attest'], ['acl:media:read', 'acl:media:write'],
+        ['storage:allocations:issue', 'storage:media:retire'],
+    ]:
+        assert not network_service_key_allowed('hyperme.sh', 'service', scopes, canonical_portal_test=True)
