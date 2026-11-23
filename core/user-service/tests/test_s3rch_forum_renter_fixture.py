@@ -26,7 +26,7 @@ def test_refuses_a_changed_canonical_organization():
         fixture.validate(ACTIVATION | {"organization": str(fixture.TENANT)}, OBSERVATION)
 
 
-def owner_db(monkeypatch, *, existing=False, group_name="renter", sealed=True):
+def owner_db(monkeypatch, *, existing=False, group_name="renter", sealed=True, granted=True, profile_exists=True):
     db = Mock()
     engine = Mock(begin=Mock(return_value=nullcontext(db)))
     profile = fixture.identifier(fixture.GENERATION, "member", fixture.TENANT, fixture.SUBJECT)
@@ -37,24 +37,25 @@ def owner_db(monkeypatch, *, existing=False, group_name="renter", sealed=True):
     def execute(query, params=None):
         statement = str(query)
         result = Mock()
-        if "FROM authority_fixture_generation" in statement:
+        if statement.lstrip().startswith(("INSERT INTO", "UPDATE", "DELETE FROM")):
+            writes.append(statement)
+        elif "FROM authority_fixture_generation" in statement:
             result.one.return_value = (fixture.GENERATION, ("a" if sealed else "z") * 64, "b" * 64)
         elif "FROM authority_fixture_accounts" in statement:
             declared = (fixture.SUBJECT, fixture.ACCOUNT, fixture.TENANT)
             result.one_or_none.return_value = declared if existing else None
         elif "FROM organization_memberships" in statement:
-            result.all.return_value = [(fixture.ORG, "member", True, True)] if existing else []
+            result.all.return_value = [(fixture.ORG, "member", True, granted)] if existing else []
         elif "FROM user_group_memberships" in statement:
-            result.all.return_value = [(membership, group)] if existing else []
-        elif "INSERT INTO" in statement:
-            writes.append(statement)
+            result.all.return_value = [(membership, group)] if existing and granted else []
         return result
 
     db.execute.side_effect = execute
     db.scalar.return_value = False
     monkeypatch.setattr(fixture, "require_test_owner", Mock())
     monkeypatch.setattr(fixture, "ensure_organization", Mock())
-    monkeypatch.setattr(fixture, "install_person", Mock(side_effect=[fixture.SUBJECT, profile]))
+    monkeypatch.setattr(fixture, "install_person", Mock(side_effect=[fixture.SUBJECT, profile]
+                                                       if profile_exists else [None, None]))
     return engine, writes
 
 
@@ -79,3 +80,15 @@ def test_refuses_changed_generation_or_unexpected_existing_grants(monkeypatch, b
     with pytest.raises(ValueError):
         fixture.provision(engine, ACTIVATION, OBSERVATION)
     assert writes == []
+
+
+@pytest.mark.parametrize("existing,granted", [(False, False), (True, True), (True, False)])
+def test_teardown_disables_only_owned_grants_and_handles_partial_setup(monkeypatch, existing, granted):
+    engine, writes = owner_db(monkeypatch, existing=existing, granted=granted, profile_exists=existing)
+    result = fixture.provision(engine, ACTIVATION, OBSERVATION | {"enabled": False}, enabled=False)
+    assert result["state"] == "disabled"
+    assert len(writes) == (2 if granted else 0)
+    if writes:
+        assert "UPDATE organization_memberships SET enabled=:enabled" in writes[0]
+        assert "DELETE FROM user_group_memberships" in writes[1]
+    assert [call.kwargs["create"] for call in fixture.install_person.call_args_list] == [False, False]
