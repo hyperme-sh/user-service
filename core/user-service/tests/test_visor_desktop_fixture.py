@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from user_service import visor_desktop_fixture as owner
 
@@ -59,7 +59,6 @@ def test_rejects_foreign_provider_binding_and_existing_fixture_changes():
         compile_plan(old_raw, subjects, after)
 
 
-
 @pytest.mark.parametrize("member", [RENTER, owner.PORTAL_MEMBER])
 def test_additive_owner_transaction_and_retry(empty_authority_owner, monkeypatch, member):
     from test_fixture_bootstrap import bootstrap
@@ -84,12 +83,26 @@ def test_additive_owner_transaction_and_retry(empty_authority_owner, monkeypatch
         return {*platform, *profiles}
 
     users_before = snapshot()
+
+    def interrupt_before_membership(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO organization_memberships"):
+            raise RuntimeError("interrupted before membership was written")
+
+    event.listen(engine, "before_cursor_execute", interrupt_before_membership)
+    try:
+        with pytest.raises(RuntimeError, match="interrupted before membership"):
+            owner.apply(engine, before, after, old_bindings, new_bindings, fixture=fixture)
+    finally:
+        event.remove(engine, "before_cursor_execute", interrupt_before_membership)
+    assert snapshot() == users_before
+
     applied = owner.apply(engine, before, after, old_bindings, new_bindings, fixture=fixture)
     assert applied["changed"] is True
     assert owner.apply(engine, before, after, old_bindings, new_bindings, fixture=fixture) == {**applied, "changed": False}
     users_after = snapshot()
     assert {row for row in users_after if row.keycloak_sub != member["id"]} == users_before
     assert len(users_after) == len(users_before) + 2
+
 
 def test_portal_member_refuses_billing_and_mismatched_provider_subject():
     member = owner.PORTAL_MEMBER
