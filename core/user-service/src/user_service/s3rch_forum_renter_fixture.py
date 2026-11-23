@@ -18,27 +18,27 @@ SUBJECT = UUID("d2b1afb6-3046-5409-98ae-91daf8f3f1f8")
 EMAIL = f"{ACCOUNT}@test.s3r.ch"
 
 
-def validate(activation, observation):
+def validate(activation, observation, *, enabled=True):
     if (
         set(activation) != {"manifest_sha256", "subjects_sha256", "tenant", "organization"}
         or (activation["tenant"], activation["organization"]) != (str(TENANT), str(ORG))
         or any(not re.fullmatch("[a-f0-9]{64}", activation[key])
                for key in ("manifest_sha256", "subjects_sha256"))
         or observation != {"issuer": ISSUER, "subject": str(SUBJECT), "email": EMAIL,
-                           "tenant": str(TENANT), "enabled": True}
-        or observation["enabled"] is not True
+                           "tenant": str(TENANT), "enabled": enabled}
+        or observation["enabled"] is not enabled or type(enabled) is not bool
     ):
         raise ValueError("Exact s3r.ch TEST renter observation required")
 
 
-def provision(engine, activation, observation):
-    validate(activation, observation)
+def provision(engine, activation, observation, *, enabled=True):
+    validate(activation, observation, enabled=enabled)
     profile = identifier(GENERATION, "member", TENANT, SUBJECT)
     renter_group = identifier(GENERATION, "group", TENANT, "renter")
     group_membership = identifier(GENERATION, "group-member", TENANT, profile, "renter")
     params = {"generation": GENERATION, "tenant": TENANT, "organization": ORG, "network": NETWORK,
               "subject": SUBJECT, "actor": ACCOUNT, "profile": profile,
-              "group": renter_group, "membership": group_membership}
+              "group": renter_group, "membership": group_membership, "enabled": enabled}
     with engine.begin() as db:
         db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
         require_test_owner(db)
@@ -61,7 +61,7 @@ def provision(engine, activation, observation):
         db.execute(text("""
             SELECT id FROM groups WHERE id=:group AND tenant_id=:tenant AND name='renter' FOR SHARE
         """), params).scalar_one()
-        ensure_organization(db, enabled=True)
+        ensure_organization(db, enabled=enabled)
         scope(db, network=NETWORK)
         declared = db.execute(text("""
             SELECT user_id,account_key,tenant_context FROM authority_fixture_accounts
@@ -72,14 +72,16 @@ def provision(engine, activation, observation):
         if db.scalar(text("SELECT EXISTS(SELECT 1 FROM authority_network_admins WHERE user_id=:subject)"), params):
             raise ValueError("Conflicting TEST network authority")
 
-        person = install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Forum Renter")
-        member = install_person(db, TENANT, profile, SUBJECT, EMAIL, fixture_name="Forum Renter")
+        person = install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Forum Renter", create=enabled)
+        member = install_person(db, TENANT, profile, SUBJECT, EMAIL, fixture_name="Forum Renter", create=enabled)
+        if not enabled and declared is None and (person, member) == (None, None):
+            return result("disabled")
         if (person, member) != (SUBJECT, profile):
             raise ValueError("Existing TEST renter identity differs")
         if db.scalar(text("""
             SELECT EXISTS(SELECT 1 FROM authority_host_owners WHERE tenant_id=:tenant AND user_id=:profile)
-                OR EXISTS(SELECT 1 FROM operator_bans WHERE tenant_id=:tenant AND subject_kind='user'
-                           AND subject_id IN (:subject,:profile) AND lifted_at IS NULL)
+                OR (:enabled AND EXISTS(SELECT 1 FROM operator_bans WHERE tenant_id=:tenant AND subject_kind='user'
+                           AND subject_id IN (:subject,:profile) AND lifted_at IS NULL))
         """), params):
             raise ValueError("TEST renter has conflicting authority or an active ban")
         grants = db.execute(text("""
@@ -90,7 +92,7 @@ def provision(engine, activation, observation):
             SELECT id,group_id FROM user_group_memberships WHERE tenant_id=:tenant AND user_id=:profile FOR UPDATE
         """), params).all()
         if declared is None:
-            if grants or groups:
+            if grants or groups or not enabled:
                 raise ValueError("TEST renter has existing grants outside this fixture")
             db.execute(text("""
                 INSERT INTO organization_memberships(tenant_id,organization_id,user_id,role,can_purchase_leases,enabled)
@@ -105,9 +107,30 @@ def provision(engine, activation, observation):
                 INSERT INTO authority_fixture_accounts(user_id,account_key,network_id,tenant_context)
                 VALUES(:subject,:actor,:network,:tenant)
             """), params)
-        elif grants != [(ORG, "member", True, True)] or groups != [(group_membership, renter_group)]:
-            raise ValueError("Existing TEST renter grants differ")
-    return {"state": "existing" if declared else "provisioned", "tenant": str(TENANT),
+        else:
+            if (len(grants) != 1 or tuple(grants[0])[:3] != (ORG, "member", True)
+                    or groups != ([(group_membership, renter_group)] if grants[0][3] else [])):
+                raise ValueError("Existing TEST renter grants differ")
+            if grants[0][3] != enabled:
+                db.execute(text("""
+                    UPDATE organization_memberships SET enabled=:enabled
+                     WHERE tenant_id=:tenant AND organization_id=:organization AND user_id=:profile
+                """), params)
+                if enabled:
+                    db.execute(text("""
+                        INSERT INTO user_group_memberships(id,tenant_id,user_id,group_id)
+                        VALUES(:membership,:tenant,:profile,:group)
+                    """), params)
+                else:
+                    db.execute(text("""
+                        DELETE FROM user_group_memberships
+                         WHERE id=:membership AND tenant_id=:tenant AND user_id=:profile AND group_id=:group
+                    """), params)
+    return result(("existing" if declared else "provisioned") if enabled else "disabled")
+
+
+def result(state):
+    return {"state": state, "tenant": str(TENANT),
             "organization": str(ORG), "user_id": str(SUBJECT), "subject": str(SUBJECT)}
 
 
@@ -117,7 +140,8 @@ def main():
         raise ValueError("Explicit TEST renter configuration required")
     engine = create_engine(os.environ["USER_FIXTURE_DATABASE_URL"])
     try:
-        print(json.dumps(provision(engine, payload["activation"], payload["observation"])))
+        print(json.dumps(provision(engine, payload["activation"], payload["observation"],
+                                   enabled=payload["observation"]["enabled"])))
     finally:
         engine.dispose()
 
