@@ -4,13 +4,13 @@
   "purpose": "stable-release",
   "components": {
     "user-service": {
-      "version": "0.1.1",
+      "version": "0.1.2",
       "contract": "contract.json",
-      "contract_sha256": "1ecc49962fd87c9100c09f4d883eb7c4dbeff421bf21a5742bbbb94878754c6d",
+      "contract_sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
       "artifact": {
         "kind": "package",
-        "uri": "urn:sha256:82ef14e40d1a844073a3107050325e50f3d0a906f26a1b9373da2089b5436e93",
-        "sha256": "82ef14e40d1a844073a3107050325e50f3d0a906f26a1b9373da2089b5436e93"
+        "uri": "urn:sha256:a66113a07811b64ea27c87dd67d4b392ed1e1b9aa1fa6f445c9042c359cb8117",
+        "sha256": "a66113a07811b64ea27c87dd67d4b392ed1e1b9aa1fa6f445c9042c359cb8117"
       }
     }
   }
