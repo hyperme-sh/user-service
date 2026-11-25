@@ -113,6 +113,18 @@ def test_acl_media_requires_both_permissions_and_canonical_test():
         assert not network_service_key_allowed('s3r.ch', 'service', scopes, canonical_s3rch_test=True)
 
 
+def test_forum_statement_key_requires_exact_pair_and_canonical_test():
+    profile = ['acl:statements:read', 'acl:statements:write']
+    for pair in (profile, profile[::-1]):
+        assert network_service_key_allowed('s3r.ch', 'service', pair, canonical_s3rch_test=True)
+        assert not network_service_key_allowed('s3r.ch', 'service', pair)
+        assert not network_service_key_allowed('s3r.ch', 'renter', pair, canonical_s3rch_test=True)
+        assert not network_service_key_allowed('hyperme.sh', 'service', pair, canonical_portal_test=True)
+    for invalid in ([profile[0]], [profile[1]], [profile[0], profile[0]],
+                    [profile[0], 'acl:media:write'], [*profile, 'acl:vault:statements:read']):
+        assert not network_service_key_allowed('s3r.ch', 'service', invalid, canonical_s3rch_test=True)
+
+
 def test_vault_key_requires_exact_pair_and_canonical_test():
     scopes = ['storage:vault:read', 'storage:vault:write']
     for pair in (scopes, scopes[::-1]):
