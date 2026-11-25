@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "versions": {
-    "core/user-service/contracts/pyproject.toml": "0.1.1",
-    "core/user-service/pyproject.toml": "0.1.1"
+    "core/user-service/contracts/pyproject.toml": "0.1.2",
+    "core/user-service/pyproject.toml": "0.1.2"
   },
   "restorations": [
     {

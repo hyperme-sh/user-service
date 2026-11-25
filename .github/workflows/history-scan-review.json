@@ -1390,5 +1390,61 @@
     "start": 83,
     "end": 83,
     "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 14,
+    "end": 14,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 15,
+    "end": 15,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 16,
+    "end": 16,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 51,
+    "end": 51,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 75,
+    "end": 75,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 78,
+    "end": 78,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
+  },
+  {
+    "file": "e45dd7a2b978c3b09fd80f3ca69fd1cf86e083fb.txt",
+    "sha256": "0212fb8445e046d2a3338450bbb31ee1c7cef9f79c27f027e83e07e4034e360a",
+    "rule": "generic-api-key",
+    "start": 84,
+    "end": 84,
+    "reason": "SHA-256 of a file in the approved User v0.1.2 owner wheel"
   }
 ]
