@@ -128,6 +128,34 @@ async def actor_active(session, tenant, subject):
     return True
 
 
+async def tenant_profile_active(session, tenant, subject):
+    async with scope(session, tenant):
+        return bool(await session.scalar(
+            text("""SELECT EXISTS(SELECT 1 FROM users
+                 WHERE tenant_id=:tenant AND keycloak_sub=:subject AND is_active AND deleted_at IS NULL)"""),
+            {"tenant": tenant, "subject": subject},
+        ))
+
+
+async def member_organization_page(session, tenant, subject, *, limit, offset, q=None):
+    """Read only the active subject's enabled memberships under destination RLS."""
+    filters = {"tenant": tenant, "subject": subject, "q": "%" + (q or "") + "%",
+               "limit": limit, "offset": offset}
+    selection = """FROM organizations o
+        JOIN organization_memberships m ON m.organization_id=o.id AND m.tenant_id=o.tenant_id
+        JOIN users u ON u.id=m.user_id AND u.tenant_id=m.tenant_id
+        WHERE o.tenant_id=:tenant AND m.enabled AND u.is_active AND u.deleted_at IS NULL
+          AND u.keycloak_sub=:subject AND lower(o.legal_name) LIKE lower(:q)"""
+    async with scope(session, tenant):
+        total = await session.scalar(text("SELECT count(*) " + selection), filters)
+        rows = (await session.execute(
+            text("SELECT o.id,o.tenant_id,o.legal_name " + selection +
+                 " ORDER BY o.legal_name,o.id LIMIT :limit OFFSET :offset"),
+            filters,
+        )).mappings().all()
+    return rows, total
+
+
 async def tenant_admin(session, tenant, subject):
     if not await actor_active(session, tenant, subject):
         return False
