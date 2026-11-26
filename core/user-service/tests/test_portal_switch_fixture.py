@@ -24,8 +24,8 @@ OBSERVATION = {
     ("subject", "00000000-0000-0000-0000-000000000000"),
     ("enabled", 1),
 ])
-def test_requires_the_declared_enabled_test_identity(field, value):
-    with pytest.raises(ValueError, match="dedicated enabled Portal TEST identity"):
+def test_requires_the_declared_test_identity(field, value):
+    with pytest.raises(ValueError, match="dedicated Portal TEST identity"):
         fixture.validate(ACTIVATION, OBSERVATION | {field: value})
 
 
@@ -64,3 +64,23 @@ def test_provisions_only_ordinary_memberships_and_can_retry(monkeypatch, existin
     }
     expected = [] if existing else [(tenant, org) for _, tenant, org in fixture.DESTINATIONS]
     assert writes == expected
+
+
+def test_disabling_removes_only_the_declared_ordinary_memberships(monkeypatch):
+    db = Mock()
+    engine = Mock(begin=Mock(return_value=nullcontext(db)))
+    db.execute.return_value.one.return_value = (fixture.GENERATION, "a" * 64, "b" * 64)
+    monkeypatch.setattr(fixture, "require_test_owner", Mock())
+    monkeypatch.setattr(fixture, "scope", Mock())
+    monkeypatch.setattr(fixture, "install_person", Mock())
+
+    fixture.provision(engine, ACTIVATION, OBSERVATION | {"enabled": False})
+
+    fixture.install_person.assert_not_called()
+    deletes = [call.args for call in db.execute.call_args_list if "DELETE FROM" in str(call.args[0])]
+    assert [(params["tenant"], params["organization"]) for _, params in deletes] == [
+        (tenant, org) for _, tenant, org in fixture.DESTINATIONS
+    ]
+    for query, params in deletes:
+        assert "role='member' AND NOT can_purchase_leases" in str(query)
+        assert params["member"] == fixture.identifier(fixture.GENERATION, "member", params["tenant"], fixture.SUBJECT)

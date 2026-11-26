@@ -1,4 +1,4 @@
-"""Create the two ordinary memberships for the dedicated Portal TEST account."""
+"""Reconcile the two ordinary memberships for the dedicated Portal TEST account."""
 
 import json
 import os
@@ -27,13 +27,15 @@ def validate(activation, observation):
             or any(not re.fullmatch("[0-9a-f]{64}", activation[key])
                    for key in ("manifest_sha256", "subjects_sha256"))):
         raise ValueError("Exactly the declared TEST Portal organizations are required")
-    if (observation != {"issuer": ISSUER, "email": EMAIL, "subject": str(SUBJECT), "enabled": True}
-            or observation["enabled"] is not True):
-        raise ValueError("The dedicated enabled Portal TEST identity is required")
+    enabled = observation.get("enabled")
+    if (type(enabled) is not bool
+            or observation != {"issuer": ISSUER, "email": EMAIL, "subject": str(SUBJECT), "enabled": enabled}):
+        raise ValueError("The dedicated Portal TEST identity is required")
 
 
 def provision(engine, activation, observation):
     validate(activation, observation)
+    enabled = observation["enabled"]
     with engine.begin() as db:
         db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
         require_test_owner(db)
@@ -47,16 +49,23 @@ def provision(engine, activation, observation):
         if tuple(seal) != (GENERATION, activation["manifest_sha256"], activation["subjects_sha256"]):
             raise ValueError("Installed TEST User generation differs")
 
-        person = install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Portal Switch")
+        if enabled and install_person(db, None, SUBJECT, SUBJECT, EMAIL, fixture_name="Portal Switch") != SUBJECT:
+            raise ValueError("Unexpected Portal TEST person identity")
         for network, tenant, organization in DESTINATIONS:
             profile = identifier(GENERATION, "member", tenant, SUBJECT)
-            member = install_person(db, tenant, profile, SUBJECT, EMAIL, fixture_name="Portal Switch")
-            if person != SUBJECT or member != profile:
+            if enabled and install_person(db, tenant, profile, SUBJECT, EMAIL, fixture_name="Portal Switch") != profile:
                 raise ValueError("Unexpected Portal TEST profile identity")
 
             scope(db, tenant, network)
             params = {"network": network, "tenant": tenant, "organization": organization,
-                      "person": person, "member": member}
+                      "person": SUBJECT, "member": profile}
+            if not enabled:
+                db.execute(text("""
+                    DELETE FROM organization_memberships
+                     WHERE tenant_id=:tenant AND organization_id=:organization AND user_id=:member
+                       AND role='member' AND NOT can_purchase_leases
+                """), params)
+                continue
             db.execute(text("""
                 SELECT o.id FROM organizations o
                   JOIN tenants t ON t.id=o.tenant_id
