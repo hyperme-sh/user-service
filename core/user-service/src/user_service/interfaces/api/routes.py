@@ -571,18 +571,12 @@ async def list_organizations(
                                     total=int(matches), limit=limit, offset=offset)
     from user_service.authority_routes import enabled
     if enabled():
-        from user_service.scoped_authority import actor_active,tenant_admin,scope
-        from sqlalchemy import text
+        from user_service.scoped_authority import actor_active, member_organization_page, tenant_admin
         if not await actor_active(session,tenant_id,me.sub):raise HTTPException(403,'Identity or tenant is inactive or unavailable')
         if not await tenant_admin(session,tenant_id,me.sub):
-            filters={"tenant":tenant_id,"subject":me.sub,"q":"%"+(q or "")+"%","limit":limit,"offset":offset}
-            selection="""FROM organizations o JOIN organization_memberships m ON m.organization_id=o.id AND m.tenant_id=o.tenant_id
-                JOIN users u ON u.id=m.user_id AND u.tenant_id=m.tenant_id
-                WHERE o.tenant_id=:tenant AND m.enabled AND u.is_active AND u.deleted_at IS NULL
-                  AND u.keycloak_sub=:subject AND lower(o.legal_name) LIKE lower(:q)"""
-            async with scope(session,tenant_id):
-                total=await session.scalar(text('SELECT count(*) '+selection),filters)
-                rows=(await session.execute(text('SELECT o.id,o.tenant_id,o.legal_name '+selection+' ORDER BY o.legal_name,o.id LIMIT :limit OFFSET :offset'),filters)).mappings().all()
+            rows, total = await member_organization_page(
+                session, tenant_id, me.sub, limit=limit, offset=offset, q=q,
+            )
             return OrganizationListPage(items=[OrganizationResponse.model_validate(dict(row)) for row in rows],total=total,limit=limit,offset=offset)
     repo = SqlOrganizationRepository(session)
     orgs, total = await repo.list_paged(

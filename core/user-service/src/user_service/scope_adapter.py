@@ -8,18 +8,22 @@ import os
 import uuid
 from pydantic import BaseModel, ConfigDict, Field
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import text
 from auth_service.deps import get_access_token_claims
 from auth_service.schemas import AuthMeResponse
 from user_service.deps import get_current_user
+from user_service.domain.dtos import OrganizationListPage, OrganizationResponse
 
 from user_service.scope_api import AuthorityBody, service_caller
 from user_service.scoped_authority import (
+    actor_active,
+    member_organization_page,
     network_admin,
     organization_member,
     scope,
     tenant_network,
+    tenant_profile_active,
 )
 
 router = APIRouter()
@@ -256,7 +260,6 @@ async def establish_login_tenant(
 async def contexts(
     request: Request, response: Response, me: AuthMeResponse = Depends(get_current_user)
 ):
-    from user_service.scoped_authority import actor_active
     from controlplane_identity.nightly import current_binding, require
     binding = current_binding()
     if binding is not None:
@@ -281,15 +284,43 @@ async def contexts(
                 continue
             network = await tenant_network(db, tenant)
             admin = await network_admin(db, network, me.sub)
-            async with scope(db, tenant):
-                member = await db.scalar(
-                    text(
-                        "SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id=:tenant AND keycloak_sub=:subject AND is_active AND deleted_at IS NULL)"
-                    ),
-                    {"tenant": tenant, "subject": me.sub},
-                )
-            if admin or member:
+            if admin or await tenant_profile_active(db, tenant, me.sub):
                 result.append(
                     dict(id=tenant, name=name, network_id=network, network_admin=admin)
                 )
         return {"tenants": result}
+
+
+@router.get(
+    "/authority/organizations",
+    response_model=OrganizationListPage,
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def discover_organizations(
+    request: Request,
+    response: Response,
+    tenant_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    claims: dict = Depends(get_access_token_claims),
+):
+    """Discover the native actor's current organizations before scope exchange."""
+    from controlplane_identity.nightly import current_binding
+
+    issuer = os.environ.get("KEYCLOAK_ISSUER")
+    subject = claims.get("sub")
+    if (not issuer or claims.get("iss") != issuer or "spanopticon_auth" in claims
+            or "nightly_run" in claims or current_binding() is not None
+            or not isinstance(subject, str) or not subject.strip() or len(subject) > 512):
+        raise HTTPException(403, "Native organization discovery identity required")
+    if os.environ.get("USER_SCOPED_AUTHORITY_REQUIRED") != "1":
+        raise HTTPException(503, "Canonical authority is not active")
+    async with request.app.state.session_maker() as db, db.begin():
+        if not await actor_active(db, tenant_id, subject) or not await tenant_profile_active(db, tenant_id, subject):
+            raise HTTPException(403, "Current tenant membership required")
+        rows, total = await member_organization_page(db, tenant_id, subject, limit=limit, offset=offset)
+    response.headers["Cache-Control"] = "no-store"
+    return OrganizationListPage(
+        items=[OrganizationResponse.model_validate(dict(row)) for row in rows],
+        total=total, limit=limit, offset=offset,
+    )

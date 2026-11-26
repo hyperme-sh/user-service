@@ -8,6 +8,7 @@ def test_openapi_includes_group_and_org_list_get():
     assert "get" in paths["/api/v1/groups"]
     assert "get" in paths["/api/v1/groups/{group_id}"]
     assert "get" in paths["/api/v1/organizations"]
+    assert "get" in paths["/api/v1/authority/organizations"]
     assert "get" in paths["/api/v1/organizations/{organization_id}"]
     assert "post" in paths["/api/v1/organizations/{organization_id}/idp-links"]
     assert "get" in paths["/api/v1/organizations/idp-match"]
