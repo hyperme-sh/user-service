@@ -8,6 +8,8 @@ import uuid
 from sqlalchemy import create_engine, text
 
 from user_service.fixture_bootstrap import identifier, validate
+from user_service.fixture_topology import plan as plan_topology
+from user_service.second_host_fixture import AFTER as SECOND_HOST_AFTER, BEFORE as SECOND_HOST_BEFORE
 
 ISSUER = "https://auth.test.hyperme.sh/realms/controlplane"
 GENERATION = "test-reset-v1"
@@ -35,23 +37,54 @@ PORTAL_MEMBER = {
 FIXTURES = {row["key"]: row for row in (RENTER, PORTAL_MEMBER)}
 
 
-def plan(previous, desired, previous_bindings, desired_bindings, *, fixture=RENTER["key"]):
+def topology_steps(previous, predecessors, binding_digest, *, fixture):
+    """Resolve the original provider manifest to the exact installed manifest."""
+    if not predecessors:
+        if binding_digest != hashlib.sha256(previous).hexdigest():
+            raise ValueError("Sealed TEST topology predecessors required")
+        return ()
+    if fixture != PORTAL_MEMBER["key"] or len(predecessors) > 3:
+        raise ValueError("Unsupported TEST topology predecessor sequence")
+    manifests = (*predecessors, previous)
+    digests = [hashlib.sha256(raw).hexdigest() for raw in manifests]
+    if digests[0] != binding_digest or len(set(digests)) != len(digests):
+        raise ValueError("Provider manifest and topology predecessors differ")
+    steps = []
+    for index, (prior, current) in enumerate(zip(manifests, manifests[1:])):
+        # This permanent host addition is identified by its two immutable
+        # digests and has no tenant transition row.
+        if tuple(digests[index:index + 2]) != (SECOND_HOST_BEFORE, SECOND_HOST_AFTER):
+            steps.append(plan_topology(prior, current))
+    return tuple(steps)
+
+
+def owner_scope(manifest, steps):
+    # Bootstrap accepts the initial tenant pair and s3r.ch. The only extra
+    # tenant here has already been checked as an exact additive transition.
+    if steps and steps[-1]["addition"]["key"] == "startup-nightly":
+        return {**manifest, "tenants": [tenant for tenant in manifest["tenants"]
+                                        if tenant["key"] != "startup-nightly"]}
+    return manifest
+
+
+def plan(previous, desired, previous_bindings, desired_bindings, *, fixture=RENTER["key"],
+         topology_predecessors=()):
     member = FIXTURES.get(fixture)
     if member is None:
         raise ValueError("Exact TEST fixture required")
     before, after, old_subjects, new_subjects = map(
         json.loads, (previous, desired, previous_bindings, desired_bindings)
     )
-    validate(before, old_subjects, generation=GENERATION, issuer=ISSUER)
-    _, tenants, orgs, _, _ = validate(after, new_subjects, generation=GENERATION, issuer=ISSUER)
+    steps = topology_steps(previous, topology_predecessors, old_subjects.get("manifest_sha256"), fixture=fixture)
+    validate(owner_scope(before, steps), old_subjects, generation=GENERATION, issuer=ISSUER)
+    _, tenants, orgs, _, _ = validate(owner_scope(after, steps), new_subjects, generation=GENERATION, issuer=ISSUER)
     old_hash, new_hash, old_subject_hash, new_subject_hash = (
         hashlib.sha256(raw).hexdigest()
         for raw in (previous, desired, previous_bindings, desired_bindings)
     )
     binding = {"account_key": member["key"], "id": member["id"],
                "email": member["email"], "enabled": True}
-    if (old_subjects.get("manifest_sha256") != old_hash
-            or after != {**before, "accounts": [*before["accounts"], member]}
+    if (after != {**before, "accounts": [*before["accounts"], member]}
             or new_subjects != {**old_subjects, "manifest_sha256": new_hash,
                                 "subjects": [*old_subjects["subjects"], binding]}
             or orgs["primary"]["tenant"] != "active" or tenants["active"]["active"] is not True):
@@ -60,7 +93,7 @@ def plan(previous, desired, previous_bindings, desired_bindings, *, fixture=RENT
     subject = uuid.UUID(member["id"])
     profile = identifier(GENERATION, "member", tenant, subject)
     return dict(generation=GENERATION, old_hash=old_hash, new_hash=new_hash,
-                old_subject_hash=old_subject_hash, new_subject_hash=new_subject_hash,
+                old_subject_hash=old_subject_hash, new_subject_hash=new_subject_hash, topology_steps=steps,
                 tenant=tenant, network=tenants["active"]["network"], org=uuid.UUID(orgs["primary"]["id"]),
                 subject=subject, subject_text=str(subject), profile=profile, email=member["email"], key=member["key"],
                 can_purchase_leases=member["can_purchase_leases"],
@@ -81,8 +114,27 @@ def require_owner(db):
         raise ValueError("Canonical TEST User schema owner required")
 
 
-def apply(engine, previous, desired, previous_bindings, desired_bindings, *, fixture=RENTER["key"]):
-    args = plan(previous, desired, previous_bindings, desired_bindings, fixture=fixture)
+def verify_topology_journal(db, steps, subjects_sha256):
+    if steps and db.scalar(text("SELECT to_regclass('authority_fixture_transitions')")) is None:
+        raise ValueError("Applied TEST topology journal required")
+    for step in steps:
+        row = db.execute(text("""
+            SELECT operation_id, source_sha, receipt FROM authority_fixture_transitions
+            WHERE predecessor_sha256=:predecessor_sha256 AND successor_sha256=:successor_sha256
+              AND state='applied' FOR SHARE
+        """), step).mappings().one_or_none()
+        if row is None:
+            raise ValueError("Applied TEST topology journal entry required")
+        expected = {**step, "state": "applied", "operation_id": str(row["operation_id"]),
+                    "source_sha": row["source_sha"], "subjects_sha256": subjects_sha256}
+        if any(row["receipt"].get(key) != value for key, value in expected.items()):
+            raise ValueError("Applied TEST topology journal differs")
+
+
+def apply(engine, previous, desired, previous_bindings, desired_bindings, *, fixture=RENTER["key"],
+          topology_predecessors=()):
+    args = plan(previous, desired, previous_bindings, desired_bindings,
+                fixture=fixture, topology_predecessors=topology_predecessors)
     before = (args["old_hash"], args["old_subject_hash"])
     after = (args["new_hash"], args["new_subject_hash"])
     with engine.begin() as db:
@@ -95,6 +147,7 @@ def apply(engine, previous, desired, previous_bindings, desired_bindings, *, fix
         """), args).one())
         if installed not in (before, after):
             raise ValueError("Unexpected installed TEST fixture binding")
+        verify_topology_journal(db, args["topology_steps"], before[1])
         db.execute(text("SELECT set_config('app.current_network_id',:network,true), "
                         "set_config('app.current_tenant_id','',true)"), args)
         if installed == before:
@@ -151,10 +204,14 @@ if __name__ == "__main__":
     for name in ("previous", "desired", "previous-bindings", "desired-bindings", "database-url-file"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--fixture", choices=FIXTURES, default=RENTER["key"])
+    parser.add_argument("--topology-predecessor", action="append", type=Path, default=[],
+                        help="Original provider and intermediate manifests in chronological order")
     options = parser.parse_args()
     engine = create_engine(options.database_url_file.read_text().strip())
     try:
         print(json.dumps(apply(engine, options.previous.read_bytes(), options.desired.read_bytes(),
-                               options.previous_bindings.read_bytes(), options.desired_bindings.read_bytes(), fixture=options.fixture)))
+                               options.previous_bindings.read_bytes(), options.desired_bindings.read_bytes(),
+                               fixture=options.fixture,
+                               topology_predecessors=[path.read_bytes() for path in options.topology_predecessor])))
     finally:
         engine.dispose()
