@@ -12,6 +12,7 @@ _MEDIA_PROFILE = frozenset({'storage:objects:read', 'storage:objects:write',
                             'storage:media:read', 'storage:media:write'})
 _TEST_VAULT_PROFILE = frozenset({'storage:vault:read', 'storage:vault:write'})
 _TEST_FORUM_STATEMENT_PROFILE = frozenset({'acl:statements:read', 'acl:statements:write'})
+_TEST_CONTACTS_PROFILE = frozenset({'acl:contacts:read', 'acl:contacts:write'})
 _TEST_ALLOCATED_PAYLOAD = frozenset({'storage:media:payload:read', 'storage:media:payload:write'})
 
 _PORTAL_TEST_MEDIA_PROFILES = (
@@ -48,7 +49,8 @@ def network_service_key_allowed(
         return True
     if (scopes in (['storage:media:observe'], ['storage:allocations:issue'], ['storage:media:retire'],
                    ['acl:vault:statements:read'])
-            or (len(scopes) == 2 and frozenset(scopes) in (_TEST_ALLOCATED_PAYLOAD, _TEST_VAULT_PROFILE, _TEST_FORUM_STATEMENT_PROFILE))
+            or (len(scopes) == 2 and frozenset(scopes) in (_TEST_ALLOCATED_PAYLOAD, _TEST_VAULT_PROFILE,
+                                                        _TEST_FORUM_STATEMENT_PROFILE, _TEST_CONTACTS_PROFILE))
             or (len(scopes) == 2 and set(scopes) == {'acl:media:read', 'acl:media:write'})):
         return canonical_s3rch_test
     if len(scopes) == len(set(scopes)) and frozenset(scopes) in (_REPLAY_PROFILE, _MEDIA_PROFILE):
